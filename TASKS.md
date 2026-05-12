@@ -15,11 +15,13 @@
 
 ## Next
 
-- [ ] Build **Idea Intake form** — multi-step form: name, idea, goal, budget, timeline, constraints
-- [ ] Build **mock Blueprint Preview** — static UI showing what a generated business blueprint looks like
 - [ ] Build **Mission Control dashboard shell** — authenticated layout with sidebar nav and placeholder panels
 - [ ] Add **Navbar** and **Footer** components to shared/
 - [ ] Wire up **Early Access CTA** to a waitlist form (email capture, no backend yet — can use a form service)
+- [ ] Replace mock blueprint with real `/api/generate-blueprint` route
+- [ ] Add OpenAI structured JSON output
+- [ ] Add loading/error states
+- [ ] Add Supabase persistence later
 
 ---
 
@@ -48,3 +50,5 @@ _Nothing blocked right now._
 - [x] Project scaffold: Next.js 16 + TypeScript + Tailwind v4 + App Router
 - [x] Agent handoff files created
 - [x] Landing page foundation built
+- [x] Build **Idea Intake form** — multi-step form: name, idea, goal, budget, timeline, constraints
+- [x] Build **mock Blueprint Preview** — intelligent frontend-only Mission Control dashboard for generated launch blueprints

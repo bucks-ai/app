@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export function Hero() {
   return (
     <section className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-black px-6 pt-20 text-center">
@@ -33,12 +35,12 @@ export function Hero() {
 
         {/* CTAs */}
         <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
-          <a
-            href="#early-access"
+          <Link
+            href="/intake"
             className="rounded-full bg-emerald-500 px-8 py-3.5 text-base font-semibold text-black transition-colors hover:bg-emerald-400"
           >
-            Get early access
-          </a>
+            Launch your blueprint
+          </Link>
           <a
             href="#how-it-works"
             className="rounded-full border border-white/20 px-8 py-3.5 text-base font-medium text-white transition-colors hover:border-white/40 hover:bg-white/5"

@@ -14,12 +14,12 @@ export function Navbar() {
           >
             How it works
           </a>
-          <a
-            href="#early-access"
+          <Link
+            href="/intake"
             className="rounded-full bg-emerald-500 px-4 py-2 text-sm font-medium text-black transition-colors hover:bg-emerald-400"
           >
-            Get early access
-          </a>
+            Start intake
+          </Link>
         </div>
       </div>
     </nav>

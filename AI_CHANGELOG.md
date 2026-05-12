@@ -30,6 +30,44 @@
 
 ## Entries
 
+### [2026-05-12 13:03] — Agent: Codex
+
+**Task attempted:** Build the first functional product flow: Idea Intake + Mock Launch Blueprint without backend integrations
+
+**Files changed:**
+- `src/app/intake/page.tsx` — Created the new `/intake` route and page shell
+- `src/components/intake/IdeaIntakeWizard.tsx` — Created the 4-step wizard, validation, navigation, and preview switching
+- `src/components/intake/IntakeStep.tsx` — Created the reusable step wrapper
+- `src/components/intake/BlueprintPreview.tsx` — Created the Mission Control blueprint dashboard
+- `src/components/intake/BlueprintSection.tsx` — Created the reusable preview section card
+- `src/lib/mock-blueprint.ts` — Created the mock blueprint generator with business-type-aware logic
+- `src/types/startup.ts` — Created shared startup and blueprint TypeScript contracts
+- `src/components/sections/Hero.tsx` — Updated the primary landing page CTA to `/intake`
+- `src/components/shared/Navbar.tsx` — Updated the navbar CTA to `/intake`
+- `PROJECT_STATE.md` — Updated current state to reflect the new intake flow
+- `TASKS.md` — Moved intake/blueprint work to Done and added next follow-up tasks
+- `AI_CHANGELOG.md` — Added this session entry
+
+**Commands run:**
+- `git status --short --branch` — verified starting repo state
+- `sed -n '1,260p' package.json` — inspected package metadata and scripts
+- `sed -n '1,260p' src/app/page.tsx` — inspected landing page composition
+- `sed -n '1,260p' src/app/layout.tsx` — inspected root layout and metadata
+- `find src/components -maxdepth 3 -type f | sort` — inspected existing component structure
+- `rg -n "href=|Link href|window.location|router.push|Get early access|Early Access|Start|CTA|Join" src/app src/components` — inspected CTA links and navigation targets
+- `find node_modules/next/dist/docs/01-app -maxdepth 3 -type f | sort` — located local Next.js 16 docs per repo instructions
+- `sed -n '1,220p' node_modules/next/dist/docs/...` — reviewed relevant App Router, layout/page, linking, and client component docs
+- `npm run lint` — passed
+- `npm run build` — passed, with `/` and `/intake` prerendered as static routes
+
+**Result:** Success
+
+**Errors / Blockers:**
+- None
+
+**Next recommended task:**
+Replace the mock generator with a real `/api/generate-blueprint` route that returns structured JSON from an LLM while preserving the current typed UI contract.
+
 ### [2026-05-12 12:30] — Agent: Claude Sonnet 4.6
 
 **Task attempted:** Initialize project foundation and cross-agent handoff system; build initial landing page
