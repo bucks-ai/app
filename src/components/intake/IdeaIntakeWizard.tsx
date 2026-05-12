@@ -11,6 +11,12 @@ import type {
   StartupIdea,
 } from "@/types/startup";
 
+type GenerateState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "missing_key" }
+  | { status: "error"; message: string };
+
 const businessTypeOptions: BusinessTypeGuess[] = [
   "B2B",
   "B2C",
@@ -296,6 +302,7 @@ export function IdeaIntakeWizard() {
   const [errors, setErrors] = useState<FieldErrors>({});
   const [blueprint, setBlueprint] = useState<BusinessBlueprint | null>(null);
   const [isPreviewVisible, setIsPreviewVisible] = useState(false);
+  const [generateState, setGenerateState] = useState<GenerateState>({ status: "idle" });
 
   function updateField(name: FieldName, value: string) {
     setIdea((current) => ({ ...current, [name]: value }));
@@ -318,7 +325,7 @@ export function IdeaIntakeWizard() {
     setCurrentStep((step) => Math.max(step - 1, 0));
   }
 
-  function handleGenerateBlueprint() {
+  async function handleGenerateBlueprint() {
     const nextErrors = {
       ...validateStep(0, idea),
       ...validateStep(1, idea),
@@ -338,12 +345,61 @@ export function IdeaIntakeWizard() {
     }
 
     setErrors({});
+    setGenerateState({ status: "loading" });
+
+    try {
+      const response = await fetch("/api/generate-blueprint", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(idea),
+      });
+
+      const data = (await response.json()) as {
+        blueprint?: BusinessBlueprint;
+        error?: string;
+        message?: string;
+      };
+
+      if (!response.ok) {
+        if (data.error === "missing_api_key") {
+          setGenerateState({ status: "missing_key" });
+          return;
+        }
+        setGenerateState({
+          status: "error",
+          message: data.message ?? "Blueprint generation failed. Please try again.",
+        });
+        return;
+      }
+
+      if (!data.blueprint) {
+        setGenerateState({
+          status: "error",
+          message: "The server returned an empty blueprint.",
+        });
+        return;
+      }
+
+      setGenerateState({ status: "idle" });
+      setBlueprint(data.blueprint);
+      setIsPreviewVisible(true);
+    } catch {
+      setGenerateState({
+        status: "error",
+        message: "Could not reach the server. Check your connection and try again.",
+      });
+    }
+  }
+
+  function handleUseDemoBlueprint() {
+    setGenerateState({ status: "idle" });
     setBlueprint(generateMockBlueprint(idea));
     setIsPreviewVisible(true);
   }
 
   function handleEditIdea() {
     setIsPreviewVisible(false);
+    setGenerateState({ status: "idle" });
     setCurrentStep(0);
   }
 
@@ -356,6 +412,8 @@ export function IdeaIntakeWizard() {
       />
     );
   }
+
+  const isLoading = generateState.status === "loading";
 
   return (
     <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
@@ -374,9 +432,9 @@ export function IdeaIntakeWizard() {
                 Turn an idea into a launch blueprint.
               </h1>
               <p className="mt-4 text-sm leading-7 text-neutral-300 sm:text-base">
-                This mock flow stays frontend-only, but it already behaves like a
-                startup operating system: it scopes the business, respects
-                boundaries, and drafts the next launch plan.
+                Fill in the four steps below and bucks.ai will generate an
+                execution-ready launch plan: stack, GTM, analytics, permissions,
+                and next autonomous actions.
               </p>
             </div>
 
@@ -396,6 +454,81 @@ export function IdeaIntakeWizard() {
             </div>
           </div>
         </div>
+
+        {generateState.status === "missing_key" ? (
+          <div className="rounded-[2rem] border border-amber-500/25 bg-amber-500/8 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.3)]">
+            <div className="mb-3 flex items-center gap-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full border border-amber-500/30 bg-amber-500/15 text-amber-300">
+                !
+              </div>
+              <h3 className="text-sm font-semibold text-amber-200">
+                OPENAI_API_KEY not configured
+              </h3>
+            </div>
+            <p className="mb-4 text-sm leading-6 text-amber-100/70">
+              To enable real AI blueprint generation, add your OpenAI API key to{" "}
+              <code className="rounded bg-black/30 px-1.5 py-0.5 text-amber-200">
+                .env.local
+              </code>
+              :
+            </p>
+            <pre className="mb-4 overflow-x-auto rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-emerald-300">
+              {`OPENAI_API_KEY=sk-...`}
+            </pre>
+            <p className="mb-5 text-sm leading-6 text-neutral-400">
+              Restart the dev server after adding the key. In the meantime you
+              can explore the demo blueprint below.
+            </p>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={handleUseDemoBlueprint}
+                className="rounded-full border border-white/15 bg-white/8 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:border-white/30 hover:bg-white/12"
+              >
+                Use demo blueprint
+              </button>
+              <button
+                type="button"
+                onClick={() => setGenerateState({ status: "idle" })}
+                className="rounded-full border border-white/10 bg-transparent px-5 py-2.5 text-sm font-medium text-neutral-400 transition-colors hover:text-white"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {generateState.status === "error" ? (
+          <div className="rounded-[2rem] border border-rose-500/25 bg-rose-500/8 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.3)]">
+            <div className="mb-3 flex items-center gap-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full border border-rose-500/30 bg-rose-500/15 text-rose-300">
+                ✕
+              </div>
+              <h3 className="text-sm font-semibold text-rose-200">
+                Blueprint generation failed
+              </h3>
+            </div>
+            <p className="mb-5 text-sm leading-6 text-rose-100/70">
+              {generateState.message}
+            </p>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={() => void handleGenerateBlueprint()}
+                className="rounded-full bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-emerald-400"
+              >
+                Try again
+              </button>
+              <button
+                type="button"
+                onClick={handleUseDemoBlueprint}
+                className="rounded-full border border-white/15 bg-white/8 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:border-white/30 hover:bg-white/12"
+              >
+                Use demo blueprint
+              </button>
+            </div>
+          </div>
+        ) : null}
 
         <IntakeStep
           step={currentStep + 1}
@@ -443,7 +576,7 @@ export function IdeaIntakeWizard() {
                   value={idea.ideaDescription}
                   error={errors.ideaDescription}
                   placeholder="Describe the product, workflow, or outcome in a bit more detail."
-                  helper="Optional, but more detail helps the mock blueprint feel sharper."
+                  helper="Optional, but more detail helps the blueprint feel sharper."
                   onChange={updateField}
                 />
               </div>
@@ -563,7 +696,7 @@ export function IdeaIntakeWizard() {
                 value={idea.preferredTools}
                 error={errors.preferredTools}
                 placeholder="Vercel, PostHog, HubSpot"
-                helper="Optional tool preferences to weave into the mock plan."
+                helper="Optional tool preferences to weave into the plan."
                 onChange={updateField}
               />
             </div>
@@ -573,7 +706,7 @@ export function IdeaIntakeWizard() {
             <button
               type="button"
               onClick={handleBack}
-              disabled={currentStep === 0}
+              disabled={currentStep === 0 || isLoading}
               className="rounded-full border border-white/10 bg-white/5 px-5 py-3 text-sm font-medium text-white transition-colors hover:border-white/20 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
             >
               Back
@@ -583,20 +716,31 @@ export function IdeaIntakeWizard() {
               <button
                 type="button"
                 onClick={handleContinue}
-                className="rounded-full bg-emerald-500 px-6 py-3 text-sm font-semibold text-black transition-colors hover:bg-emerald-400"
+                disabled={isLoading}
+                className="rounded-full bg-emerald-500 px-6 py-3 text-sm font-semibold text-black transition-colors hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Continue
               </button>
             ) : (
               <button
                 type="button"
-                onClick={handleGenerateBlueprint}
-                className="rounded-full bg-emerald-500 px-6 py-3 text-sm font-semibold text-black transition-colors hover:bg-emerald-400"
+                onClick={() => void handleGenerateBlueprint()}
+                disabled={isLoading}
+                className="rounded-full bg-emerald-500 px-6 py-3 text-sm font-semibold text-black transition-colors hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Generate Blueprint
+                {isLoading ? "Building your blueprint…" : "Generate Blueprint"}
               </button>
             )}
           </div>
+
+          {isLoading ? (
+            <div className="mt-4 flex items-center gap-3 rounded-2xl border border-emerald-500/20 bg-emerald-500/8 px-4 py-3">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-emerald-400 border-t-transparent" />
+              <p className="text-sm text-emerald-300">
+                bucks.ai is building your launch blueprint…
+              </p>
+            </div>
+          ) : null}
         </IntakeStep>
       </div>
     </div>
