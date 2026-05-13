@@ -9,6 +9,7 @@ import { PermissionControlRoom } from "@/components/tools/PermissionControlRoom"
 import { OperatorPanel } from "@/components/ui/OperatorPanel";
 import { SectionLabel } from "@/components/ui/SectionLabel";
 import { StatusPill } from "@/components/ui/StatusPill";
+import { DeploymentExecutionPanel } from "@/components/vercel/DeploymentExecutionPanel";
 
 type BusinessDetailProps = {
   business: DashboardBusiness;
@@ -108,42 +109,6 @@ export function BusinessDetail({ business }: BusinessDetailProps) {
         </OperatorPanel>
       </section>
 
-      <div id="tool-setup-queue" className="scroll-mt-28">
-        <PermissionControlRoom businessId={business.id} businessName={business.name} />
-      </div>
-
-      <OperatorPanel className="p-6 shadow-[0_30px_120px_rgba(0,0,0,0.34)] sm:p-8">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="max-w-3xl">
-            <div className="flex flex-wrap items-center gap-3">
-              <SectionLabel>Repository Execution</SectionLabel>
-              <StatusPill label="Controlled external action" variant="warning" />
-            </div>
-            <h2 className="mt-4 text-3xl font-semibold tracking-tight text-[#F0F0F0]">
-              GitHub repository creation
-            </h2>
-            <p className="mt-3 text-sm leading-7 text-[#888888] sm:text-base">
-              Create a private GitHub repo only after GitHub is approved in the
-              setup queue. This is the first real external asset bucks.ai can
-              create for a saved business.
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-6">
-          {isApprovedGitHubPermission(business) ? (
-            <GitHubRepoCard
-              businessId={business.id}
-              businessName={business.name}
-              oneLineIdea={business.oneLineIdea ?? business.overview}
-              existingRepo={business.githubRepo ?? null}
-            />
-          ) : (
-            <GitHubRepoGate />
-          )}
-        </div>
-      </OperatorPanel>
-
       <section className="grid gap-6 xl:grid-cols-3">
         <OperatorPanel className="p-6 xl:col-span-1">
           <SectionLabel>Next autonomous actions</SectionLabel>
@@ -191,6 +156,55 @@ export function BusinessDetail({ business }: BusinessDetailProps) {
           </div>
         </OperatorPanel>
       </section>
+
+      <div id="tool-setup-queue" className="scroll-mt-28">
+        <PermissionControlRoom businessId={business.id} businessName={business.name} />
+      </div>
+
+      <OperatorPanel
+        id="repository-execution"
+        className="scroll-mt-28 p-6 shadow-[0_30px_120px_rgba(0,0,0,0.34)] sm:p-8"
+      >
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="max-w-3xl">
+            <div className="flex flex-wrap items-center gap-3">
+              <SectionLabel>Repository Execution</SectionLabel>
+              <StatusPill label="Controlled external action" variant="warning" />
+            </div>
+            <h2 className="mt-4 text-3xl font-semibold tracking-tight text-[#F0F0F0]">
+              GitHub repository creation
+            </h2>
+            <p className="mt-3 text-sm leading-7 text-[#888888] sm:text-base">
+              Create a private GitHub repo only after GitHub is approved in the
+              setup queue. This is the first real external asset bucks.ai can
+              create for a saved business.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-6">
+          {isApprovedGitHubPermission(business) ? (
+            <GitHubRepoCard
+              businessId={business.id}
+              businessName={business.name}
+              oneLineIdea={business.oneLineIdea ?? business.overview}
+              existingRepo={business.githubRepo ?? null}
+            />
+          ) : (
+            <GitHubRepoGate />
+          )}
+        </div>
+      </OperatorPanel>
+
+      <DeploymentExecutionPanel
+        businessId={business.id}
+        businessName={business.name}
+        oneLineIdea={business.oneLineIdea ?? business.overview}
+        activityLogs={business.activityLogs}
+        toolPermissions={business.toolPermissions}
+        existingGitHubRepo={business.githubRepo ?? null}
+        existingVercelProject={business.vercelProject ?? null}
+      />
     </div>
   );
 }
