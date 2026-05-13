@@ -26,6 +26,10 @@ import type {
 } from "@/types/database";
 import type { GitHubRepoResult } from "@/types/github-ui";
 import type { BusinessBlueprint, NextAutonomousAction } from "@/types/startup";
+import type {
+  DeploymentActivityLog,
+  VercelProjectResult,
+} from "@/types/vercel-ui";
 import { OperatorPanel } from "@/components/ui/OperatorPanel";
 import { SectionLabel } from "@/components/ui/SectionLabel";
 import { StatusPill } from "@/components/ui/StatusPill";
@@ -156,11 +160,19 @@ function toGitHubRepoResult(logs: AgentActivityLogRecord[]): GitHubRepoResult | 
   const metadata = repoLog ? asRecord(repoLog.metadata) : null;
   if (!metadata) return null;
 
-  const repoUrl = asString(metadata.repoUrl) ?? asString(metadata.repo_url);
-  const fullName = asString(metadata.fullName) ?? asString(metadata.full_name);
+  const repoUrl =
+    asString(metadata.repoUrl) ??
+    asString(metadata.repo_url) ??
+    asString(metadata.githubRepoUrl) ??
+    asString(metadata.github_repo_url);
+  const fullName =
+    asString(metadata.fullName) ??
+    asString(metadata.full_name) ??
+    asString(metadata.githubRepoFullName) ??
+    asString(metadata.github_repo_full_name);
   const [ownerFromFullName, nameFromFullName] = fullName?.split("/") ?? [];
-  const owner = asString(metadata.owner) ?? ownerFromFullName;
-  const name = asString(metadata.name) ?? nameFromFullName;
+  const owner = asString(metadata.owner) ?? asString(metadata.githubOwner) ?? ownerFromFullName;
+  const name = asString(metadata.name) ?? asString(metadata.githubRepoName) ?? nameFromFullName;
   const isPrivate =
     asBoolean(metadata.private) ??
     (asString(metadata.visibility) === "private" ? true : null);
@@ -173,6 +185,56 @@ function toGitHubRepoResult(logs: AgentActivityLogRecord[]): GitHubRepoResult | 
     owner,
     name,
     private: isPrivate,
+  };
+}
+
+function toVercelProjectResult(
+  logs: AgentActivityLogRecord[]
+): VercelProjectResult | null {
+  const projectLog = logs.find((log) => log.activity_type === "vercel_project_created");
+  const metadata = projectLog ? asRecord(projectLog.metadata) : null;
+  if (!metadata) return null;
+
+  const projectName =
+    asString(metadata.projectName) ??
+    asString(metadata.project_name) ??
+    asString(metadata.vercelProjectName) ??
+    asString(metadata.name);
+  const dashboardUrl =
+    asString(metadata.dashboardUrl) ??
+    asString(metadata.dashboard_url) ??
+    asString(metadata.vercelDashboardUrl) ??
+    asString(metadata.vercel_dashboard_url);
+
+  if (!projectName || !dashboardUrl) return null;
+
+  return {
+    projectId:
+      asString(metadata.projectId) ??
+      asString(metadata.project_id) ??
+      asString(metadata.vercelProjectId) ??
+      undefined,
+    projectName,
+    dashboardUrl,
+    deploymentUrl:
+      asString(metadata.deploymentUrl) ??
+      asString(metadata.deployment_url) ??
+      asString(metadata.vercelDeploymentUrl) ??
+      asString(metadata.vercel_deployment_url),
+    repoFullName:
+      asString(metadata.repoFullName) ??
+      asString(metadata.repo_full_name) ??
+      asString(metadata.githubRepoFullName) ??
+      asString(metadata.github_repo_full_name),
+  };
+}
+
+function toDeploymentActivityLog(log: AgentActivityLogRecord): DeploymentActivityLog {
+  return {
+    activityType: log.activity_type,
+    message: log.message,
+    metadata: log.metadata,
+    createdAt: log.created_at,
   };
 }
 
@@ -239,10 +301,12 @@ function toDashboardBusiness(input: {
     ),
     activity: input.logs.map(toActivityItem),
     permissions,
+    activityLogs: input.logs.map(toDeploymentActivityLog),
     toolPermissions: input.toolPermissions
       .map(toDashboardToolPermission)
       .filter((permission): permission is DashboardToolPermission => !!permission),
     githubRepo: toGitHubRepoResult(input.logs),
+    vercelProject: toVercelProjectResult(input.logs),
   };
 }
 

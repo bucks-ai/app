@@ -7,7 +7,7 @@
 Surface Unification — Intake and Tools Operator Console Aesthetic
 
 ## Current Working Feature
-Unified homepage (`/`), intake (`/intake`), and tool registry (`/tools`) around the Black Card + Operator Console design system.
+Vercel deployment execution UI on saved business detail pages.
 
 ## Last Known Working State
 - Next.js 16 app initialized with TypeScript, Tailwind v4, App Router, `src/` directory
@@ -96,4 +96,4 @@ _None at this time._
 | LangGraph | ⏳ Not yet integrated |
 | Stripe | ⏳ Not yet integrated |
 | GitHub App | ⏳ Not yet integrated |
-| Vercel Deployment | ⏳ Not yet integrated |
+| Vercel Deployment | ⚠️ Frontend UI ready; backend routes expected from separate branch |

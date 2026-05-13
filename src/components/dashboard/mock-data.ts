@@ -1,4 +1,8 @@
 import type { GitHubRepoResult } from "@/types/github-ui";
+import type {
+  DeploymentActivityLog,
+  VercelProjectResult,
+} from "@/types/vercel-ui";
 
 export type StatusVariant = "accent" | "success" | "warning" | "danger" | "neutral";
 
@@ -20,7 +24,9 @@ export type DashboardBusiness = {
   activity: ActivityItem[];
   permissions: ToolPermission[];
   toolPermissions?: DashboardToolPermission[];
+  activityLogs?: DeploymentActivityLog[];
   githubRepo?: GitHubRepoResult | null;
+  vercelProject?: VercelProjectResult | null;
 };
 
 export type ActivityItem = {

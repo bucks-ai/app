@@ -30,6 +30,43 @@
 
 ## Entries
 
+### [2026-05-13 15:40] — Agent: Codex
+
+**Task attempted:** Build the frontend Deployment Execution UI for Vercel project creation after GitHub repo setup
+
+**Files changed:**
+- `src/types/vercel-ui.ts` — Added typed Vercel UI state, responses, project result, scaffold response, and deployment activity log contracts
+- `src/lib/vercel-client.ts` — Added browser-safe Vercel/scaffold fetch helpers with friendly route-missing and approval/token/repo failure messages
+- `src/components/vercel/VercelDeployGate.tsx` — Added deployment approval/source-repo gate component
+- `src/components/vercel/VercelProjectCard.tsx` — Added Vercel project creation form with safety copy and controlled action state
+- `src/components/vercel/VercelProjectResult.tsx` — Added Vercel success/existing-project link display
+- `src/components/vercel/DeploymentExecutionPanel.tsx` — Added deployment orchestration panel for repo gate, Vercel gate, scaffold prep, and project result states
+- `src/components/vercel/ScaffoldPrepCard.tsx` — Added standalone deployable Next.js starter prep card
+- `src/components/dashboard/BusinessDetail.tsx` — Added Deployment Execution after Repository Execution and reordered detail sections per requested UX
+- `src/app/dashboard/businesses/[id]/page.tsx` — Passed serializable activity logs and parsed GitHub/Vercel metadata from activity logs
+- `src/components/dashboard/mock-data.ts` — Extended dashboard business type with deployment activity logs and optional Vercel project
+- `src/components/ui/OperatorPanel.tsx` — Added optional `id` prop for section anchors
+- `HANDOFF_vercel-deployment-ui.md` — Created deployment UI handoff
+- `PROJECT_STATE.md`, `TASKS.md`, `AI_CHANGELOG.md` — Updated project/session state
+
+**Commands run:**
+- `pwd` — confirmed `/Users/satvikranga/bucks-ai-vercel-ui`
+- `git branch --show-current` — confirmed `feature/vercel-deployment-ui`
+- `git status --short --branch` — confirmed not `main`
+- `npm install` — completed; did not run `npm audit fix --force`
+- `./scripts/check.sh` — passed after fixing one TypeScript type guard
+- `npm run dev -- -p 3005` — started local dev server
+- Browser smoke — opened `/dashboard/businesses/acme-analytics`; local session is signed out, so authenticated detail UI was gated
+
+**Result:** Success
+
+**Errors / Blockers:**
+- Full signed-in manual QA was not possible without an active Supabase browser session.
+- Existing Next.js multiple-lockfile workspace-root warning remains.
+
+**Next recommended task:**
+Merge the backend branch with the Vercel scaffold/project/status routes and run the deployment UI manual test plan with a signed-in saved business.
+
 ### [2026-05-12 20:48] — Agent: Codex
 
 **Task attempted:** Full visual unification pass across `/intake` and `/tools` using the Black Card + Operator Console system
