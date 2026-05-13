@@ -17,7 +17,13 @@ export function Navbar() {
         >
           bucks<span style={{ color: "#4F46E5" }}>.ai</span>
         </Link>
-        <div className="flex items-center gap-3 sm:gap-6">
+        <div className="flex items-center gap-3 sm:gap-5">
+          <Link
+            href="/dashboard"
+            className="hidden text-sm text-[#888888] transition-colors hover:text-[#F0F0F0] md:inline"
+          >
+            Dashboard
+          </Link>
           <Link
             href="/tools"
             className="text-sm text-[#888888] transition-colors hover:text-[#F0F0F0]"
@@ -29,6 +35,12 @@ export function Navbar() {
             className="hidden text-sm text-[#888888] transition-colors hover:text-[#F0F0F0] sm:inline"
           >
             How it works
+          </Link>
+          <Link
+            href="/login"
+            className="text-sm text-[#888888] transition-colors hover:text-[#F0F0F0]"
+          >
+            Sign in
           </Link>
           <Link
             href="/intake"

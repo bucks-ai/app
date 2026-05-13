@@ -1,0 +1,115 @@
+import Link from "next/link";
+import { ActivityLog } from "@/components/dashboard/ActivityLog";
+import { HumanActionQueue } from "@/components/dashboard/HumanActionQueue";
+import { ToolPermissionSummary } from "@/components/dashboard/ToolPermissionSummary";
+import type { DashboardBusiness } from "@/components/dashboard/mock-data";
+import { OperatorPanel } from "@/components/ui/OperatorPanel";
+import { SectionLabel } from "@/components/ui/SectionLabel";
+import { StatusPill } from "@/components/ui/StatusPill";
+
+type BusinessDetailProps = {
+  business: DashboardBusiness;
+};
+
+export function BusinessDetail({ business }: BusinessDetailProps) {
+  const humanActions = business.humanActions.map((action) => ({
+    title: action,
+    business: business.name,
+    reason: "This mock queue item is intentionally approval-gated.",
+    status: "Needs review",
+  }));
+
+  return (
+    <div className="space-y-8">
+      <Link
+        href="/dashboard"
+        className="inline-flex text-sm font-medium text-[#A5B4FC] transition-colors hover:text-[#C7D2FE]"
+      >
+        &lt;- Back to Mission Control
+      </Link>
+
+      <OperatorPanel className="p-6 shadow-[0_30px_140px_rgba(0,0,0,0.38)] sm:p-10">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+          <div className="max-w-3xl">
+            <div className="flex flex-wrap items-center gap-3">
+              <SectionLabel>Demo build record</SectionLabel>
+              <StatusPill label={business.status} variant={business.statusVariant} />
+            </div>
+            <h1 className="mt-5 text-4xl font-semibold tracking-tight text-[#F0F0F0] sm:text-5xl">
+              {business.name}
+            </h1>
+            <p className="mt-4 text-base leading-8 text-[#888888]">{business.overview}</p>
+          </div>
+          <div className="grid min-w-64 gap-3 rounded-lg border border-[#1C1C1C] bg-[#080808] p-4">
+            <div>
+              <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#444444]">
+                Business type
+              </p>
+              <p className="mt-2 text-sm font-medium text-[#F0F0F0]">
+                {business.businessType}
+              </p>
+            </div>
+            <div>
+              <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#444444]">
+                Goal
+              </p>
+              <p className="mt-2 text-sm leading-6 text-[#D4D4D4]">{business.goal}</p>
+            </div>
+            <div>
+              <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#444444]">
+                Created
+              </p>
+              <p className="mt-2 text-sm leading-6 text-[#D4D4D4]">{business.created}</p>
+            </div>
+          </div>
+        </div>
+      </OperatorPanel>
+
+      <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+        <OperatorPanel className="p-6">
+          <SectionLabel>Latest blueprint summary</SectionLabel>
+          <p className="mt-4 text-sm leading-7 text-[#D4D4D4]">
+            {business.blueprintSummary}
+          </p>
+        </OperatorPanel>
+
+        <OperatorPanel className="p-6" elevated>
+          <SectionLabel tone="warning">Human-required actions</SectionLabel>
+          <div className="mt-5">
+            <HumanActionQueue actions={humanActions} />
+          </div>
+        </OperatorPanel>
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-3">
+        <OperatorPanel className="p-6 xl:col-span-1">
+          <SectionLabel>Next autonomous actions</SectionLabel>
+          <ul className="mt-5 space-y-3">
+            {business.nextActions.map((action) => (
+              <li
+                key={action}
+                className="rounded-md border border-[#1C1C1C] bg-[#080808] p-4 text-sm leading-6 text-[#D4D4D4]"
+              >
+                {action}
+              </li>
+            ))}
+          </ul>
+        </OperatorPanel>
+
+        <OperatorPanel className="p-6 xl:col-span-1">
+          <SectionLabel>Activity log</SectionLabel>
+          <div className="mt-5">
+            <ActivityLog items={business.activity} />
+          </div>
+        </OperatorPanel>
+
+        <OperatorPanel className="p-6 xl:col-span-1">
+          <SectionLabel>Tool permissions</SectionLabel>
+          <div className="mt-5">
+            <ToolPermissionSummary permissions={business.permissions} />
+          </div>
+        </OperatorPanel>
+      </section>
+    </div>
+  );
+}
