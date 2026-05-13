@@ -2,6 +2,10 @@
 
 import type { BusinessBlueprint, StartupIdea } from "@/types/startup";
 import { BlueprintSection } from "@/components/intake/BlueprintSection";
+import { DataTile } from "@/components/ui/DataTile";
+import { OperatorPanel } from "@/components/ui/OperatorPanel";
+import { SectionLabel } from "@/components/ui/SectionLabel";
+import { StatusPill } from "@/components/ui/StatusPill";
 
 type BlueprintPreviewProps = {
   idea: StartupIdea;
@@ -9,25 +13,55 @@ type BlueprintPreviewProps = {
   onEditIdea: () => void;
 };
 
-function Pill({ label }: { label: string }) {
-  return (
-    <span className="rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 text-xs font-medium text-neutral-200">
-      {label}
-    </span>
-  );
-}
+function TextList({
+  items,
+  tone = "neutral",
+}: {
+  items: string[];
+  tone?: "neutral" | "warning" | "danger" | "accent";
+}) {
+  const toneClasses = {
+    neutral: "border-[#1C1C1C] bg-[#080808] text-[#D4D4D4]",
+    warning: "border-[#F59E0B]/25 bg-[#F59E0B]/10 text-[#FDE68A]",
+    danger: "border-[#EF4444]/30 bg-[#EF4444]/10 text-[#FECACA]",
+    accent: "border-[#4F46E5]/30 bg-[#4F46E5]/10 text-[#C7D2FE]",
+  };
 
-function TextList({ items }: { items: string[] }) {
   return (
     <div className="grid gap-3">
       {items.map((item) => (
         <div
           key={item}
-          className="rounded-2xl border border-white/8 bg-black/25 px-4 py-3 text-sm leading-6 text-neutral-300"
+          className={`rounded-md border px-4 py-3 text-sm leading-6 ${toneClasses[tone]}`}
         >
           {item}
         </div>
       ))}
+    </div>
+  );
+}
+
+function QueueItem({
+  label,
+  title,
+  detail,
+  tone = "accent",
+}: {
+  label: string;
+  title: string;
+  detail: string;
+  tone?: "accent" | "warning";
+}) {
+  return (
+    <div className="rounded-md border border-[#1C1C1C] bg-[#080808] p-4">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold text-[#F0F0F0]">{title}</h3>
+        <StatusPill
+          label={label}
+          variant={tone === "warning" ? "warning" : "accent"}
+        />
+      </div>
+      <p className="text-sm leading-6 text-[#888888]">{detail}</p>
     </div>
   );
 }
@@ -39,16 +73,14 @@ export function BlueprintPreview({
 }: BlueprintPreviewProps) {
   return (
     <div className="space-y-6">
-      <div className="overflow-hidden rounded-[2rem] border border-white/10 bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.22),_transparent_35%),linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.03))] p-8 shadow-[0_30px_120px_rgba(0,0,0,0.45)]">
+      <OperatorPanel className="overflow-hidden p-6 shadow-[0_30px_120px_rgba(0,0,0,0.45)] sm:p-8">
         <div className="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
-            <div className="inline-flex rounded-full border border-emerald-500/25 bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.28em] text-emerald-300">
-              Blueprint Ready
-            </div>
-            <h1 className="mt-5 text-4xl font-semibold tracking-tight text-white sm:text-5xl">
+            <SectionLabel>Blueprint Ready</SectionLabel>
+            <h1 className="mt-5 text-4xl font-semibold tracking-tight text-[#F0F0F0] sm:text-5xl">
               {idea.ideaName || "Untitled startup"} Mission Control
             </h1>
-            <p className="mt-4 max-w-2xl text-base leading-7 text-neutral-300 sm:text-lg">
+            <p className="mt-4 max-w-2xl text-base leading-7 text-[#888888] sm:text-lg">
               {blueprint.businessSummary}
             </p>
           </div>
@@ -57,214 +89,234 @@ export function BlueprintPreview({
             <button
               type="button"
               onClick={onEditIdea}
-              className="rounded-full border border-white/15 bg-white/5 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:border-white/30 hover:bg-white/10"
+              className="rounded-md border border-[#1C1C1C] bg-[#141414] px-5 py-2.5 text-sm font-medium text-[#F0F0F0] transition-colors hover:border-[#2A2A2A] hover:bg-[#191919]"
             >
               Edit Idea
             </button>
             <div className="flex flex-wrap gap-2 lg:justify-end">
-              <Pill label={blueprint.businessType} />
-              <Pill label={idea.autonomyPreference} />
-              <Pill label={`Budget: ${idea.budget || "TBD"}`} />
-              <Pill label={`Timeline: ${idea.timeline || "TBD"}`} />
+              <StatusPill label="Stack selected" variant="accent" />
+              <StatusPill label="GTM mapped" variant="accent" />
+              <StatusPill label="Permissions pending" variant="warning" />
+              <StatusPill label="Human gates identified" variant="warning" />
             </div>
           </div>
         </div>
-      </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+        <div className="mt-8 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <DataTile
+            label="Startup"
+            value={idea.ideaName || "Untitled"}
+            detail={blueprint.businessType}
+            className="xl:col-span-1"
+          />
+          <DataTile
+            label="Customer"
+            value={blueprint.targetCustomer || "TBD"}
+            detail="First wedge"
+            className="xl:col-span-2"
+          />
+          <DataTile
+            label="Goal"
+            value={idea.primaryGoal || "TBD"}
+            detail={idea.successMetric || "Success metric pending"}
+            className="xl:col-span-2"
+          />
+          <DataTile
+            label="Autonomy"
+            value={idea.autonomyPreference}
+            detail={idea.spendingLimit || "No spend threshold supplied"}
+            tone="accent"
+            className="xl:col-span-2"
+          />
+          <DataTile
+            label="Runway"
+            value={idea.budget || "TBD"}
+            detail={idea.timeline || "Timeline pending"}
+            className="xl:col-span-3"
+          />
+        </div>
+      </OperatorPanel>
+
+      <div className="grid gap-6 xl:grid-cols-3">
         <div className="space-y-6">
           <BlueprintSection
-            title="Business Summary"
-            description="The initial business framing based on the founder intake."
+            title="Business / Product"
+            description="Initial operating frame for product scope, customer pain, and build direction."
           >
-            <p className="text-sm leading-7 text-neutral-300">
-              {blueprint.businessSummary}
-            </p>
-          </BlueprintSection>
-
-          <div className="grid gap-6 lg:grid-cols-2">
-            <BlueprintSection title="Startup Classification">
-              <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/8 p-4">
-                <p className="text-sm font-medium text-emerald-300">
-                  {blueprint.businessType}
+            <div className="space-y-5">
+              <div>
+                <SectionLabel tone="muted">Summary</SectionLabel>
+                <p className="mt-2 text-sm leading-7 text-[#D4D4D4]">
+                  {blueprint.businessSummary}
                 </p>
               </div>
-            </BlueprintSection>
-
-            <BlueprintSection title="Target Customer">
-              <p className="text-sm leading-7 text-neutral-300">
-                {blueprint.targetCustomer}
-              </p>
-            </BlueprintSection>
-          </div>
-
-          <BlueprintSection title="Pain Hypothesis">
-            <p className="text-sm leading-7 text-neutral-300">
-              {blueprint.painHypothesis}
-            </p>
-          </BlueprintSection>
-
-          <BlueprintSection title="MVP Scope">
-            <TextList items={blueprint.mvpScope} />
-          </BlueprintSection>
-
-          <BlueprintSection title="Differentiation">
-            <TextList items={blueprint.differentiation} />
+              <div>
+                <SectionLabel tone="muted">Pain hypothesis</SectionLabel>
+                <p className="mt-2 text-sm leading-7 text-[#D4D4D4]">
+                  {blueprint.painHypothesis}
+                </p>
+              </div>
+              <div>
+                <SectionLabel tone="muted">MVP scope</SectionLabel>
+                <div className="mt-3">
+                  <TextList items={blueprint.mvpScope} />
+                </div>
+              </div>
+              <div>
+                <SectionLabel tone="muted">Differentiation</SectionLabel>
+                <div className="mt-3">
+                  <TextList items={blueprint.differentiation} />
+                </div>
+              </div>
+            </div>
           </BlueprintSection>
 
           <BlueprintSection title="Suggested Stack">
-            <TextList items={blueprint.suggestedStack} />
+            <TextList items={blueprint.suggestedStack} tone="accent" />
           </BlueprintSection>
 
           <BlueprintSection title="Required Tools">
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid gap-3">
               {blueprint.requiredTools.map((tool) => (
                 <div
                   key={`${tool.name}-${tool.category}`}
-                  className="rounded-2xl border border-white/8 bg-black/25 p-4"
+                  className="rounded-md border border-[#1C1C1C] bg-[#080808] p-4"
                 >
                   <div className="mb-3 flex items-center justify-between gap-3">
-                    <h3 className="text-sm font-semibold text-white">
+                    <h3 className="text-sm font-semibold text-[#F0F0F0]">
                       {tool.name}
                     </h3>
-                    <span className="rounded-full border border-white/10 bg-white/6 px-2.5 py-1 text-[11px] uppercase tracking-[0.22em] text-neutral-400">
-                      {tool.category}
-                    </span>
+                    <StatusPill label={tool.category} />
                   </div>
-                  <p className="text-sm leading-6 text-neutral-400">
+                  <p className="text-sm leading-6 text-[#888888]">
                     {tool.purpose}
                   </p>
                 </div>
               ))}
             </div>
           </BlueprintSection>
-
-          <BlueprintSection title="Required Permissions">
-            <div className="grid gap-3">
-              {blueprint.requiredPermissions.map((permission) => (
-                <div
-                  key={permission.title}
-                  className="rounded-2xl border border-white/8 bg-black/25 p-4"
-                >
-                  <div className="mb-2 flex flex-wrap items-center gap-3">
-                    <h3 className="text-sm font-semibold text-white">
-                      {permission.title}
-                    </h3>
-                    <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-[11px] uppercase tracking-[0.22em] text-amber-300">
-                      {permission.level}
-                    </span>
-                  </div>
-                  <p className="text-sm leading-6 text-neutral-400">
-                    {permission.reason}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </BlueprintSection>
-
-          <BlueprintSection title="Go-To-Market Motion">
-            <p className="text-sm leading-7 text-neutral-300">
-              {blueprint.goToMarketMotion}
-            </p>
-          </BlueprintSection>
         </div>
 
         <div className="space-y-6">
-          <BlueprintSection title="Marketing Plan">
-            <div className="space-y-4">
+          <BlueprintSection
+            title="GTM / Marketing / Sales"
+            description="Launch motion, channel choices, experiments, and first sales operating queue."
+          >
+            <div className="space-y-5">
               <div>
-                <h3 className="text-sm font-semibold text-white">Channels</h3>
+                <SectionLabel tone="muted">GTM motion</SectionLabel>
+                <p className="mt-2 text-sm leading-7 text-[#D4D4D4]">
+                  {blueprint.goToMarketMotion}
+                </p>
+              </div>
+              <div>
+                <SectionLabel tone="muted">Marketing channels</SectionLabel>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {blueprint.marketingPlan.channels.map((channel) => (
-                    <Pill key={channel} label={channel} />
+                    <StatusPill key={channel} label={channel} variant="accent" />
                   ))}
                 </div>
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-white">Launch Assets</h3>
-                <TextList items={blueprint.marketingPlan.launchAssets} />
+                <SectionLabel tone="muted">Launch assets</SectionLabel>
+                <div className="mt-3">
+                  <TextList items={blueprint.marketingPlan.launchAssets} />
+                </div>
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-white">Experiments</h3>
-                <TextList items={blueprint.marketingPlan.experiments} />
+                <SectionLabel tone="muted">Experiments</SectionLabel>
+                <div className="mt-3">
+                  <TextList items={blueprint.marketingPlan.experiments} />
+                </div>
               </div>
             </div>
           </BlueprintSection>
 
           <BlueprintSection title="Sales / Outreach Plan">
-            <div className="space-y-4">
-              <p className="text-sm leading-7 text-neutral-300">
+            <div className="space-y-5">
+              <p className="text-sm leading-7 text-[#D4D4D4]">
                 {blueprint.salesPlan.motion}
               </p>
               <div>
-                <h3 className="text-sm font-semibold text-white">Channels</h3>
+                <SectionLabel tone="muted">Channels</SectionLabel>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {blueprint.salesPlan.channels.map((channel) => (
-                    <Pill key={channel} label={channel} />
+                    <StatusPill key={channel} label={channel} />
                   ))}
                 </div>
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-white">
-                  Enablement
-                </h3>
-                <TextList items={blueprint.salesPlan.enablement} />
+                <SectionLabel tone="muted">Enablement</SectionLabel>
+                <div className="mt-3">
+                  <TextList items={blueprint.salesPlan.enablement} />
+                </div>
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-white">
-                  Sequence
-                </h3>
-                <TextList items={blueprint.salesPlan.sequence} />
+                <SectionLabel tone="muted">Sequence</SectionLabel>
+                <div className="mt-3">
+                  <TextList items={blueprint.salesPlan.sequence} />
+                </div>
               </div>
             </div>
           </BlueprintSection>
 
           <BlueprintSection title="Analytics Plan">
+            <div className="space-y-5">
+              <DataTile
+                label="North Star"
+                value={blueprint.analyticsPlan.northStarMetric}
+                tone="accent"
+              />
+              <div>
+                <SectionLabel tone="muted">Events</SectionLabel>
+                <div className="mt-3">
+                  <TextList items={blueprint.analyticsPlan.events} />
+                </div>
+              </div>
+              <div>
+                <SectionLabel tone="muted">Dashboards</SectionLabel>
+                <div className="mt-3">
+                  <TextList items={blueprint.analyticsPlan.dashboards} />
+                </div>
+              </div>
+              <div>
+                <SectionLabel tone="muted">Review cadence</SectionLabel>
+                <div className="mt-3">
+                  <TextList items={blueprint.analyticsPlan.reviewCadence} />
+                </div>
+              </div>
+            </div>
+          </BlueprintSection>
+        </div>
+
+        <div className="space-y-6">
+          <BlueprintSection
+            title="Controls / Permissions"
+            description="Human-required checkpoints and boundaries before autonomous execution."
+          >
             <div className="space-y-4">
-              <div className="rounded-2xl border border-emerald-500/15 bg-emerald-500/8 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-300">
-                  North Star
-                </p>
-                <p className="mt-2 text-sm text-white">
-                  {blueprint.analyticsPlan.northStarMetric}
-                </p>
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold text-white">Events</h3>
-                <TextList items={blueprint.analyticsPlan.events} />
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold text-white">Dashboards</h3>
-                <TextList items={blueprint.analyticsPlan.dashboards} />
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold text-white">
-                  Review Cadence
-                </h3>
-                <TextList items={blueprint.analyticsPlan.reviewCadence} />
-              </div>
+              {blueprint.requiredPermissions.map((permission) => (
+                <QueueItem
+                  key={permission.title}
+                  label={permission.level}
+                  title={permission.title}
+                  detail={permission.reason}
+                  tone="warning"
+                />
+              ))}
             </div>
           </BlueprintSection>
 
           <BlueprintSection title="Human-Required Actions">
             <div className="grid gap-3">
               {blueprint.humanRequiredActions.map((action) => (
-                <div
+                <QueueItem
                   key={action.title}
-                  className="rounded-2xl border border-amber-500/15 bg-amber-500/6 p-4"
-                >
-                  <div className="flex flex-wrap items-center gap-3">
-                    <h3 className="text-sm font-semibold text-white">
-                      {action.title}
-                    </h3>
-                    <span className="rounded-full border border-white/10 bg-white/6 px-2.5 py-1 text-[11px] uppercase tracking-[0.22em] text-neutral-400">
-                      {action.owner}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-sm leading-6 text-neutral-400">
-                    {action.reason}
-                  </p>
-                </div>
+                  label={action.owner}
+                  title={action.title}
+                  detail={action.reason}
+                  tone="warning"
+                />
               ))}
             </div>
           </BlueprintSection>
@@ -272,36 +324,35 @@ export function BlueprintPreview({
           <BlueprintSection title="Next Autonomous Actions">
             <div className="grid gap-3">
               {blueprint.nextAutonomousActions.map((action) => (
-                <div
+                <QueueItem
                   key={action.title}
-                  className="rounded-2xl border border-white/8 bg-black/25 p-4"
-                >
-                  <div className="mb-2 flex items-center justify-between gap-3">
-                    <h3 className="text-sm font-semibold text-white">
-                      {action.title}
-                    </h3>
-                    <span className="rounded-full border border-emerald-500/15 bg-emerald-500/8 px-2.5 py-1 text-[11px] uppercase tracking-[0.22em] text-emerald-300">
-                      {action.phase}
-                    </span>
-                  </div>
-                  <p className="text-sm leading-6 text-neutral-400">
-                    {action.detail}
-                  </p>
-                </div>
+                  label={action.phase}
+                  title={action.title}
+                  detail={action.detail}
+                />
               ))}
             </div>
           </BlueprintSection>
 
           <BlueprintSection title="Risks">
-            <TextList items={blueprint.risks} />
+            <TextList items={blueprint.risks} tone="danger" />
           </BlueprintSection>
 
           <BlueprintSection title="Success Metrics">
-            <TextList items={blueprint.successMetrics} />
+            <div className="grid gap-3">
+              {blueprint.successMetrics.map((metric, index) => (
+                <DataTile
+                  key={metric}
+                  label={`Metric ${index + 1}`}
+                  value={metric}
+                  tone="success"
+                />
+              ))}
+            </div>
           </BlueprintSection>
 
           <BlueprintSection title="Kill Criteria">
-            <TextList items={blueprint.killCriteria} />
+            <TextList items={blueprint.killCriteria} tone="warning" />
           </BlueprintSection>
         </div>
       </div>

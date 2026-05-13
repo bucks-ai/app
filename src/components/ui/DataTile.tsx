@@ -29,7 +29,7 @@ export function DataTile({
     >
       <SectionLabel tone="muted">{label}</SectionLabel>
       <p
-        className={`mt-3 text-2xl font-semibold tracking-tight ${valueToneClasses[tone]}`}
+        className={`mt-3 break-words text-xl font-semibold tracking-tight ${valueToneClasses[tone]}`}
       >
         {value}
       </p>
@@ -39,4 +39,3 @@ export function DataTile({
     </div>
   );
 }
-

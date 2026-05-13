@@ -1,4 +1,6 @@
 import type { RiskLevel, SetupStatus, ToolRegistryItem, ToolStatus } from "@/types/tools";
+import { OperatorPanel } from "@/components/ui/OperatorPanel";
+import { SectionLabel } from "@/components/ui/SectionLabel";
 import { ToolStatusBadge } from "@/components/tools/ToolStatusBadge";
 
 function getStatusVariant(status: ToolStatus) {
@@ -54,13 +56,11 @@ export function ToolCard({ tool }: { tool: ToolRegistryItem }) {
   ].filter(Boolean) as string[];
 
   return (
-    <article className="flex h-full flex-col rounded-[1.75rem] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.03))] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.3)] backdrop-blur-sm">
+    <OperatorPanel className="flex h-full flex-col p-5 shadow-[0_24px_80px_rgba(0,0,0,0.3)] sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-400/75">
-            {tool.category}
-          </p>
-          <h3 className="mt-2 text-xl font-semibold text-white">{tool.name}</h3>
+          <SectionLabel tone="muted">{tool.category}</SectionLabel>
+          <h3 className="mt-2 text-xl font-semibold text-[#F0F0F0]">{tool.name}</h3>
         </div>
         <ToolStatusBadge
           label={tool.status}
@@ -68,8 +68,14 @@ export function ToolCard({ tool }: { tool: ToolRegistryItem }) {
         />
       </div>
 
-      <p className="mt-4 text-sm leading-6 text-neutral-300">{tool.purpose}</p>
-      <p className="mt-3 text-sm leading-6 text-neutral-500">{tool.typicalUse}</p>
+      <p className="mt-4 text-sm leading-6 text-[#D4D4D4]">{tool.purpose}</p>
+      <p className="mt-3 text-sm leading-6 text-[#888888]">{tool.typicalUse}</p>
+
+      {tool.requiresPaymentSetup || tool.category === "Payments" ? (
+        <div className="mt-4 rounded-md border border-[#F59E0B]/25 bg-[#F59E0B]/10 px-3 py-2 text-sm leading-6 text-[#FDE68A]">
+          Payment setup and terms remain founder-controlled.
+        </div>
+      ) : null}
 
       <div className="mt-5 flex flex-wrap gap-2">
         <ToolStatusBadge
@@ -86,16 +92,14 @@ export function ToolCard({ tool }: { tool: ToolRegistryItem }) {
         />
       </div>
 
-      <div className="mt-6 grid gap-4 border-t border-white/8 pt-5">
+      <div className="mt-6 grid gap-4 border-t border-[#1C1C1C] pt-5">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-neutral-500">
-            Default permissions
-          </p>
+          <SectionLabel tone="muted">Default permissions</SectionLabel>
           <ul className="mt-3 space-y-2">
             {tool.defaultPermissions.map((permission) => (
               <li
                 key={permission}
-                className="rounded-2xl border border-white/8 bg-black/25 px-3 py-2 text-sm text-neutral-300"
+                className="rounded-md border border-[#1C1C1C] bg-[#080808] px-3 py-2 text-sm text-[#D4D4D4]"
               >
                 {permission}
               </li>
@@ -104,9 +108,7 @@ export function ToolCard({ tool }: { tool: ToolRegistryItem }) {
         </div>
 
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-neutral-500">
-            Human gates
-          </p>
+          <SectionLabel tone="muted">Human gates</SectionLabel>
           <div className="mt-3 flex flex-wrap gap-2">
             {requirementBadges.length > 0 ? (
               requirementBadges.map((requirement) => (
@@ -124,14 +126,12 @@ export function ToolCard({ tool }: { tool: ToolRegistryItem }) {
 
         {tool.humanOnlyReasons.length > 0 ? (
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-neutral-500">
-              Human-only reasons
-            </p>
+            <SectionLabel tone="warning">Human-only reasons</SectionLabel>
             <ul className="mt-3 space-y-2">
               {tool.humanOnlyReasons.map((reason) => (
                 <li
                   key={reason}
-                  className="rounded-2xl border border-amber-500/15 bg-amber-500/8 px-3 py-2 text-sm leading-6 text-neutral-300"
+                  className="rounded-md border border-[#F59E0B]/25 bg-[#F59E0B]/10 px-3 py-2 text-sm leading-6 text-[#FDE68A]"
                 >
                   {reason}
                 </li>
@@ -140,6 +140,6 @@ export function ToolCard({ tool }: { tool: ToolRegistryItem }) {
           </div>
         ) : null}
       </div>
-    </article>
+    </OperatorPanel>
   );
 }

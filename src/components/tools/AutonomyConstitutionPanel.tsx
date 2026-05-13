@@ -1,5 +1,8 @@
 import type { AutonomyConstitution, AutonomyRuleCategory } from "@/types/tools";
 import { ToolStatusBadge } from "@/components/tools/ToolStatusBadge";
+import { DataTile } from "@/components/ui/DataTile";
+import { OperatorPanel } from "@/components/ui/OperatorPanel";
+import { SectionLabel } from "@/components/ui/SectionLabel";
 
 const categoryOrder: AutonomyRuleCategory[] = [
   "Spending",
@@ -17,6 +20,21 @@ function formatUsd(value: number) {
   }).format(value);
 }
 
+function getCategoryLabel(category: AutonomyRuleCategory) {
+  switch (category) {
+    case "Spending":
+      return "Spend limits";
+    case "Outreach":
+      return "Outreach limits";
+    case "Product":
+      return "Product / deployment limits";
+    case "Sales":
+      return "Sales limits";
+    case "Legal":
+      return "Legal / human-only limits";
+  }
+}
+
 export function AutonomyConstitutionPanel({
   constitution,
 }: {
@@ -28,16 +46,14 @@ export function AutonomyConstitutionPanel({
   }));
 
   return (
-    <section className="rounded-[2rem] border border-white/10 bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.18),_transparent_36%),linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.03))] p-7 shadow-[0_30px_120px_rgba(0,0,0,0.35)] backdrop-blur-sm sm:p-8">
-      <div className="flex flex-col gap-4 border-b border-white/8 pb-6">
-        <div className="inline-flex w-fit rounded-full border border-emerald-500/30 bg-emerald-500/12 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-emerald-300">
-          Default constitution
-        </div>
+    <OperatorPanel className="p-6 shadow-[0_30px_120px_rgba(0,0,0,0.35)] sm:p-8">
+      <div className="flex flex-col gap-4 border-b border-[#1C1C1C] pb-6">
+        <SectionLabel>Default constitution</SectionLabel>
         <div>
-          <h2 className="text-3xl font-semibold tracking-tight text-white">
+          <h2 className="text-3xl font-semibold tracking-tight text-[#F0F0F0]">
             Autonomy Constitution
           </h2>
-          <p className="mt-3 max-w-3xl text-sm leading-7 text-neutral-300 sm:text-base">
+          <p className="mt-3 max-w-3xl text-sm leading-7 text-[#888888] sm:text-base">
             bucks.ai can execute aggressively inside clearly defined limits. The
             constitution below keeps spend, outreach, deployments, sales, and
             legal actions inside a founder-approved operating envelope.
@@ -46,62 +62,50 @@ export function AutonomyConstitutionPanel({
       </div>
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-3xl border border-white/10 bg-black/25 p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-neutral-500">
-            Spend per action
-          </p>
-          <p className="mt-3 text-3xl font-semibold text-white">
-            {formatUsd(constitution.maxSpendPerActionUsd)}
-          </p>
-        </div>
-        <div className="rounded-3xl border border-white/10 bg-black/25 p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-neutral-500">
-            Daily spend cap
-          </p>
-          <p className="mt-3 text-3xl font-semibold text-white">
-            {formatUsd(constitution.maxDailySpendUsd)}
-          </p>
-        </div>
-        <div className="rounded-3xl border border-white/10 bg-black/25 p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-neutral-500">
-            Monthly spend cap
-          </p>
-          <p className="mt-3 text-3xl font-semibold text-white">
-            {formatUsd(constitution.maxMonthlySpendUsd)}
-          </p>
-        </div>
-        <div className="rounded-3xl border border-white/10 bg-black/25 p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-neutral-500">
-            Sales discount limit
-          </p>
-          <p className="mt-3 text-3xl font-semibold text-white">
-            {constitution.maxDiscountPercent}%
-          </p>
-        </div>
+        <DataTile
+          label="Spend per action"
+          value={formatUsd(constitution.maxSpendPerActionUsd)}
+          tone="warning"
+        />
+        <DataTile
+          label="Daily spend cap"
+          value={formatUsd(constitution.maxDailySpendUsd)}
+        />
+        <DataTile
+          label="Monthly spend cap"
+          value={formatUsd(constitution.maxMonthlySpendUsd)}
+          tone="warning"
+        />
+        <DataTile
+          label="Sales discount limit"
+          value={`${constitution.maxDiscountPercent}%`}
+        />
       </div>
 
       <div className="mt-8 grid gap-6 xl:grid-cols-2">
         {groupedRules.map(({ category, rules }) => (
           <div
             key={category}
-            className="rounded-3xl border border-white/10 bg-black/25 p-6"
+            className="rounded-lg border border-[#1C1C1C] bg-[#080808] p-5 sm:p-6"
           >
             <div className="flex items-center justify-between gap-3">
-              <h3 className="text-lg font-semibold text-white">{category}</h3>
+              <h3 className="text-lg font-semibold text-[#F0F0F0]">
+                {getCategoryLabel(category)}
+              </h3>
               <ToolStatusBadge label={`${rules.length} rules`} variant="neutral" />
             </div>
             <div className="mt-5 space-y-3">
               {rules.map((rule) => (
                 <div
                   key={rule.id}
-                  className="rounded-2xl border border-white/8 bg-white/[0.03] p-4"
+                  className="rounded-md border border-[#1C1C1C] bg-[#0F0F0F] p-4"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <p className="text-sm font-semibold text-white">
+                      <p className="text-sm font-semibold text-[#F0F0F0]">
                         {rule.title}
                       </p>
-                      <p className="mt-2 text-sm leading-6 text-neutral-400">
+                      <p className="mt-2 text-sm leading-6 text-[#888888]">
                         {rule.description}
                       </p>
                     </div>
@@ -124,6 +128,6 @@ export function AutonomyConstitutionPanel({
           </div>
         ))}
       </div>
-    </section>
+    </OperatorPanel>
   );
 }

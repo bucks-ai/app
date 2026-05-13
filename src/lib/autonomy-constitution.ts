@@ -22,11 +22,12 @@ export const autonomyConstitution: AutonomyConstitution = {
     "Any production action outside approved tests, budget, or policy guardrails.",
   ],
   humanOnlyActions: [
+    "Sign legal documents.",
     "Accept terms of service or legal agreements.",
-    "Enter bank, tax, identity, or government-verification details.",
-    "Approve new paid acquisition channels or billing instruments.",
-    "Delete customer data or close customer accounts.",
-    "Send guarantees, warranties, or contractual promises to prospects or customers.",
+    "Enter payment, bank, tax, identity, or government-verification details.",
+    "Authorize spend over approved limits.",
+    "Join client calls or make live-client commitments.",
+    "Sign contracts.",
   ],
   rules: [
     {

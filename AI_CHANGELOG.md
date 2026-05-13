@@ -30,6 +30,48 @@
 
 ## Entries
 
+### [2026-05-12 20:48] — Agent: Codex
+
+**Task attempted:** Full visual unification pass across `/intake` and `/tools` using the Black Card + Operator Console system
+
+**Files changed:**
+- `HANDOFF_surface-unification.md` — Created session handoff with inspected files, design changes, QA, and concerns
+- `src/app/layout.tsx` — Added `data-scroll-behavior="smooth"` for Next.js smooth-scroll guidance
+- `src/components/ui/DataTile.tsx` — Added/adjusted shared operator data tile primitive
+- `src/components/ui/StatusPill.tsx` — Added/adjusted shared status pill primitive
+- `src/components/intake/IdeaIntakeWizard.tsx` — Restyled wizard, launch path, form controls, loading log, missing-key warning, error state, and demo fallback
+- `src/components/intake/IntakeStep.tsx` — Restyled intake step shell
+- `src/components/intake/BlueprintSection.tsx` — Restyled blueprint section shell
+- `src/components/intake/BlueprintPreview.tsx` — Rebuilt blueprint preview as Mission Control output with summary tiles, bento columns, permissions, queues, risks, and metrics
+- `src/components/tools/ToolRegistryPage.tsx` — Restyled tool registry page as permission layer/control room
+- `src/components/tools/ToolCard.tsx` — Restyled tool cards and clarified founder-controlled payment setup
+- `src/components/tools/ToolStatusBadge.tsx` — Replaced green/cyan/orange badge palette with indigo/amber/red/success system
+- `src/components/tools/AutonomyConstitutionPanel.tsx` — Restyled constitution panel with rule rows and clearer category labels
+- `src/lib/autonomy-constitution.ts` — Polished human-only action labels
+- `PROJECT_STATE.md` — Updated current milestone and integration status
+- `TASKS.md` — Marked surface unification done and added workspace-root warning follow-up
+- `AI_CHANGELOG.md` — Added this entry
+
+**Commands run:**
+- `pwd` — confirmed `/Users/satvikranga/bucks-ai`
+- `git branch --show-current` — confirmed `feature/homepage-redesign`
+- `git status --short --branch` — confirmed not `main`
+- `rm -rf .claude .next` — cleared generated/session directories as requested
+- `npm run lint` — passed
+- `npm run build` — passed; `/`, `/intake`, `/tools` static; `/api/generate-blueprint` dynamic
+- `npm run dev -- -p 3002` — started dev server on `3002` because `3000` is occupied by `/Users/satvikranga/bucks-ai-codex`
+- Playwright/Chrome QA — checked `/`, `/intake`, `/tools`, mobile widths, nav hrefs, missing API key flow, demo fallback, and blueprint preview
+
+**Result:** Success
+
+**Errors / Blockers:**
+- Port `3000` is occupied by another local worktree, so QA used `http://localhost:3002`.
+- Build still warns that Next.js inferred the workspace root because multiple lockfiles exist.
+- Real OpenAI generation was not invoked because `.env.local` is absent; missing-key and demo fallback were verified.
+
+**Next recommended task:**
+Resolve the Next.js workspace-root warning by setting `turbopack.root` or cleaning up the parent lockfile situation.
+
 ### [2026-05-12] — Agent: Claude Sonnet 4.6
 
 **Task attempted:** Homepage redesign — premium autonomous startup operator aesthetic

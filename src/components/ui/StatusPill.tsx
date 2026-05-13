@@ -6,7 +6,7 @@ type StatusPillVariant =
   | "neutral";
 
 const variantClasses: Record<StatusPillVariant, string> = {
-  accent: "border-[#4F46E5]/35 bg-[#4F46E5]/12 text-[#A5B4FC]",
+  accent: "border-[#4F46E5]/35 bg-[#4F46E5]/10 text-[#A5B4FC]",
   success: "border-[#22C55E]/25 bg-[#22C55E]/10 text-[#86EFAC]",
   warning: "border-[#F59E0B]/35 bg-[#F59E0B]/10 text-[#FCD34D]",
   danger: "border-[#EF4444]/35 bg-[#EF4444]/10 text-[#FCA5A5]",
@@ -32,4 +32,3 @@ export function StatusPill({
     </span>
   );
 }
-

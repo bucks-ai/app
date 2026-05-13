@@ -4,15 +4,17 @@
 **Functional Prototype**
 
 ## Current Milestone
-Homepage Redesign — Premium Operator Console Aesthetic
+Surface Unification — Intake and Tools Operator Console Aesthetic
 
 ## Current Working Feature
-Redesigned homepage (`/`) with full operator console design system. `/intake` and `/tools` routes intact and unchanged.
+Unified homepage (`/`), intake (`/intake`), and tool registry (`/tools`) around the Black Card + Operator Console design system.
 
 ## Last Known Working State
 - Next.js 16 app initialized with TypeScript, Tailwind v4, App Router, `src/` directory
-- Homepage fully redesigned with 10 new landing components under `src/components/landing/`
-- Design system: `#080808` background, `#4F46E5` accent, no emerald, no emoji, no fake social proof
+- Homepage fully redesigned with 10 landing components under `src/components/landing/`
+- `/intake` visually unified as a launch-sequence wizard and Mission Control blueprint output
+- `/tools` visually unified as a permission-layer/control-room registry
+- Design system: `#080808` background, `#4F46E5` accent, amber human-required states, red blocked/risk states, minimal green success treatment, no emoji, no fake social proof
 - All routes (`/`, `/intake`, `/tools`, `/api/generate-blueprint`) building successfully
 - `npm run lint` — clean
 - `npm run build` — passing (see AI_CHANGELOG.md for latest run result)
@@ -89,7 +91,7 @@ _None at this time._
 | Idea Intake Wizard | ✅ Active (frontend-only mock flow) |
 | Mock Blueprint Generator | ✅ Active (local TypeScript logic) |
 | Supabase | ⏳ Not yet integrated |
-| OpenAI API | ⏳ Not yet integrated |
+| OpenAI API | ⚠️ Route scaffold active; requires `OPENAI_API_KEY` in `.env.local` |
 | Vercel AI SDK | ⏳ Not yet integrated |
 | LangGraph | ⏳ Not yet integrated |
 | Stripe | ⏳ Not yet integrated |

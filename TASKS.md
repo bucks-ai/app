@@ -11,13 +11,14 @@
 - [x] Create .env.example with all placeholder env vars
 - [x] Build initial landing page (Hero, What We Do, How It Works, Autonomy Boundaries, CTA)
 - [x] Homepage redesign — premium operator console aesthetic (feature/homepage-redesign)
+- [x] Surface unification — `/intake` and `/tools` match premium operator console aesthetic
 
 ---
 
 ## Next
 
-- [ ] Connect `/intake` wizard to real `/api/generate-blueprint` route — stream OpenAI structured output to BlueprintPreview
-- [ ] Add loading and error states to the intake blueprint flow
+- [ ] Resolve Next.js workspace-root warning from multiple lockfiles (`turbopack.root` or workspace cleanup)
+- [ ] Improve real `/api/generate-blueprint` route — stream OpenAI structured output to BlueprintPreview
 - [ ] Build **Mission Control dashboard shell** — authenticated layout with sidebar nav and placeholder panels
 - [ ] Wire up **Early Access CTA** to a waitlist form (email capture, no backend yet — can use a form service)
 - [ ] Add Supabase persistence

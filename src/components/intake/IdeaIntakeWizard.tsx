@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { BlueprintPreview } from "@/components/intake/BlueprintPreview";
 import { IntakeStep } from "@/components/intake/IntakeStep";
 import { OperatorPanel } from "@/components/ui/OperatorPanel";
@@ -143,7 +143,7 @@ function ProgressRail({
                 state === "current"
                   ? "border-[#4F46E5]/60 bg-[#4F46E5]/10"
                   : state === "done"
-                    ? "border-[#22C55E]/25 bg-[#22C55E]/8"
+                    ? "border-[#22C55E]/25 bg-[#22C55E]/10"
                     : "border-[#1C1C1C] bg-[#080808]"
               }`}
             >
@@ -302,6 +302,12 @@ export function IdeaIntakeWizard() {
   const [blueprint, setBlueprint] = useState<BusinessBlueprint | null>(null);
   const [isPreviewVisible, setIsPreviewVisible] = useState(false);
   const [generateState, setGenerateState] = useState<GenerateState>({ status: "idle" });
+
+  useEffect(() => {
+    if (isPreviewVisible) {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }, [isPreviewVisible]);
 
   function updateField(name: FieldName, value: string) {
     setIdea((current) => ({ ...current, [name]: value }));
@@ -698,12 +704,12 @@ export function IdeaIntakeWizard() {
             </div>
           ) : null}
 
-          <div className="mt-10 flex flex-col gap-3 border-t border-white/8 pt-6 sm:flex-row sm:items-center sm:justify-between">
+          <div className="mt-10 flex flex-col gap-3 border-t border-[#1C1C1C] pt-6 sm:flex-row sm:items-center sm:justify-between">
             <button
               type="button"
               onClick={handleBack}
               disabled={currentStep === 0 || isLoading}
-              className="rounded-full border border-white/10 bg-white/5 px-5 py-3 text-sm font-medium text-white transition-colors hover:border-white/20 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+              className="rounded-md border border-[#1C1C1C] bg-[#141414] px-5 py-3 text-sm font-medium text-[#F0F0F0] transition-colors hover:border-[#2A2A2A] hover:bg-[#191919] disabled:cursor-not-allowed disabled:opacity-40"
             >
               Back
             </button>
@@ -713,7 +719,7 @@ export function IdeaIntakeWizard() {
                 type="button"
                 onClick={handleContinue}
                 disabled={isLoading}
-                className="rounded-full bg-emerald-500 px-6 py-3 text-sm font-semibold text-black transition-colors hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-md bg-[#4F46E5] px-6 py-3 text-sm font-semibold text-[#F0F0F0] transition-colors hover:bg-[#6366F1] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Continue
               </button>
@@ -722,7 +728,7 @@ export function IdeaIntakeWizard() {
                 type="button"
                 onClick={() => void handleGenerateBlueprint()}
                 disabled={isLoading}
-                className="rounded-full bg-emerald-500 px-6 py-3 text-sm font-semibold text-black transition-colors hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-md bg-[#4F46E5] px-6 py-3 text-sm font-semibold text-[#F0F0F0] transition-colors hover:bg-[#6366F1] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isLoading ? "Building your blueprint…" : "Generate Blueprint"}
               </button>
@@ -730,11 +736,29 @@ export function IdeaIntakeWizard() {
           </div>
 
           {isLoading ? (
-            <div className="mt-4 flex items-center gap-3 rounded-2xl border border-emerald-500/20 bg-emerald-500/8 px-4 py-3">
-              <div className="h-4 w-4 animate-spin rounded-full border-2 border-emerald-400 border-t-transparent" />
-              <p className="text-sm text-emerald-300">
-                bucks.ai is building your launch blueprint…
-              </p>
+            <div className="mt-4 rounded-lg border border-[#4F46E5]/35 bg-[#4F46E5]/10 p-4">
+              <div className="flex items-center gap-3">
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#A5B4FC] border-t-transparent" />
+                <p className="text-sm font-medium text-[#A5B4FC]">
+                  bucks.ai is building your launch blueprint...
+                </p>
+              </div>
+              <div className="mt-4 grid gap-2 font-mono text-xs text-[#888888] sm:grid-cols-2">
+                {[
+                  "Classifying business model",
+                  "Selecting startup stack",
+                  "Mapping GTM motion",
+                  "Defining human-only checkpoints",
+                  "Preparing launch plan",
+                ].map((item) => (
+                  <div
+                    key={item}
+                    className="rounded-md border border-[#1C1C1C] bg-[#080808] px-3 py-2"
+                  >
+                    {item}
+                  </div>
+                ))}
+              </div>
             </div>
           ) : null}
         </IntakeStep>

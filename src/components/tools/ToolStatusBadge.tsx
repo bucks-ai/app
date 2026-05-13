@@ -14,19 +14,19 @@ type ToolStatusBadgeVariant =
   | "danger";
 
 const variantClasses: Record<ToolStatusBadgeVariant, string> = {
-  preferred: "border-emerald-500/30 bg-emerald-500/12 text-emerald-300",
-  approved: "border-cyan-500/30 bg-cyan-500/12 text-cyan-300",
-  external: "border-amber-500/30 bg-amber-500/12 text-amber-300",
-  blocked: "border-rose-500/30 bg-rose-500/12 text-rose-300",
-  human: "border-orange-500/30 bg-orange-500/12 text-orange-300",
-  low: "border-emerald-500/30 bg-emerald-500/12 text-emerald-300",
-  medium: "border-yellow-500/30 bg-yellow-500/12 text-yellow-300",
-  high: "border-orange-500/30 bg-orange-500/12 text-orange-300",
-  critical: "border-rose-500/30 bg-rose-500/12 text-rose-300",
-  success: "border-emerald-500/30 bg-emerald-500/12 text-emerald-300",
-  warning: "border-amber-500/30 bg-amber-500/12 text-amber-300",
-  neutral: "border-white/12 bg-white/6 text-neutral-300",
-  danger: "border-rose-500/30 bg-rose-500/12 text-rose-300",
+  preferred: "border-[#4F46E5]/35 bg-[#4F46E5]/10 text-[#A5B4FC]",
+  approved: "border-[#1C1C1C] bg-[#141414] text-[#D4D4D4]",
+  external: "border-[#F59E0B]/35 bg-[#F59E0B]/10 text-[#FCD34D]",
+  blocked: "border-[#EF4444]/35 bg-[#EF4444]/10 text-[#FCA5A5]",
+  human: "border-[#F59E0B]/35 bg-[#F59E0B]/10 text-[#FCD34D]",
+  low: "border-[#22C55E]/25 bg-[#22C55E]/10 text-[#86EFAC]",
+  medium: "border-[#F59E0B]/25 bg-[#F59E0B]/10 text-[#FDE68A]",
+  high: "border-[#F59E0B]/35 bg-[#F59E0B]/10 text-[#FCD34D]",
+  critical: "border-[#EF4444]/35 bg-[#EF4444]/10 text-[#FCA5A5]",
+  success: "border-[#22C55E]/25 bg-[#22C55E]/10 text-[#86EFAC]",
+  warning: "border-[#F59E0B]/35 bg-[#F59E0B]/10 text-[#FCD34D]",
+  neutral: "border-[#1C1C1C] bg-[#141414] text-[#888888]",
+  danger: "border-[#EF4444]/35 bg-[#EF4444]/10 text-[#FCA5A5]",
 };
 
 type ToolStatusBadgeProps = {
@@ -40,7 +40,7 @@ export function ToolStatusBadge({
 }: ToolStatusBadgeProps) {
   return (
     <span
-      className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] ${variantClasses[variant]}`}
+      className={`inline-flex w-fit rounded-md border px-2.5 py-1 font-mono text-[11px] font-medium uppercase tracking-[0.18em] ${variantClasses[variant]}`}
     >
       {label}
     </span>
