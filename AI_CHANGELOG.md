@@ -30,6 +30,44 @@
 
 ## Entries
 
+### [2026-05-12] — Agent: Claude Sonnet 4.6
+
+**Task attempted:** Homepage redesign — premium autonomous startup operator aesthetic
+
+**Files created:**
+- `src/components/landing/CommandHero.tsx` — Hero with headline, subheadline, dual CTA
+- `src/components/landing/OperatorConsoleMockup.tsx` — Operator status card embedded in hero
+- `src/components/landing/ControlRoomStats.tsx` — Demo stats bar (labeled as demo)
+- `src/components/landing/FounderTrap.tsx` — Founder Trap contrast section
+- `src/components/landing/AgentDepartments.tsx` — Five departments with concrete outputs
+- `src/components/landing/AutonomyModel.tsx` — Auto vs human-only action split
+- `src/components/landing/ProductConsoleShowcase.tsx` — Three-panel Mission Control mockup
+- `src/components/landing/ToolPermissionLayer.tsx` — Tool registry with permission badges
+- `src/components/landing/LaunchTimeline.tsx` — Day 0 to operating company timeline
+- `src/components/landing/FinalCTA.tsx` — Final conversion section
+- `HANDOFF_homepage-redesign.md` — Full session handoff document
+
+**Files modified:**
+- `src/app/page.tsx` — Replaced old section imports with 10 new landing components
+- `src/components/shared/Navbar.tsx` — Removed emerald, added `#4F46E5` accent, added Tools link
+- `src/components/shared/Footer.tsx` — Updated colors, added Tools link
+- `src/app/globals.css` — Added full design token set as CSS custom properties
+- `PROJECT_STATE.md` — Updated current milestone and file map
+- `TASKS.md` — Marked homepage redesign done, updated Next queue
+- `AI_CHANGELOG.md` — Added this entry
+
+**Commands run:**
+- `npm run lint` — clean
+- `npm run build` — success; `/`, `/intake`, `/tools` static; `/api/generate-blueprint` dynamic
+
+**Result:** Success
+
+**Errors / Blockers:**
+- First build failed: onMouseEnter/onMouseLeave event handlers blocked in Server Components. Fixed by replacing with Tailwind arbitrary-value hover classes (`hover:text-[#F0F0F0]`). No `"use client"` required.
+
+**Next recommended task:**
+Connect the `/intake` wizard to the real `/api/generate-blueprint` route and stream structured OpenAI output to the BlueprintPreview component.
+
 ### [2026-05-12 13:03] — Agent: Codex
 
 **Task attempted:** Build the first functional product flow: Idea Intake + Mock Launch Blueprint without backend integrations

@@ -3,6 +3,9 @@
 import { useState } from "react";
 import { BlueprintPreview } from "@/components/intake/BlueprintPreview";
 import { IntakeStep } from "@/components/intake/IntakeStep";
+import { OperatorPanel } from "@/components/ui/OperatorPanel";
+import { SectionLabel } from "@/components/ui/SectionLabel";
+import { StatusPill } from "@/components/ui/StatusPill";
 import { generateMockBlueprint } from "@/lib/mock-blueprint";
 import type {
   AutonomyPreference,
@@ -113,22 +116,18 @@ function ProgressRail({
   currentStep: number;
 }) {
   return (
-    <div className="rounded-[2rem] border border-white/10 bg-white/[0.04] p-5 shadow-[0_20px_80px_rgba(0,0,0,0.16)] backdrop-blur-sm">
+    <OperatorPanel className="p-4 shadow-[0_24px_80px_rgba(0,0,0,0.32)] sm:p-5">
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-400/80">
-            Launch Path
-          </p>
-          <h2 className="mt-2 text-lg font-semibold text-white">
+          <SectionLabel>Launch Path</SectionLabel>
+          <h2 className="mt-2 text-lg font-semibold text-[#F0F0F0]">
             Founder intake
           </h2>
         </div>
-        <div className="rounded-full border border-white/10 bg-black/30 px-3 py-1 text-xs font-medium text-neutral-400">
-          {currentStep + 1} / {steps.length}
-        </div>
+        <StatusPill label={`${currentStep + 1} / ${steps.length}`} />
       </div>
 
-      <div className="space-y-3">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
         {steps.map((step, index) => {
           const state =
             index < currentStep
@@ -140,29 +139,29 @@ function ProgressRail({
           return (
             <div
               key={step.title}
-              className={`rounded-2xl border px-4 py-4 transition-colors ${
+              className={`rounded-lg border px-4 py-4 transition-colors ${
                 state === "current"
-                  ? "border-emerald-500/30 bg-emerald-500/10"
+                  ? "border-[#4F46E5]/60 bg-[#4F46E5]/10"
                   : state === "done"
-                    ? "border-white/10 bg-white/6"
-                    : "border-white/8 bg-black/25"
+                    ? "border-[#22C55E]/25 bg-[#22C55E]/8"
+                    : "border-[#1C1C1C] bg-[#080808]"
               }`}
             >
               <div className="flex items-center gap-3">
                 <div
-                  className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold ${
+                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md border font-mono text-xs font-semibold ${
                     state === "current"
-                      ? "bg-emerald-500 text-black"
+                      ? "border-[#4F46E5] bg-[#4F46E5] text-[#F0F0F0]"
                       : state === "done"
-                        ? "bg-white/12 text-white"
-                        : "bg-white/5 text-neutral-500"
+                        ? "border-[#22C55E]/35 bg-[#22C55E]/10 text-[#86EFAC]"
+                        : "border-[#1C1C1C] bg-[#141414] text-[#888888]"
                   }`}
                 >
-                  {index + 1}
+                  {state === "done" ? "OK" : `0${index + 1}`}
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-white">{step.title}</p>
-                  <p className="mt-1 text-xs leading-5 text-neutral-400">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-[#F0F0F0]">{step.title}</p>
+                  <p className="mt-1 text-xs leading-5 text-[#888888]">
                     {step.description}
                   </p>
                 </div>
@@ -171,7 +170,7 @@ function ProgressRail({
           );
         })}
       </div>
-    </div>
+    </OperatorPanel>
   );
 }
 
@@ -202,19 +201,19 @@ function FieldWrapper({
   return (
     <label className="block">
       <div className="mb-2 flex items-center gap-2">
-        <span className="text-sm font-medium text-white">{label}</span>
+        <span className="text-sm font-medium text-[#F0F0F0]">{label}</span>
         {required ? (
-          <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-300">
+          <span className="rounded-md border border-[#4F46E5]/35 bg-[#4F46E5]/10 px-2 py-0.5 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-[#A5B4FC]">
             Required
           </span>
         ) : null}
       </div>
       {children}
       {helper ? (
-        <p className="mt-2 text-xs leading-5 text-neutral-500">{helper}</p>
+        <p className="mt-2 text-xs leading-5 text-[#666666]">{helper}</p>
       ) : null}
       {error ? (
-        <p className="mt-2 text-xs font-medium text-rose-300">{error}</p>
+        <p className="mt-2 text-xs font-medium text-[#FCA5A5]">{error}</p>
       ) : null}
     </label>
   );
@@ -233,10 +232,10 @@ function TextInput(props: BaseFieldProps) {
         value={props.value}
         onChange={(event) => props.onChange(props.name, event.target.value)}
         placeholder={props.placeholder}
-        className={`w-full rounded-2xl border bg-black/30 px-4 py-3 text-sm text-white outline-none transition-colors placeholder:text-neutral-500 ${
+        className={`w-full rounded-md border bg-[#080808] px-4 py-3 text-sm text-[#F0F0F0] outline-none transition-colors placeholder:text-[#444444] ${
           props.error
-            ? "border-rose-400/50"
-            : "border-white/10 focus:border-emerald-500/50"
+            ? "border-[#EF4444]/60"
+            : "border-[#1C1C1C] focus:border-[#4F46E5]"
         }`}
       />
     </FieldWrapper>
@@ -256,10 +255,10 @@ function TextArea(props: BaseFieldProps) {
         onChange={(event) => props.onChange(props.name, event.target.value)}
         placeholder={props.placeholder}
         rows={5}
-        className={`w-full rounded-2xl border bg-black/30 px-4 py-3 text-sm text-white outline-none transition-colors placeholder:text-neutral-500 ${
+        className={`w-full rounded-md border bg-[#080808] px-4 py-3 text-sm text-[#F0F0F0] outline-none transition-colors placeholder:text-[#444444] ${
           props.error
-            ? "border-rose-400/50"
-            : "border-white/10 focus:border-emerald-500/50"
+            ? "border-[#EF4444]/60"
+            : "border-[#1C1C1C] focus:border-[#4F46E5]"
         }`}
       />
     </FieldWrapper>
@@ -280,14 +279,14 @@ function SelectField({
       <select
         value={props.value}
         onChange={(event) => props.onChange(props.name, event.target.value)}
-        className={`w-full rounded-2xl border bg-black/30 px-4 py-3 text-sm text-white outline-none transition-colors ${
+        className={`w-full rounded-md border bg-[#080808] px-4 py-3 text-sm text-[#F0F0F0] outline-none transition-colors ${
           props.error
-            ? "border-rose-400/50"
-            : "border-white/10 focus:border-emerald-500/50"
+            ? "border-[#EF4444]/60"
+            : "border-[#1C1C1C] focus:border-[#4F46E5]"
         }`}
       >
         {options.map((option) => (
-          <option key={option} value={option} className="bg-neutral-950">
+          <option key={option} value={option} className="bg-[#080808]">
             {option}
           </option>
         ))}
@@ -416,25 +415,22 @@ export function IdeaIntakeWizard() {
   const isLoading = generateState.status === "loading";
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
+    <div className="grid gap-6 xl:grid-cols-[330px_minmax(0,1fr)]">
       <div className="xl:sticky xl:top-28 xl:self-start">
         <ProgressRail currentStep={currentStep} />
       </div>
 
       <div className="space-y-6">
-        <div className="overflow-hidden rounded-[2rem] border border-white/10 bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.18),_transparent_35%),linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.03))] p-6 shadow-[0_30px_120px_rgba(0,0,0,0.45)] sm:p-8">
+        <OperatorPanel className="overflow-hidden p-6 shadow-[0_30px_120px_rgba(0,0,0,0.45)] sm:p-8">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-2xl">
-              <div className="inline-flex rounded-full border border-emerald-500/25 bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.28em] text-emerald-300">
-                Bucks.ai intake
-              </div>
-              <h1 className="mt-4 text-3xl font-semibold tracking-tight text-white sm:text-5xl">
+              <SectionLabel>Bucks.ai intake</SectionLabel>
+              <h1 className="mt-4 text-3xl font-semibold tracking-tight text-[#F0F0F0] sm:text-5xl">
                 Turn an idea into a launch blueprint.
               </h1>
-              <p className="mt-4 text-sm leading-7 text-neutral-300 sm:text-base">
-                Fill in the four steps below and bucks.ai will generate an
-                execution-ready launch plan: stack, GTM, analytics, permissions,
-                and next autonomous actions.
+              <p className="mt-4 text-sm leading-7 text-[#888888] sm:text-base">
+                bucks.ai will generate an execution-ready startup plan: stack,
+                GTM, analytics, permissions, and next autonomous actions.
               </p>
             </div>
 
@@ -446,36 +442,36 @@ export function IdeaIntakeWizard() {
               ].map((item) => (
                 <div
                   key={item}
-                  className="rounded-2xl border border-white/10 bg-black/30 px-4 py-4 text-sm text-neutral-300"
+                  className="rounded-lg border border-[#1C1C1C] bg-[#080808] px-4 py-4 font-mono text-xs uppercase tracking-[0.16em] text-[#888888]"
                 >
                   {item}
                 </div>
               ))}
             </div>
           </div>
-        </div>
+        </OperatorPanel>
 
         {generateState.status === "missing_key" ? (
-          <div className="rounded-[2rem] border border-amber-500/25 bg-amber-500/8 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.3)]">
+          <div className="rounded-lg border border-[#F59E0B]/35 bg-[#F59E0B]/10 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.3)]">
             <div className="mb-3 flex items-center gap-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full border border-amber-500/30 bg-amber-500/15 text-amber-300">
+              <div className="flex h-8 w-8 items-center justify-center rounded-md border border-[#F59E0B]/35 bg-[#080808] font-mono text-xs text-[#FCD34D]">
                 !
               </div>
-              <h3 className="text-sm font-semibold text-amber-200">
+              <h3 className="text-sm font-semibold text-[#FCD34D]">
                 OPENAI_API_KEY not configured
               </h3>
             </div>
-            <p className="mb-4 text-sm leading-6 text-amber-100/70">
+            <p className="mb-4 text-sm leading-6 text-[#FDE68A]/80">
               To enable real AI blueprint generation, add your OpenAI API key to{" "}
-              <code className="rounded bg-black/30 px-1.5 py-0.5 text-amber-200">
+              <code className="rounded bg-[#080808] px-1.5 py-0.5 font-mono text-[#FCD34D]">
                 .env.local
               </code>
               :
             </p>
-            <pre className="mb-4 overflow-x-auto rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-emerald-300">
+            <pre className="mb-4 overflow-x-auto rounded-md border border-[#1C1C1C] bg-[#080808] px-4 py-3 font-mono text-sm text-[#A5B4FC]">
               {`OPENAI_API_KEY=sk-...`}
             </pre>
-            <p className="mb-5 text-sm leading-6 text-neutral-400">
+            <p className="mb-5 text-sm leading-6 text-[#888888]">
               Restart the dev server after adding the key. In the meantime you
               can explore the demo blueprint below.
             </p>
@@ -483,14 +479,14 @@ export function IdeaIntakeWizard() {
               <button
                 type="button"
                 onClick={handleUseDemoBlueprint}
-                className="rounded-full border border-white/15 bg-white/8 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:border-white/30 hover:bg-white/12"
+                className="rounded-md border border-[#F59E0B]/35 bg-[#F59E0B]/10 px-5 py-2.5 text-sm font-medium text-[#FCD34D] transition-colors hover:bg-[#F59E0B]/15"
               >
                 Use demo blueprint
               </button>
               <button
                 type="button"
                 onClick={() => setGenerateState({ status: "idle" })}
-                className="rounded-full border border-white/10 bg-transparent px-5 py-2.5 text-sm font-medium text-neutral-400 transition-colors hover:text-white"
+                className="rounded-md border border-[#1C1C1C] bg-[#0F0F0F] px-5 py-2.5 text-sm font-medium text-[#888888] transition-colors hover:text-[#F0F0F0]"
               >
                 Dismiss
               </button>
@@ -499,30 +495,30 @@ export function IdeaIntakeWizard() {
         ) : null}
 
         {generateState.status === "error" ? (
-          <div className="rounded-[2rem] border border-rose-500/25 bg-rose-500/8 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.3)]">
+          <div className="rounded-lg border border-[#EF4444]/35 bg-[#EF4444]/10 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.3)]">
             <div className="mb-3 flex items-center gap-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full border border-rose-500/30 bg-rose-500/15 text-rose-300">
-                ✕
+              <div className="flex h-8 w-8 items-center justify-center rounded-md border border-[#EF4444]/35 bg-[#080808] font-mono text-xs text-[#FCA5A5]">
+                X
               </div>
-              <h3 className="text-sm font-semibold text-rose-200">
+              <h3 className="text-sm font-semibold text-[#FCA5A5]">
                 Blueprint generation failed
               </h3>
             </div>
-            <p className="mb-5 text-sm leading-6 text-rose-100/70">
+            <p className="mb-5 text-sm leading-6 text-[#FECACA]/80">
               {generateState.message}
             </p>
             <div className="flex flex-col gap-3 sm:flex-row">
               <button
                 type="button"
                 onClick={() => void handleGenerateBlueprint()}
-                className="rounded-full bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-emerald-400"
+                className="rounded-md bg-[#4F46E5] px-5 py-2.5 text-sm font-semibold text-[#F0F0F0] transition-colors hover:bg-[#6366F1]"
               >
                 Try again
               </button>
               <button
                 type="button"
                 onClick={handleUseDemoBlueprint}
-                className="rounded-full border border-white/15 bg-white/8 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:border-white/30 hover:bg-white/12"
+                className="rounded-md border border-[#F59E0B]/35 bg-[#F59E0B]/10 px-5 py-2.5 text-sm font-medium text-[#FCD34D] transition-colors hover:bg-[#F59E0B]/15"
               >
                 Use demo blueprint
               </button>

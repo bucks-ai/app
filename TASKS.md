@@ -10,18 +10,17 @@
 - [x] Create agent handoff system (AGENTS.md, CLAUDE.md, PROJECT_STATE.md, TASKS.md, DECISIONS.md, AI_CHANGELOG.md)
 - [x] Create .env.example with all placeholder env vars
 - [x] Build initial landing page (Hero, What We Do, How It Works, Autonomy Boundaries, CTA)
+- [x] Homepage redesign — premium operator console aesthetic (feature/homepage-redesign)
 
 ---
 
 ## Next
 
+- [ ] Connect `/intake` wizard to real `/api/generate-blueprint` route — stream OpenAI structured output to BlueprintPreview
+- [ ] Add loading and error states to the intake blueprint flow
 - [ ] Build **Mission Control dashboard shell** — authenticated layout with sidebar nav and placeholder panels
-- [ ] Add **Navbar** and **Footer** components to shared/
 - [ ] Wire up **Early Access CTA** to a waitlist form (email capture, no backend yet — can use a form service)
-- [ ] Replace mock blueprint with real `/api/generate-blueprint` route
-- [ ] Add OpenAI structured JSON output
-- [ ] Add loading/error states
-- [ ] Add Supabase persistence later
+- [ ] Add Supabase persistence
 
 ---
 

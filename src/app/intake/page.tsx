@@ -13,8 +13,16 @@ export default function IntakePage() {
   return (
     <>
       <Navbar />
-      <main className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.12),_transparent_30%),linear-gradient(180deg,#020202_0%,#050505_35%,#09090b_100%)] px-6 pb-20 pt-28">
-        <div className="mx-auto max-w-7xl">
+      <main className="relative min-h-screen overflow-hidden bg-[#080808] px-5 pb-20 pt-28 sm:px-6">
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            backgroundImage:
+              "linear-gradient(rgba(79,70,229,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(79,70,229,0.025) 1px, transparent 1px)",
+            backgroundSize: "64px 64px",
+          }}
+        />
+        <div className="relative mx-auto max-w-7xl">
           <IdeaIntakeWizard />
         </div>
       </main>

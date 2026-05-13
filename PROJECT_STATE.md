@@ -4,19 +4,18 @@
 **Functional Prototype**
 
 ## Current Milestone
-Idea Intake + Mock Launch Blueprint flow
+Homepage Redesign — Premium Operator Console Aesthetic
 
 ## Current Working Feature
-Landing page CTA to `/intake` plus a frontend-only 4-step Idea Intake wizard with Blueprint Preview
+Redesigned homepage (`/`) with full operator console design system. `/intake` and `/tools` routes intact and unchanged.
 
 ## Last Known Working State
 - Next.js 16 app initialized with TypeScript, Tailwind v4, App Router, `src/` directory
-- Landing page components created under `/src/components/sections/`
-- New `/intake` route added with a client-side multi-step wizard
-- Mock business blueprint generator added under `/src/lib/mock-blueprint.ts`
-- Blueprint Preview renders business summary, stack, permissions, GTM, analytics, risks, and next autonomous actions
-- Root layout and page wired up
-- `npm run lint` and `npm run build` passing (see AI_CHANGELOG.md for latest run result)
+- Homepage fully redesigned with 10 new landing components under `src/components/landing/`
+- Design system: `#080808` background, `#4F46E5` accent, no emerald, no emoji, no fake social proof
+- All routes (`/`, `/intake`, `/tools`, `/api/generate-blueprint`) building successfully
+- `npm run lint` — clean
+- `npm run build` — passing (see AI_CHANGELOG.md for latest run result)
 
 ---
 
@@ -66,8 +65,9 @@ _None at this time._
 │   │
 │   ├── components/
 │   │   ├── intake/       ← Idea Intake wizard + Blueprint Preview components
+│   │   ├── landing/       ← Homepage redesign (10 components, current)
 │   │   ├── ui/            ← shadcn/ui-compatible primitives
-│   │   ├── sections/      ← Landing page section components
+│   │   ├── sections/      ← Legacy landing components (superseded by landing/)
 │   │   └── shared/        ← Navbar, Footer, etc.
 │   │
 │   ├── lib/               ← Utilities and helpers, including mock blueprint generation
