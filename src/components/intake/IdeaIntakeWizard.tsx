@@ -7,6 +7,7 @@ import { OperatorPanel } from "@/components/ui/OperatorPanel";
 import { SectionLabel } from "@/components/ui/SectionLabel";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { generateMockBlueprint } from "@/lib/mock-blueprint";
+import { createBrowserClient } from "@/lib/supabase/client";
 import type {
   AutonomyPreference,
   BusinessBlueprint,
@@ -18,6 +19,14 @@ type GenerateState =
   | { status: "idle" }
   | { status: "loading" }
   | { status: "missing_key" }
+  | { status: "error"; message: string };
+
+type SaveState =
+  | { status: "idle" }
+  | { status: "checking" }
+  | { status: "saving" }
+  | { status: "saved"; businessId: string; detailUrl: string }
+  | { status: "unauthenticated" }
   | { status: "error"; message: string };
 
 const businessTypeOptions: BusinessTypeGuess[] = [
@@ -302,6 +311,7 @@ export function IdeaIntakeWizard() {
   const [blueprint, setBlueprint] = useState<BusinessBlueprint | null>(null);
   const [isPreviewVisible, setIsPreviewVisible] = useState(false);
   const [generateState, setGenerateState] = useState<GenerateState>({ status: "idle" });
+  const [saveState, setSaveState] = useState<SaveState>({ status: "idle" });
 
   useEffect(() => {
     if (isPreviewVisible) {
@@ -388,6 +398,7 @@ export function IdeaIntakeWizard() {
       setGenerateState({ status: "idle" });
       setBlueprint(data.blueprint);
       setIsPreviewVisible(true);
+      void saveGeneratedBlueprint(data.blueprint);
     } catch {
       setGenerateState({
         status: "error",
@@ -396,8 +407,67 @@ export function IdeaIntakeWizard() {
     }
   }
 
+  async function saveGeneratedBlueprint(generatedBlueprint: BusinessBlueprint) {
+    setSaveState({ status: "checking" });
+
+    try {
+      const supabase = createBrowserClient();
+      if (!supabase) {
+        setSaveState({ status: "unauthenticated" });
+        return;
+      }
+
+      const { data, error } = await supabase.auth.getUser();
+      if (error || !data.user) {
+        setSaveState({ status: "unauthenticated" });
+        return;
+      }
+
+      setSaveState({ status: "saving" });
+      const response = await fetch("/api/businesses/save-blueprint", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          startupIdea: idea,
+          blueprint: generatedBlueprint,
+        }),
+      });
+
+      const result = (await response.json()) as
+        | { ok: true; businessId: string; detailUrl: string }
+        | { ok: false; error?: string; code?: string };
+
+      if (!response.ok || !result.ok) {
+        if (!response.ok && response.status === 401) {
+          setSaveState({ status: "unauthenticated" });
+          return;
+        }
+
+        setSaveState({
+          status: "error",
+          message: result.ok
+            ? "Blueprint generated, but saving failed."
+            : `Blueprint generated, but saving failed.${result.error ? ` ${result.error}` : ""}`,
+        });
+        return;
+      }
+
+      setSaveState({
+        status: "saved",
+        businessId: result.businessId,
+        detailUrl: result.detailUrl,
+      });
+    } catch {
+      setSaveState({
+        status: "error",
+        message: "Blueprint generated, but saving failed.",
+      });
+    }
+  }
+
   function handleUseDemoBlueprint() {
     setGenerateState({ status: "idle" });
+    setSaveState({ status: "idle" });
     setBlueprint(generateMockBlueprint(idea));
     setIsPreviewVisible(true);
   }
@@ -405,6 +475,7 @@ export function IdeaIntakeWizard() {
   function handleEditIdea() {
     setIsPreviewVisible(false);
     setGenerateState({ status: "idle" });
+    setSaveState({ status: "idle" });
     setCurrentStep(0);
   }
 
@@ -414,6 +485,9 @@ export function IdeaIntakeWizard() {
         idea={idea}
         blueprint={blueprint}
         onEditIdea={handleEditIdea}
+        saveStatus={saveState.status}
+        savedBusinessId={saveState.status === "saved" ? saveState.businessId : undefined}
+        saveError={saveState.status === "error" ? saveState.message : undefined}
       />
     );
   }

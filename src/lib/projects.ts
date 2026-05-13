@@ -159,6 +159,141 @@ export async function getHumanRequiredActions(
   return ok((data ?? []) as HumanRequiredActionRecord[]);
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function asArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function asString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function normalizeRiskLevel(value: unknown, fallback = "medium") {
+  const riskLevel = asString(value)?.toLowerCase();
+  if (
+    riskLevel === "low" ||
+    riskLevel === "medium" ||
+    riskLevel === "high" ||
+    riskLevel === "critical"
+  ) {
+    return riskLevel;
+  }
+
+  return fallback;
+}
+
+function buildHumanActionInserts(
+  businessId: string,
+  userId: string,
+  blueprint: Record<string, unknown>
+): NewHumanRequiredActionInput[] {
+  const inserts: NewHumanRequiredActionInput[] = [];
+  const seenTitles = new Set<string>();
+
+  function addAction(input: {
+    title: string | null;
+    description?: string | null;
+    riskLevel?: string;
+  }) {
+    const title = input.title?.trim();
+    if (!title) return;
+
+    const key = title.toLowerCase();
+    if (seenTitles.has(key)) return;
+    seenTitles.add(key);
+
+    inserts.push({
+      business_id: businessId,
+      user_id: userId,
+      title,
+      description: input.description ?? undefined,
+      risk_level: input.riskLevel ?? "medium",
+    });
+  }
+
+  const rawHumanActions = [
+    ...asArray(blueprint.humanRequiredActions),
+    ...asArray(blueprint.human_required_actions),
+    ...asArray(blueprint.humanGates),
+    ...asArray(blueprint.human_gates),
+    ...asArray(blueprint.approvalGates),
+    ...asArray(blueprint.approval_gates),
+  ];
+
+  for (const action of rawHumanActions) {
+    if (typeof action === "string") {
+      addAction({ title: action, riskLevel: "medium" });
+      continue;
+    }
+
+    const record = asRecord(action);
+    if (!record) continue;
+
+    const reason =
+      asString(record.reason) ??
+      asString(record.description) ??
+      asString(record.detail);
+
+    addAction({
+      title:
+        asString(record.title) ??
+        asString(record.action) ??
+        asString(record.name) ??
+        "Action required",
+      description: reason,
+      riskLevel: normalizeRiskLevel(record.risk_level ?? record.riskLevel),
+    });
+  }
+
+  const rawPermissions = [
+    ...asArray(blueprint.requiredPermissions),
+    ...asArray(blueprint.required_permissions),
+  ];
+
+  for (const permission of rawPermissions) {
+    if (typeof permission === "string") {
+      addAction({
+        title: `Approve ${permission}`,
+        description: "Permission is required before autonomous execution.",
+        riskLevel: "medium",
+      });
+      continue;
+    }
+
+    const record = asRecord(permission);
+    if (!record) continue;
+
+    const title = asString(record.title) ?? asString(record.name);
+    const level = asString(record.level)?.toLowerCase();
+    addAction({
+      title: title ? `Approve ${title}` : "Approve required permission",
+      description:
+        asString(record.reason) ??
+        asString(record.description) ??
+        "Permission is required before autonomous execution.",
+      riskLevel: level === "required" ? "high" : "medium",
+    });
+  }
+
+  if (inserts.length === 0) {
+    for (const risk of asArray(blueprint.risks).slice(0, 5)) {
+      const title = asString(risk);
+      addAction({
+        title: title ? `Review risk: ${title}` : null,
+        description: "Risk review is required before autonomous execution.",
+        riskLevel: "high",
+      });
+    }
+  }
+
+  return inserts.slice(0, 12);
+}
+
 // Parses blueprint JSON for human-required actions and bulk-inserts them.
 export async function createHumanRequiredActionsFromBlueprint(
   businessId: string,
@@ -168,23 +303,7 @@ export async function createHumanRequiredActionsFromBlueprint(
   const supabase = await createSupabaseServerClient();
   if (!supabase) return err(NO_CLIENT);
 
-  const rawActions =
-    (blueprint.humanRequiredActions as unknown[]) ??
-    (blueprint.human_required_actions as unknown[]) ??
-    [];
-
-  if (!Array.isArray(rawActions) || rawActions.length === 0) return ok([]);
-
-  const inserts: NewHumanRequiredActionInput[] = rawActions
-    .filter((a): a is Record<string, unknown> => typeof a === "object" && a !== null)
-    .map((a) => ({
-      business_id: businessId,
-      user_id: userId,
-      title: String(a.title ?? a.action ?? "Action required"),
-      description: a.description ? String(a.description) : undefined,
-      risk_level: a.risk_level ? String(a.risk_level) : undefined,
-    }));
-
+  const inserts = buildHumanActionInserts(businessId, userId, blueprint);
   if (inserts.length === 0) return ok([]);
 
   const { data, error } = await supabase
