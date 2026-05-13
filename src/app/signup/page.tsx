@@ -1,12 +1,18 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Footer } from "@/components/shared/Footer";
 import { Navbar } from "@/components/shared/Navbar";
 import { OperatorPanel } from "@/components/ui/OperatorPanel";
 import { SectionLabel } from "@/components/ui/SectionLabel";
 import { StatusPill } from "@/components/ui/StatusPill";
+import { createBrowserClient } from "@/lib/supabase/client";
+
+const supabaseConfigured =
+  !!process.env.NEXT_PUBLIC_SUPABASE_URL &&
+  !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 type SignupErrors = {
   email?: string;
@@ -15,41 +21,64 @@ type SignupErrors = {
 };
 
 export default function SignupPage() {
-  const [message, setMessage] = useState("");
+  const router = useRouter();
   const [errors, setErrors] = useState<SignupErrors>({});
+  const [authError, setAuthError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setAuthError("");
+    setSuccessMessage("");
+
     const formData = new FormData(event.currentTarget);
     const email = String(formData.get("email") ?? "").trim();
     const password = String(formData.get("password") ?? "");
     const confirmPassword = String(formData.get("confirmPassword") ?? "");
+
     const nextErrors: SignupErrors = {};
-
-    if (!email) {
-      nextErrors.email = "Email is required.";
-    }
-
-    if (!password) {
-      nextErrors.password = "Password is required.";
-    }
-
-    if (password && confirmPassword && password !== confirmPassword) {
-      nextErrors.confirmPassword = "Passwords must match.";
-    }
-
-    if (password && !confirmPassword) {
+    if (!email) nextErrors.email = "Email is required.";
+    if (!password) nextErrors.password = "Password is required.";
+    if (password && !confirmPassword)
       nextErrors.confirmPassword = "Confirm your password.";
-    }
+    if (password && confirmPassword && password !== confirmPassword)
+      nextErrors.confirmPassword = "Passwords must match.";
 
     setErrors(nextErrors);
-    setMessage("");
+    if (Object.keys(nextErrors).length > 0) return;
 
-    if (Object.keys(nextErrors).length === 0) {
-      setMessage(
-        "Account creation will be wired to Supabase in the backend integration step.",
+    setLoading(true);
+
+    const supabase = createBrowserClient();
+    if (!supabase) {
+      setAuthError(
+        "Supabase is not configured. Check your environment variables.",
       );
+      setLoading(false);
+      return;
     }
+
+    const { data, error } = await supabase.auth.signUp({ email, password });
+
+    if (error) {
+      setAuthError(error.message);
+      setLoading(false);
+      return;
+    }
+
+    // If a session was created immediately (email confirmation disabled), redirect.
+    if (data.session) {
+      router.push("/dashboard");
+      router.refresh();
+      return;
+    }
+
+    // Email confirmation required.
+    setSuccessMessage(
+      `Account created. Check ${email} for a confirmation link before signing in.`,
+    );
+    setLoading(false);
   }
 
   return (
@@ -69,14 +98,18 @@ export default function SignupPage() {
             <div>
               <div className="flex flex-wrap items-center gap-3">
                 <SectionLabel>Founder account</SectionLabel>
-                <StatusPill label="Supabase next" variant="warning" />
+                <StatusPill
+                  label={supabaseConfigured ? "Live auth" : "Not configured"}
+                  variant={supabaseConfigured ? "success" : "warning"}
+                />
               </div>
               <h1 className="mt-5 text-4xl font-semibold tracking-tight text-[#F0F0F0] sm:text-5xl">
-                Create the account shell.
+                Create your operator account.
               </h1>
               <p className="mt-5 max-w-xl text-base leading-8 text-[#888888]">
-                This form validates locally so the interface is ready for the
-                auth handoff. It does not create a real user yet.
+                {supabaseConfigured
+                  ? "Create an account to start building your company with bucks.ai."
+                  : "Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local to enable live signup."}
               </p>
             </div>
 
@@ -90,10 +123,15 @@ export default function SignupPage() {
                     autoComplete="email"
                     className="mt-2 w-full rounded-md border border-[#1C1C1C] bg-[#080808] px-4 py-3 text-sm text-[#F0F0F0] outline-none transition-colors placeholder:text-[#444444] focus:border-[#4F46E5]"
                     placeholder="founder@company.com"
-                    aria-describedby={errors.email ? "signup-email-error" : undefined}
+                    aria-describedby={
+                      errors.email ? "signup-email-error" : undefined
+                    }
                   />
                   {errors.email ? (
-                    <p id="signup-email-error" className="mt-2 text-sm text-[#FCA5A5]">
+                    <p
+                      id="signup-email-error"
+                      className="mt-2 text-sm text-[#FCA5A5]"
+                    >
                       {errors.email}
                     </p>
                   ) : null}
@@ -111,7 +149,10 @@ export default function SignupPage() {
                     }
                   />
                   {errors.password ? (
-                    <p id="signup-password-error" className="mt-2 text-sm text-[#FCA5A5]">
+                    <p
+                      id="signup-password-error"
+                      className="mt-2 text-sm text-[#FCA5A5]"
+                    >
                       {errors.password}
                     </p>
                   ) : null}
@@ -141,13 +182,19 @@ export default function SignupPage() {
                 </div>
                 <button
                   type="submit"
-                  className="w-full rounded-md bg-[#4F46E5] px-4 py-3 text-sm font-semibold text-[#F0F0F0] transition-colors hover:bg-[#6366F1]"
+                  disabled={loading}
+                  className="w-full rounded-md bg-[#4F46E5] px-4 py-3 text-sm font-semibold text-[#F0F0F0] transition-colors hover:bg-[#6366F1] disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  Create account
+                  {loading ? "Creating account…" : "Create account"}
                 </button>
-                {message ? (
-                  <p className="rounded-md border border-[#4F46E5]/30 bg-[#4F46E5]/10 px-4 py-3 text-sm leading-6 text-[#C7D2FE]">
-                    {message}
+                {authError ? (
+                  <p className="rounded-md border border-[#FCA5A5]/30 bg-[#FCA5A5]/10 px-4 py-3 text-sm leading-6 text-[#FCA5A5]">
+                    {authError}
+                  </p>
+                ) : null}
+                {successMessage ? (
+                  <p className="rounded-md border border-[#22C55E]/25 bg-[#22C55E]/10 px-4 py-3 text-sm leading-6 text-[#86EFAC]">
+                    {successMessage}
                   </p>
                 ) : null}
               </form>

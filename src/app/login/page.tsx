@@ -1,19 +1,53 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Footer } from "@/components/shared/Footer";
 import { Navbar } from "@/components/shared/Navbar";
 import { OperatorPanel } from "@/components/ui/OperatorPanel";
 import { SectionLabel } from "@/components/ui/SectionLabel";
 import { StatusPill } from "@/components/ui/StatusPill";
+import { createBrowserClient } from "@/lib/supabase/client";
+
+const supabaseConfigured =
+  !!process.env.NEXT_PUBLIC_SUPABASE_URL &&
+  !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 export default function LoginPage() {
-  const [message, setMessage] = useState("");
+  const router = useRouter();
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setMessage("Auth wiring comes next. This screen is ready for Supabase.");
+    setError("");
+    setLoading(true);
+
+    const formData = new FormData(event.currentTarget);
+    const email = String(formData.get("email") ?? "").trim();
+    const password = String(formData.get("password") ?? "");
+
+    const supabase = createBrowserClient();
+    if (!supabase) {
+      setError("Supabase is not configured. Check your environment variables.");
+      setLoading(false);
+      return;
+    }
+
+    const { error: authError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (authError) {
+      setError(authError.message);
+      setLoading(false);
+      return;
+    }
+
+    router.push("/dashboard");
+    router.refresh();
   }
 
   return (
@@ -33,34 +67,46 @@ export default function LoginPage() {
             <div>
               <div className="flex flex-wrap items-center gap-3">
                 <SectionLabel>Operator access</SectionLabel>
-                <StatusPill label="Frontend only" variant="neutral" />
+                <StatusPill
+                  label={supabaseConfigured ? "Live auth" : "Not configured"}
+                  variant={supabaseConfigured ? "success" : "warning"}
+                />
               </div>
               <h1 className="mt-5 text-4xl font-semibold tracking-tight text-[#F0F0F0] sm:text-5xl">
                 Sign in to Mission Control.
               </h1>
               <p className="mt-5 max-w-xl text-base leading-8 text-[#888888]">
-                This shell is ready for account-backed startup builds, but no
-                live authentication is connected on this branch.
+                {supabaseConfigured
+                  ? "Sign in with your founder account to access your dashboard and active builds."
+                  : "This screen is ready for Supabase. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local to enable live auth."}
               </p>
-              <div className="mt-8 grid gap-3 rounded-lg border border-[#1C1C1C] bg-[#0F0F0F] p-4">
-                <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#444444]">
-                  Integration state
-                </p>
-                <p className="text-sm leading-6 text-[#D4D4D4]">
-                  Supabase auth, sessions, and protected routes are intentionally
-                  deferred to the backend integration step.
-                </p>
-              </div>
+              {!supabaseConfigured && (
+                <div className="mt-8 grid gap-3 rounded-lg border border-[#1C1C1C] bg-[#0F0F0F] p-4">
+                  <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#444444]">
+                    Developer setup required
+                  </p>
+                  <p className="font-mono text-xs text-[#888888]">
+                    NEXT_PUBLIC_SUPABASE_URL=
+                    <br />
+                    NEXT_PUBLIC_SUPABASE_ANON_KEY=
+                  </p>
+                  <p className="text-sm leading-6 text-[#D4D4D4]">
+                    Copy .env.example to .env.local and fill in your Supabase
+                    project credentials. The build will not fail without them.
+                  </p>
+                </div>
+              )}
             </div>
 
             <OperatorPanel className="p-6 shadow-[0_30px_140px_rgba(0,0,0,0.38)] sm:p-8">
-              <form onSubmit={handleSubmit} className="space-y-5">
+              <form onSubmit={handleSubmit} className="space-y-5" noValidate>
                 <div>
                   <SectionLabel tone="muted">Email</SectionLabel>
                   <input
                     type="email"
                     name="email"
                     autoComplete="email"
+                    required
                     className="mt-2 w-full rounded-md border border-[#1C1C1C] bg-[#080808] px-4 py-3 text-sm text-[#F0F0F0] outline-none transition-colors placeholder:text-[#444444] focus:border-[#4F46E5]"
                     placeholder="founder@company.com"
                   />
@@ -71,19 +117,21 @@ export default function LoginPage() {
                     type="password"
                     name="password"
                     autoComplete="current-password"
+                    required
                     className="mt-2 w-full rounded-md border border-[#1C1C1C] bg-[#080808] px-4 py-3 text-sm text-[#F0F0F0] outline-none transition-colors placeholder:text-[#444444] focus:border-[#4F46E5]"
                     placeholder="Enter password"
                   />
                 </div>
                 <button
                   type="submit"
-                  className="w-full rounded-md bg-[#4F46E5] px-4 py-3 text-sm font-semibold text-[#F0F0F0] transition-colors hover:bg-[#6366F1]"
+                  disabled={loading}
+                  className="w-full rounded-md bg-[#4F46E5] px-4 py-3 text-sm font-semibold text-[#F0F0F0] transition-colors hover:bg-[#6366F1] disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  Sign in
+                  {loading ? "Signing in…" : "Sign in"}
                 </button>
-                {message ? (
-                  <p className="rounded-md border border-[#4F46E5]/30 bg-[#4F46E5]/10 px-4 py-3 text-sm leading-6 text-[#C7D2FE]">
-                    {message}
+                {error ? (
+                  <p className="rounded-md border border-[#FCA5A5]/30 bg-[#FCA5A5]/10 px-4 py-3 text-sm leading-6 text-[#FCA5A5]">
+                    {error}
                   </p>
                 ) : null}
               </form>

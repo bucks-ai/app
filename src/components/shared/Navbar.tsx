@@ -1,6 +1,38 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { createBrowserClient } from "@/lib/supabase/client";
+import { LogoutButton } from "@/components/auth/LogoutButton";
 
 export function Navbar() {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const supabase = createBrowserClient();
+
+    async function initAuth() {
+      if (!supabase) {
+        setIsAuthenticated(false);
+        return;
+      }
+      const { data } = await supabase.auth.getSession();
+      setIsAuthenticated(!!data.session);
+    }
+
+    initAuth();
+
+    if (!supabase) return;
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsAuthenticated(!!session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
   return (
     <nav
       className="fixed left-0 right-0 top-0 z-50 border-b backdrop-blur-md"
@@ -18,12 +50,14 @@ export function Navbar() {
           bucks<span style={{ color: "#4F46E5" }}>.ai</span>
         </Link>
         <div className="flex items-center gap-3 sm:gap-5">
-          <Link
-            href="/dashboard"
-            className="hidden text-sm text-[#888888] transition-colors hover:text-[#F0F0F0] md:inline"
-          >
-            Dashboard
-          </Link>
+          {isAuthenticated && (
+            <Link
+              href="/dashboard"
+              className="hidden text-sm text-[#888888] transition-colors hover:text-[#F0F0F0] md:inline"
+            >
+              Dashboard
+            </Link>
+          )}
           <Link
             href="/tools"
             className="text-sm text-[#888888] transition-colors hover:text-[#F0F0F0]"
@@ -36,12 +70,16 @@ export function Navbar() {
           >
             How it works
           </Link>
-          <Link
-            href="/login"
-            className="text-sm text-[#888888] transition-colors hover:text-[#F0F0F0]"
-          >
-            Sign in
-          </Link>
+          {isAuthenticated ? (
+            <LogoutButton />
+          ) : (
+            <Link
+              href="/login"
+              className="text-sm text-[#888888] transition-colors hover:text-[#F0F0F0]"
+            >
+              Sign in
+            </Link>
+          )}
           <Link
             href="/intake"
             className="rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-[#6366F1] sm:px-4"
