@@ -3,6 +3,7 @@ export type StatusVariant = "accent" | "success" | "warning" | "danger" | "neutr
 export type DashboardBusiness = {
   id: string;
   name: string;
+  sourceLabel?: string;
   businessType: string;
   status: string;
   statusVariant: StatusVariant;
@@ -12,6 +13,7 @@ export type DashboardBusiness = {
   blueprintSummary: string;
   nextActions: string[];
   humanActions: string[];
+  humanActionItems?: HumanAction[];
   activity: ActivityItem[];
   permissions: ToolPermission[];
 };
@@ -21,6 +23,7 @@ export type ActivityItem = {
   actor: string;
   event: string;
   tone?: StatusVariant;
+  statusLabel?: string;
 };
 
 export type HumanAction = {

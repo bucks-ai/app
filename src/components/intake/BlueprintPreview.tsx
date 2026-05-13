@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type { BusinessBlueprint, StartupIdea } from "@/types/startup";
 import { BlueprintSection } from "@/components/intake/BlueprintSection";
 import { DataTile } from "@/components/ui/DataTile";
@@ -11,6 +12,9 @@ type BlueprintPreviewProps = {
   idea: StartupIdea;
   blueprint: BusinessBlueprint;
   onEditIdea: () => void;
+  savedBusinessId?: string;
+  saveStatus?: "idle" | "checking" | "saving" | "saved" | "unauthenticated" | "error";
+  saveError?: string;
 };
 
 function TextList({
@@ -70,6 +74,9 @@ export function BlueprintPreview({
   idea,
   blueprint,
   onEditIdea,
+  savedBusinessId,
+  saveStatus = "idle",
+  saveError,
 }: BlueprintPreviewProps) {
   return (
     <div className="space-y-6">
@@ -101,6 +108,74 @@ export function BlueprintPreview({
             </div>
           </div>
         </div>
+
+        {saveStatus !== "idle" ? (
+          <div
+            className={`mt-8 rounded-lg border p-4 ${
+              saveStatus === "saved"
+                ? "border-[#22C55E]/25 bg-[#22C55E]/10"
+                : saveStatus === "error"
+                  ? "border-[#F59E0B]/35 bg-[#F59E0B]/10"
+                  : saveStatus === "unauthenticated"
+                    ? "border-[#4F46E5]/35 bg-[#4F46E5]/10"
+                    : "border-[#1C1C1C] bg-[#080808]"
+            }`}
+          >
+            {saveStatus === "saved" && savedBusinessId ? (
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <StatusPill label="Saved to Mission Control" variant="success" />
+                  <p className="mt-3 text-sm leading-6 text-[#D4D4D4]">
+                    This blueprint is now attached to a saved business project.
+                  </p>
+                </div>
+                <Link
+                  href={`/dashboard/businesses/${savedBusinessId}`}
+                  className="rounded-md bg-[#4F46E5] px-4 py-2.5 text-center text-sm font-semibold text-[#F0F0F0] transition-colors hover:bg-[#6366F1]"
+                >
+                  Open in dashboard -&gt;
+                </Link>
+              </div>
+            ) : null}
+
+            {saveStatus === "unauthenticated" ? (
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <StatusPill label="Not saved" variant="accent" />
+                  <p className="mt-3 text-sm leading-6 text-[#C7D2FE]">
+                    Create an account to save this build.
+                  </p>
+                </div>
+                <Link
+                  href="/signup"
+                  className="rounded-md border border-[#4F46E5]/45 bg-[#4F46E5]/10 px-4 py-2.5 text-center text-sm font-semibold text-[#C7D2FE] transition-colors hover:bg-[#4F46E5]/15"
+                >
+                  Create account -&gt;
+                </Link>
+              </div>
+            ) : null}
+
+            {saveStatus === "checking" || saveStatus === "saving" ? (
+              <div className="flex items-center gap-3">
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#A5B4FC] border-t-transparent" />
+                <p className="text-sm font-medium text-[#A5B4FC]">
+                  {saveStatus === "checking"
+                    ? "Checking Mission Control session..."
+                    : "Saving blueprint to Mission Control..."}
+                </p>
+              </div>
+            ) : null}
+
+            {saveStatus === "error" ? (
+              <div>
+                <StatusPill label="Save warning" variant="warning" />
+                <p className="mt-3 text-sm leading-6 text-[#FDE68A]">
+                  {saveError ?? "Blueprint generated, but saving failed."}
+                </p>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
         <div className="mt-8 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
           <DataTile

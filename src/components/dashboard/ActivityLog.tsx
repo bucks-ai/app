@@ -20,7 +20,10 @@ export function ActivityLog({ items }: ActivityLogProps) {
               </p>
               <p className="mt-2 text-sm font-medium text-[#F0F0F0]">{item.actor}</p>
             </div>
-            <StatusPill label={item.tone ?? "sample"} variant={item.tone ?? "neutral"} />
+            <StatusPill
+              label={item.statusLabel ?? item.tone ?? "log"}
+              variant={item.tone ?? "neutral"}
+            />
           </div>
           <p className="mt-3 text-sm leading-6 text-[#888888]">{item.event}</p>
         </div>

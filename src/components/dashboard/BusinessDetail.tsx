@@ -12,12 +12,14 @@ type BusinessDetailProps = {
 };
 
 export function BusinessDetail({ business }: BusinessDetailProps) {
-  const humanActions = business.humanActions.map((action) => ({
-    title: action,
-    business: business.name,
-    reason: "This mock queue item is intentionally approval-gated.",
-    status: "Needs review",
-  }));
+  const humanActions =
+    business.humanActionItems ??
+    business.humanActions.map((action) => ({
+      title: action,
+      business: business.name,
+      reason: "This action requires founder approval before autonomous execution.",
+      status: "Needs review",
+    }));
 
   return (
     <div className="space-y-8">
@@ -32,7 +34,7 @@ export function BusinessDetail({ business }: BusinessDetailProps) {
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div className="max-w-3xl">
             <div className="flex flex-wrap items-center gap-3">
-              <SectionLabel>Demo build record</SectionLabel>
+              <SectionLabel>{business.sourceLabel ?? "Saved build record"}</SectionLabel>
               <StatusPill label={business.status} variant={business.statusVariant} />
             </div>
             <h1 className="mt-5 text-4xl font-semibold tracking-tight text-[#F0F0F0] sm:text-5xl">
@@ -76,7 +78,13 @@ export function BusinessDetail({ business }: BusinessDetailProps) {
         <OperatorPanel className="p-6" elevated>
           <SectionLabel tone="warning">Human-required actions</SectionLabel>
           <div className="mt-5">
-            <HumanActionQueue actions={humanActions} />
+            {humanActions.length > 0 ? (
+              <HumanActionQueue actions={humanActions} />
+            ) : (
+              <p className="rounded-md border border-[#F59E0B]/25 bg-[#F59E0B]/10 p-4 text-sm leading-6 text-[#FDE68A]">
+                No pending human-required actions are attached to this business.
+              </p>
+            )}
           </div>
         </OperatorPanel>
       </section>
@@ -85,28 +93,46 @@ export function BusinessDetail({ business }: BusinessDetailProps) {
         <OperatorPanel className="p-6 xl:col-span-1">
           <SectionLabel>Next autonomous actions</SectionLabel>
           <ul className="mt-5 space-y-3">
-            {business.nextActions.map((action) => (
-              <li
-                key={action}
-                className="rounded-md border border-[#1C1C1C] bg-[#080808] p-4 text-sm leading-6 text-[#D4D4D4]"
-              >
-                {action}
+            {business.nextActions.length > 0 ? (
+              business.nextActions.map((action) => (
+                <li
+                  key={action}
+                  className="rounded-md border border-[#1C1C1C] bg-[#080808] p-4 text-sm leading-6 text-[#D4D4D4]"
+                >
+                  {action}
+                </li>
+              ))
+            ) : (
+              <li className="rounded-md border border-[#1C1C1C] bg-[#080808] p-4 text-sm leading-6 text-[#888888]">
+                No autonomous action queue was found in the latest blueprint.
               </li>
-            ))}
+            )}
           </ul>
         </OperatorPanel>
 
         <OperatorPanel className="p-6 xl:col-span-1">
           <SectionLabel>Activity log</SectionLabel>
           <div className="mt-5">
-            <ActivityLog items={business.activity} />
+            {business.activity.length > 0 ? (
+              <ActivityLog items={business.activity} />
+            ) : (
+              <p className="rounded-md border border-[#1C1C1C] bg-[#080808] p-4 text-sm leading-6 text-[#888888]">
+                Activity logs will appear as bucks.ai works on this project.
+              </p>
+            )}
           </div>
         </OperatorPanel>
 
         <OperatorPanel className="p-6 xl:col-span-1">
           <SectionLabel>Tool permissions</SectionLabel>
           <div className="mt-5">
-            <ToolPermissionSummary permissions={business.permissions} />
+            {business.permissions.length > 0 ? (
+              <ToolPermissionSummary permissions={business.permissions} />
+            ) : (
+              <p className="rounded-md border border-[#1C1C1C] bg-[#080808] p-4 text-sm leading-6 text-[#888888]">
+                No suggested tool permissions were found in the latest blueprint.
+              </p>
+            )}
           </div>
         </OperatorPanel>
       </section>

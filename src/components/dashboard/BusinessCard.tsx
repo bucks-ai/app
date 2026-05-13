@@ -5,9 +5,10 @@ import type { DashboardBusiness } from "@/components/dashboard/mock-data";
 
 type BusinessCardProps = {
   business: DashboardBusiness;
+  label?: string;
 };
 
-export function BusinessCard({ business }: BusinessCardProps) {
+export function BusinessCard({ business, label }: BusinessCardProps) {
   return (
     <Link
       href={`/dashboard/businesses/${business.id}`}
@@ -15,7 +16,9 @@ export function BusinessCard({ business }: BusinessCardProps) {
     >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <SectionLabel tone="muted">Sample business</SectionLabel>
+          <SectionLabel tone="muted">
+            {label ?? business.sourceLabel ?? "Saved business"}
+          </SectionLabel>
           <h3 className="mt-3 text-xl font-semibold tracking-tight text-[#F0F0F0]">
             {business.name}
           </h3>
