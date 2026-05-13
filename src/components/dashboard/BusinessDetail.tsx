@@ -3,6 +3,7 @@ import { ActivityLog } from "@/components/dashboard/ActivityLog";
 import { HumanActionQueue } from "@/components/dashboard/HumanActionQueue";
 import { ToolPermissionSummary } from "@/components/dashboard/ToolPermissionSummary";
 import type { DashboardBusiness } from "@/components/dashboard/mock-data";
+import { PermissionControlRoom } from "@/components/tools/PermissionControlRoom";
 import { OperatorPanel } from "@/components/ui/OperatorPanel";
 import { SectionLabel } from "@/components/ui/SectionLabel";
 import { StatusPill } from "@/components/ui/StatusPill";
@@ -88,6 +89,8 @@ export function BusinessDetail({ business }: BusinessDetailProps) {
           </div>
         </OperatorPanel>
       </section>
+
+      <PermissionControlRoom businessId={business.id} businessName={business.name} />
 
       <section className="grid gap-6 xl:grid-cols-3">
         <OperatorPanel className="p-6 xl:col-span-1">

@@ -1,6 +1,9 @@
+import Link from "next/link";
 import { Footer } from "@/components/shared/Footer";
 import { Navbar } from "@/components/shared/Navbar";
 import { AutonomyConstitutionPanel } from "@/components/tools/AutonomyConstitutionPanel";
+import { BusinessPermissionSelector } from "@/components/tools/BusinessPermissionSelector";
+import { PermissionControlRoom } from "@/components/tools/PermissionControlRoom";
 import { ToolCard } from "@/components/tools/ToolCard";
 import { ToolStatusBadge } from "@/components/tools/ToolStatusBadge";
 import { DataTile } from "@/components/ui/DataTile";
@@ -8,6 +11,13 @@ import { OperatorPanel } from "@/components/ui/OperatorPanel";
 import { SectionLabel } from "@/components/ui/SectionLabel";
 import { autonomyConstitution } from "@/lib/autonomy-constitution";
 import { extendedTools, preferredTools, toolRegistry } from "@/lib/tool-registry";
+import type { BusinessPermissionOption } from "@/types/tool-permission-ui";
+
+type ToolRegistryPageProps = {
+  permissionBusinesses?: BusinessPermissionOption[];
+  permissionAuthState?: "supabase_missing" | "signed_out" | "signed_in" | "load_failed";
+  permissionLoadError?: string | null;
+};
 
 function RuleList({
   title,
@@ -38,7 +48,69 @@ function RuleList({
   );
 }
 
-export function ToolRegistryPage() {
+function PermissionSetupSection({
+  businesses,
+  authState,
+  loadError,
+}: {
+  businesses: BusinessPermissionOption[];
+  authState: NonNullable<ToolRegistryPageProps["permissionAuthState"]>;
+  loadError?: string | null;
+}) {
+  if (authState === "signed_in" && businesses.length > 0) {
+    return <BusinessPermissionSelector businesses={businesses} />;
+  }
+
+  if (authState === "signed_in") {
+    return (
+      <OperatorPanel className="p-6 shadow-[0_24px_90px_rgba(0,0,0,0.28)] sm:p-8">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <SectionLabel>Permission Setup</SectionLabel>
+            <h2 className="mt-3 text-3xl font-semibold tracking-tight text-[#F0F0F0]">
+              Generate a blueprint to create a setup queue
+            </h2>
+            <p className="mt-3 max-w-3xl text-sm leading-7 text-[#888888]">
+              Tool permissions attach to saved business projects. Create a
+              blueprint first, then bucks.ai can show the approvals needed for
+              that specific operating plan.
+            </p>
+          </div>
+          <Link
+            href="/intake"
+            className="rounded-md bg-[#4F46E5] px-4 py-3 text-center text-sm font-semibold text-[#F0F0F0] transition-colors hover:bg-[#6366F1]"
+          >
+            Generate a blueprint to create a setup queue -&gt;
+          </Link>
+        </div>
+      </OperatorPanel>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      {authState === "load_failed" || authState === "supabase_missing" ? (
+        <OperatorPanel className="p-5">
+          <ToolStatusBadge
+            label={authState === "supabase_missing" ? "Supabase setup required" : "Business load failed"}
+            variant="warning"
+          />
+          <p className="mt-3 text-sm leading-6 text-[#888888]">
+            {loadError ??
+              "Saved businesses are not available in this environment, so the permission layer is shown as a demo preview."}
+          </p>
+        </OperatorPanel>
+      ) : null}
+      <PermissionControlRoom signedOutCta={authState === "signed_out"} />
+    </div>
+  );
+}
+
+export function ToolRegistryPage({
+  permissionBusinesses = [],
+  permissionAuthState = "signed_out",
+  permissionLoadError = null,
+}: ToolRegistryPageProps) {
   const blockedOrHumanOnly = toolRegistry.filter(
     (tool) => tool.status === "Blocked" || tool.status === "Human Only",
   ).length;
@@ -107,6 +179,12 @@ export function ToolRegistryPage() {
               />
             </div>
           </OperatorPanel>
+
+          <PermissionSetupSection
+            businesses={permissionBusinesses}
+            authState={permissionAuthState}
+            loadError={permissionLoadError}
+          />
 
           <section className="space-y-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
