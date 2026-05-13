@@ -6,6 +6,10 @@ import {
   getCurrentUser,
   saveBusinessBlueprint,
 } from "@/lib/projects";
+import {
+  seedToolPermissionsForBusiness,
+  createToolPermissionActivityLog,
+} from "@/lib/tool-permissions";
 import { hasSupabaseEnv } from "@/lib/supabase/env";
 import type { BusinessBlueprint, StartupIdea } from "@/types/startup";
 
@@ -164,11 +168,30 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Seed tool permissions — soft failure: a seed error does not fail the blueprint save.
+  let toolPermissionWarning: string | undefined;
+  const seedResult = await seedToolPermissionsForBusiness(business.id, user.id);
+  if (seedResult.error) {
+    toolPermissionWarning = `Tool permission setup could not be initialised: ${seedResult.error}`;
+  } else if (seedResult.data && seedResult.data.seeded > 0) {
+    await createToolPermissionActivityLog({
+      business_id: business.id,
+      user_id: user.id,
+      activity_type: "tool_permissions_seeded",
+      message: "Created initial tool permission setup queue.",
+      metadata: {
+        seeded: seedResult.data.seeded,
+        skipped: seedResult.data.skipped,
+      },
+    });
+  }
+
   return Response.json(
     {
       ok: true,
       businessId: business.id,
       detailUrl: `/dashboard/businesses/${business.id}`,
+      ...(toolPermissionWarning ? { toolPermissionWarning } : {}),
     },
     { status: 200 }
   );
