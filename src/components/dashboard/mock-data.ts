@@ -1,8 +1,11 @@
+import type { GitHubRepoResult } from "@/types/github-ui";
+
 export type StatusVariant = "accent" | "success" | "warning" | "danger" | "neutral";
 
 export type DashboardBusiness = {
   id: string;
   name: string;
+  oneLineIdea?: string | null;
   sourceLabel?: string;
   businessType: string;
   status: string;
@@ -16,6 +19,8 @@ export type DashboardBusiness = {
   humanActionItems?: HumanAction[];
   activity: ActivityItem[];
   permissions: ToolPermission[];
+  toolPermissions?: DashboardToolPermission[];
+  githubRepo?: GitHubRepoResult | null;
 };
 
 export type ActivityItem = {
@@ -38,6 +43,12 @@ export type ToolPermission = {
   access: string;
   note: string;
   tone: StatusVariant;
+};
+
+export type DashboardToolPermission = {
+  toolId: string;
+  status: string;
+  setupStatus?: string | null;
 };
 
 export const demoBusinesses: DashboardBusiness[] = [

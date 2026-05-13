@@ -5,6 +5,7 @@ import { BusinessDetail } from "@/components/dashboard/BusinessDetail";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import type {
   ActivityItem,
+  DashboardToolPermission,
   DashboardBusiness,
   HumanAction,
   ToolPermission,
@@ -16,12 +17,14 @@ import {
   getHumanRequiredActions,
   getLatestBlueprintForBusiness,
 } from "@/lib/projects";
+import { getToolPermissionsForBusiness } from "@/lib/tool-permissions";
 import { hasSupabaseEnv } from "@/lib/supabase/env";
 import type {
   AgentActivityLogRecord,
   BusinessRecord,
   HumanRequiredActionRecord,
 } from "@/types/database";
+import type { GitHubRepoResult } from "@/types/github-ui";
 import type { BusinessBlueprint, NextAutonomousAction } from "@/types/startup";
 import { OperatorPanel } from "@/components/ui/OperatorPanel";
 import { SectionLabel } from "@/components/ui/SectionLabel";
@@ -73,6 +76,10 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 
 function asString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function asBoolean(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
 }
 
 function statusVariant(status: string): DashboardBusiness["statusVariant"] {
@@ -144,11 +151,53 @@ function toToolPermission(tool: unknown): ToolPermission | null {
   };
 }
 
+function toGitHubRepoResult(logs: AgentActivityLogRecord[]): GitHubRepoResult | null {
+  const repoLog = logs.find((log) => log.activity_type === "github_repo_created");
+  const metadata = repoLog ? asRecord(repoLog.metadata) : null;
+  if (!metadata) return null;
+
+  const repoUrl = asString(metadata.repoUrl) ?? asString(metadata.repo_url);
+  const fullName = asString(metadata.fullName) ?? asString(metadata.full_name);
+  const [ownerFromFullName, nameFromFullName] = fullName?.split("/") ?? [];
+  const owner = asString(metadata.owner) ?? ownerFromFullName;
+  const name = asString(metadata.name) ?? nameFromFullName;
+  const isPrivate =
+    asBoolean(metadata.private) ??
+    (asString(metadata.visibility) === "private" ? true : null);
+
+  if (!repoUrl || !fullName || !owner || !name || isPrivate === null) return null;
+
+  return {
+    repoUrl,
+    fullName,
+    owner,
+    name,
+    private: isPrivate,
+  };
+}
+
+function toDashboardToolPermission(value: unknown): DashboardToolPermission | null {
+  const record = asRecord(value);
+  if (!record) return null;
+
+  const toolId = asString(record.tool_id) ?? asString(record.toolId);
+  const status = asString(record.status);
+
+  if (!toolId || !status) return null;
+
+  return {
+    toolId,
+    status,
+    setupStatus: asString(record.setup_status) ?? asString(record.setupStatus),
+  };
+}
+
 function toDashboardBusiness(input: {
   business: BusinessRecord;
   blueprint: Record<string, unknown> | null;
   actions: HumanRequiredActionRecord[];
   logs: AgentActivityLogRecord[];
+  toolPermissions: unknown[];
 }): DashboardBusiness {
   const typedBlueprint = input.blueprint as Partial<BusinessBlueprint> | null;
   const nextActions =
@@ -168,6 +217,7 @@ function toDashboardBusiness(input: {
   return {
     id: input.business.id,
     name: input.business.idea_name,
+    oneLineIdea: input.business.one_line_idea,
     sourceLabel: "Saved build record",
     businessType: input.business.business_type ?? "Unclassified",
     status: formatStatus(input.business.status),
@@ -189,6 +239,10 @@ function toDashboardBusiness(input: {
     ),
     activity: input.logs.map(toActivityItem),
     permissions,
+    toolPermissions: input.toolPermissions
+      .map(toDashboardToolPermission)
+      .filter((permission): permission is DashboardToolPermission => !!permission),
+    githubRepo: toGitHubRepoResult(input.logs),
   };
 }
 
@@ -289,17 +343,20 @@ export default async function BusinessDetailPage({
     );
   }
 
-  const [blueprintResult, actionsResult, logsResult] = await Promise.all([
-    getLatestBlueprintForBusiness(business.id),
-    getHumanRequiredActions(business.id),
-    getAgentActivityLogs(business.id),
-  ]);
+  const [blueprintResult, actionsResult, logsResult, toolPermissionsResult] =
+    await Promise.all([
+      getLatestBlueprintForBusiness(business.id),
+      getHumanRequiredActions(business.id),
+      getAgentActivityLogs(business.id),
+      getToolPermissionsForBusiness(business.id),
+    ]);
 
   const dashboardBusiness = toDashboardBusiness({
     business,
     blueprint: blueprintResult.data?.blueprint ?? null,
     actions: actionsResult.data ?? [],
     logs: logsResult.data ?? [],
+    toolPermissions: toolPermissionsResult.data ?? [],
   });
 
   return (
