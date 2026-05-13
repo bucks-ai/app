@@ -1,0 +1,197 @@
+import { NextRequest } from "next/server";
+import { hasSupabaseEnv } from "@/lib/supabase/env";
+import { hasVercelEnv } from "@/lib/vercel/env";
+import { getCurrentUser, getBusinessById, createAgentActivityLog } from "@/lib/projects";
+import { getToolPermissionsForBusiness, updateToolPermissionStatus } from "@/lib/tool-permissions";
+import { getLatestGitHubRepoForBusiness } from "@/lib/github/repo-metadata";
+import { prepareDeployableNextScaffold } from "@/lib/github/next-scaffold";
+import { sanitizeVercelProjectName, createVercelProjectWithSetup } from "@/lib/vercel/client";
+
+function errorResponse(error: string, code: string, status: number) {
+  return Response.json({ ok: false, error, code }, { status });
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/vercel/create-project
+// ---------------------------------------------------------------------------
+
+export async function POST(request: NextRequest) {
+  if (!hasSupabaseEnv()) {
+    return errorResponse(
+      "Supabase is not configured.",
+      "missing_supabase_env",
+      503
+    );
+  }
+
+  if (!hasVercelEnv()) {
+    return errorResponse(
+      "Vercel token is not configured. Add VERCEL_TOKEN to .env.local.",
+      "vercel_env_missing",
+      503
+    );
+  }
+
+  // Parse body
+  let body: {
+    businessId?: unknown;
+    projectName?: unknown;
+    prepareScaffold?: unknown;
+    createDeployment?: unknown;
+  };
+  try {
+    body = (await request.json()) as typeof body;
+  } catch {
+    return errorResponse("Request body must be valid JSON.", "invalid_input", 400);
+  }
+
+  const businessId =
+    typeof body.businessId === "string" && body.businessId ? body.businessId : null;
+  if (!businessId) {
+    return errorResponse("businessId is required.", "invalid_input", 400);
+  }
+
+  const prepareScaffold = body.prepareScaffold === true;
+  const createDeployment = body.createDeployment === true;
+
+  // Auth
+  const userResult = await getCurrentUser();
+  if (userResult.error || !userResult.data) {
+    return errorResponse("Authentication required.", "unauthenticated", 401);
+  }
+  const user = userResult.data;
+
+  // Business ownership
+  const businessResult = await getBusinessById(businessId);
+  if (businessResult.error || !businessResult.data) {
+    return errorResponse("Business not found.", "business_not_found", 404);
+  }
+  const business = businessResult.data;
+  if (business.user_id !== user.id) {
+    return errorResponse("Access denied.", "forbidden", 403);
+  }
+
+  // Vercel permission gate
+  const permissionsResult = await getToolPermissionsForBusiness(businessId);
+  if (permissionsResult.error || !permissionsResult.data) {
+    return errorResponse(
+      "Could not read tool permissions.",
+      "vercel_not_approved",
+      403
+    );
+  }
+
+  const vercelPermission = permissionsResult.data.find(
+    (p) => p.tool_id === "vercel"
+  );
+  const approvedStatuses = new Set(["approved", "connected_demo"]);
+  if (!vercelPermission || !approvedStatuses.has(vercelPermission.status)) {
+    return errorResponse(
+      `Vercel permission must be approved or connected_demo before creating a project.`,
+      "vercel_not_approved",
+      403
+    );
+  }
+
+  // Require existing GitHub repo
+  const repoResult = await getLatestGitHubRepoForBusiness(businessId);
+  if (repoResult.error || !repoResult.data) {
+    return errorResponse(
+      "No GitHub repository found for this business. Create a repo first.",
+      "github_repo_missing",
+      400
+    );
+  }
+  const repo = repoResult.data;
+
+  // Optionally prepare deployable scaffold
+  if (prepareScaffold) {
+    try {
+      await prepareDeployableNextScaffold({
+        businessId,
+        userId: user.id,
+        owner: repo.githubOwner,
+        repo: repo.githubRepoName,
+        businessName: business.idea_name,
+        oneLineIdea: business.one_line_idea,
+      });
+    } catch (e) {
+      return errorResponse(
+        e instanceof Error ? e.message : "Scaffold preparation failed.",
+        "scaffold_failed",
+        500
+      );
+    }
+  }
+
+  // Derive project name
+  const rawName =
+    typeof body.projectName === "string" && body.projectName.trim()
+      ? body.projectName.trim()
+      : business.idea_name;
+
+  const projectName = sanitizeVercelProjectName(rawName);
+  if (!projectName) {
+    return errorResponse(
+      "Could not derive a valid Vercel project name from the business name.",
+      "invalid_input",
+      400
+    );
+  }
+
+  // Create Vercel project
+  let projectResult;
+  try {
+    projectResult = await createVercelProjectWithSetup({
+      businessId,
+      projectName,
+      gitRepoFullName: repo.githubRepoFullName,
+      createDeployment,
+    });
+  } catch (e) {
+    return errorResponse(
+      e instanceof Error ? e.message : "Vercel project creation failed.",
+      "vercel_create_failed",
+      500
+    );
+  }
+
+  // Log project creation
+  await createAgentActivityLog({
+    business_id: businessId,
+    user_id: user.id,
+    activity_type: "vercel_project_created",
+    message: "Created Vercel project for this business.",
+    metadata: {
+      vercelProjectId: projectResult.projectId,
+      vercelProjectName: projectResult.projectName,
+      vercelDashboardUrl: projectResult.dashboardUrl,
+      vercelDeploymentUrl: projectResult.deploymentUrl ?? null,
+      gitRepoFullName: projectResult.gitRepoFullName ?? repo.githubRepoFullName,
+      productionBranch: projectResult.productionBranch ?? "main",
+      warnings: projectResult.warnings,
+    },
+  });
+
+  // Update Vercel tool permission to connected_demo
+  try {
+    await updateToolPermissionStatus({
+      id: vercelPermission.id,
+      action: "mark_connected_demo",
+      userId: user.id,
+    });
+  } catch {
+    // Non-fatal
+  }
+
+  return Response.json({
+    ok: true,
+    data: {
+      projectId: projectResult.projectId,
+      projectName: projectResult.projectName,
+      dashboardUrl: projectResult.dashboardUrl,
+      ...(projectResult.deploymentUrl ? { deploymentUrl: projectResult.deploymentUrl } : {}),
+      ...(projectResult.warnings.length > 0 ? { warnings: projectResult.warnings } : {}),
+    },
+  });
+}
