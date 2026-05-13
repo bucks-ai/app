@@ -3,6 +3,8 @@ import { ActivityLog } from "@/components/dashboard/ActivityLog";
 import { HumanActionQueue } from "@/components/dashboard/HumanActionQueue";
 import { ToolPermissionSummary } from "@/components/dashboard/ToolPermissionSummary";
 import type { DashboardBusiness } from "@/components/dashboard/mock-data";
+import { GitHubRepoCard } from "@/components/github/GitHubRepoCard";
+import { GitHubRepoGate } from "@/components/github/GitHubRepoGate";
 import { PermissionControlRoom } from "@/components/tools/PermissionControlRoom";
 import { OperatorPanel } from "@/components/ui/OperatorPanel";
 import { SectionLabel } from "@/components/ui/SectionLabel";
@@ -11,6 +13,22 @@ import { StatusPill } from "@/components/ui/StatusPill";
 type BusinessDetailProps = {
   business: DashboardBusiness;
 };
+
+function isApprovedGitHubPermission(business: DashboardBusiness) {
+  const githubPermission = business.toolPermissions?.find(
+    (permission) => permission.toolId === "github"
+  );
+
+  if (!githubPermission) return true;
+
+  return (
+    githubPermission.status === "approved" ||
+    githubPermission.status === "approved_by_founder" ||
+    githubPermission.status === "connected_demo" ||
+    githubPermission.setupStatus === "ready_to_connect" ||
+    githubPermission.setupStatus === "connected_demo"
+  );
+}
 
 export function BusinessDetail({ business }: BusinessDetailProps) {
   const humanActions =
@@ -90,7 +108,41 @@ export function BusinessDetail({ business }: BusinessDetailProps) {
         </OperatorPanel>
       </section>
 
-      <PermissionControlRoom businessId={business.id} businessName={business.name} />
+      <div id="tool-setup-queue" className="scroll-mt-28">
+        <PermissionControlRoom businessId={business.id} businessName={business.name} />
+      </div>
+
+      <OperatorPanel className="p-6 shadow-[0_30px_120px_rgba(0,0,0,0.34)] sm:p-8">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="max-w-3xl">
+            <div className="flex flex-wrap items-center gap-3">
+              <SectionLabel>Repository Execution</SectionLabel>
+              <StatusPill label="Controlled external action" variant="warning" />
+            </div>
+            <h2 className="mt-4 text-3xl font-semibold tracking-tight text-[#F0F0F0]">
+              GitHub repository creation
+            </h2>
+            <p className="mt-3 text-sm leading-7 text-[#888888] sm:text-base">
+              Create a private GitHub repo only after GitHub is approved in the
+              setup queue. This is the first real external asset bucks.ai can
+              create for a saved business.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-6">
+          {isApprovedGitHubPermission(business) ? (
+            <GitHubRepoCard
+              businessId={business.id}
+              businessName={business.name}
+              oneLineIdea={business.oneLineIdea ?? business.overview}
+              existingRepo={business.githubRepo ?? null}
+            />
+          ) : (
+            <GitHubRepoGate />
+          )}
+        </div>
+      </OperatorPanel>
 
       <section className="grid gap-6 xl:grid-cols-3">
         <OperatorPanel className="p-6 xl:col-span-1">
