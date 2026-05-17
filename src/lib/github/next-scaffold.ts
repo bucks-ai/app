@@ -290,6 +290,9 @@ _This is a starter scaffold. A founder or agent will add real functionality once
     activity_type: "github_next_scaffold_prepared",
     message: "Prepared deployable Next.js starter scaffold.",
     metadata: {
+      status: "prepared",
+      assetType: "deployable_scaffold",
+      executionPhase: "scaffold",
       owner,
       repo,
       filesWritten,

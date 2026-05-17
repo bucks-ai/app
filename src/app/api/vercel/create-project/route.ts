@@ -163,6 +163,9 @@ export async function POST(request: NextRequest) {
     activity_type: "vercel_project_created",
     message: "Created Vercel project for this business.",
     metadata: {
+      status: "created",
+      assetType: "vercel_project",
+      executionPhase: "deployment",
       vercelProjectId: projectResult.projectId,
       vercelProjectName: projectResult.projectName,
       vercelDashboardUrl: projectResult.dashboardUrl,

@@ -53,3 +53,4 @@ _Nothing blocked right now._
 - [x] Build **Idea Intake form** — multi-step form: name, idea, goal, budget, timeline, constraints
 - [x] Build **mock Blueprint Preview** — intelligent frontend-only Mission Control dashboard for generated launch blueprints
 - [x] Build Vercel deployment execution UI for saved business detail pages
+- [x] Build Execution Status / Run History backend layer

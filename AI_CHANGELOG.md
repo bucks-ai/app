@@ -30,6 +30,41 @@
 
 ## Entries
 
+### [2026-05-17 00:00] — Agent: Codex
+
+**Task attempted:** Build Execution Status / Run History backend layer on `feature/execution-status-backend`
+
+**Files changed:**
+- `src/types/execution.ts` — Added execution phase, milestone, timeline, blocker, next-action, asset, and business status contracts
+- `src/lib/execution/status.ts` — Added execution status composition helpers over existing businesses, blueprints, actions, logs, permissions, GitHub metadata, and Vercel metadata
+- `src/lib/execution/log-categories.ts` — Added activity log category mapping
+- `src/app/api/businesses/[id]/execution-status/route.ts` — Added authenticated owner-only status route
+- `src/app/api/businesses/[id]/execution-timeline/route.ts` — Added authenticated owner-only timeline route
+- `src/app/api/github/create-repo/route.ts` — Added richer metadata to future GitHub repo logs
+- `src/lib/github/next-scaffold.ts` — Added richer metadata to future scaffold logs
+- `src/app/api/vercel/create-project/route.ts` — Added richer metadata to future Vercel project logs
+- `HANDOFF_execution-status-backend.md` — Added execution backend handoff and test plan
+- `PROJECT_STATE.md`, `TASKS.md`, `AI_CHANGELOG.md` — Updated project/session state
+
+**Commands run:**
+- `pwd` — confirmed `/Users/satvikranga/bucks-ai-execution-backend`
+- `git branch --show-current` — confirmed `feature/execution-status-backend`
+- `git status --short --branch` — confirmed not `main`
+- `npm install` — completed; did not run `npm audit fix --force`
+- `npm run lint` — passed
+- `./scripts/check.sh` — passed; install, lint, and production build completed
+- `npm run dev -- -p 3010` — started local dev server for API smoke testing, then stopped
+- `curl http://localhost:3010/api/businesses/not-a-real-id/execution-status` — logged-out request returned `401 unauthenticated`
+- `curl http://localhost:3010/api/businesses/not-a-real-id/execution-timeline` — logged-out request returned `401 unauthenticated`
+
+**Result:** Success pending finish script commit/push
+
+**Errors / Blockers:**
+- Full signed-in manual API testing requires a Supabase session cookie.
+
+**Next recommended task:**
+Wire the business detail UI to the new execution status and timeline APIs.
+
 ### [2026-05-13 15:40] — Agent: Codex
 
 **Task attempted:** Build the frontend Deployment Execution UI for Vercel project creation after GitHub repo setup

@@ -161,6 +161,9 @@ export async function POST(request: NextRequest) {
     activity_type: "github_repo_created",
     message: "Created GitHub repository for this business.",
     metadata: {
+      status: "created",
+      assetType: "github_repo",
+      executionPhase: "repository",
       githubRepoUrl: repoResult.repoUrl,
       githubRepoFullName: repoResult.fullName,
       githubRepoId: repoResult.repoId,

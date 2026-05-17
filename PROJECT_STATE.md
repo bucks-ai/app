@@ -7,13 +7,14 @@
 Surface Unification — Intake and Tools Operator Console Aesthetic
 
 ## Current Working Feature
-Vercel deployment execution UI on saved business detail pages.
+Execution Status / Run History backend layer for saved businesses.
 
 ## Last Known Working State
 - Next.js 16 app initialized with TypeScript, Tailwind v4, App Router, `src/` directory
 - Homepage fully redesigned with 10 landing components under `src/components/landing/`
 - `/intake` visually unified as a launch-sequence wizard and Mission Control blueprint output
 - `/tools` visually unified as a permission-layer/control-room registry
+- Execution status API summarizes business phase, milestones, blockers, next actions, assets, and timeline
 - Design system: `#080808` background, `#4F46E5` accent, amber human-required states, red blocked/risk states, minimal green success treatment, no emoji, no fake social proof
 - All routes (`/`, `/intake`, `/tools`, `/api/generate-blueprint`) building successfully
 - `npm run lint` — clean
