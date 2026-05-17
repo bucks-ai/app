@@ -32,7 +32,7 @@
 
 ### [2026-05-17 00:00] — Agent: Codex
 
-**Task attempted:** Build Execution Status / Run History backend layer on `feature/execution-status-backend`
+**Task attempted:** Build Execution Status / Run History backend layer and Execution Command Center UI
 
 **Files changed:**
 - `src/types/execution.ts` — Added execution phase, milestone, timeline, blocker, next-action, asset, and business status contracts
@@ -44,26 +44,43 @@
 - `src/lib/github/next-scaffold.ts` — Added richer metadata to future scaffold logs
 - `src/app/api/vercel/create-project/route.ts` — Added richer metadata to future Vercel project logs
 - `HANDOFF_execution-status-backend.md` — Added execution backend handoff and test plan
+- `src/types/execution-ui.ts` — Added execution status, milestone, blocker, next action, asset, and timeline response contracts
+- `src/lib/execution-client.ts` — Added browser-safe fetch helpers for execution status/timeline routes with backend-missing fallback copy
+- `src/components/execution/*` — Added command center, progress header, milestone grid, blockers, next actions, assets, timeline, and execution status pill components
+- `src/components/dashboard/BusinessDetail.tsx` — Added Execution Command Center after the business overview with fallback data derived from existing props and anchors into existing sections
+- `src/components/vercel/DeploymentExecutionPanel.tsx` — Added the deployment section anchor for command-center links
+- `HANDOFF_execution-command-center-ui.md` — Created implementation handoff and manual test plan
 - `PROJECT_STATE.md`, `TASKS.md`, `AI_CHANGELOG.md` — Updated project/session state
 
+**Notes:**
+- Execution status backend routes were added at `/api/businesses/[id]/execution-status` and `/api/businesses/[id]/execution-timeline`.
+- Execution Command Center UI was added to saved business detail pages.
+- Business detail now shows execution progress, milestones, blockers, next actions, external assets, and timeline.
+
 **Commands run:**
-- `pwd` — confirmed `/Users/satvikranga/bucks-ai-execution-backend`
-- `git branch --show-current` — confirmed `feature/execution-status-backend`
+- `pwd` — confirmed backend and UI worktree locations during feature development
+- `git branch --show-current` — confirmed feature branches during implementation
+- `git status --short --branch` — confirmed not `main` while working in feature worktrees
+- `pwd` — confirmed `/Users/satvikranga/bucks-ai-execution-ui`
+- `git branch --show-current` — confirmed `feature/execution-command-center-ui`
 - `git status --short --branch` — confirmed not `main`
 - `npm install` — completed; did not run `npm audit fix --force`
 - `npm run lint` — passed
-- `./scripts/check.sh` — passed; install, lint, and production build completed
-- `npm run dev -- -p 3010` — started local dev server for API smoke testing, then stopped
+- `./scripts/check.sh` — passed after TypeScript/lint fixes
+- `npm run dev -- -p 3010` — started local dev server for backend API smoke testing, then stopped
 - `curl http://localhost:3010/api/businesses/not-a-real-id/execution-status` — logged-out request returned `401 unauthenticated`
 - `curl http://localhost:3010/api/businesses/not-a-real-id/execution-timeline` — logged-out request returned `401 unauthenticated`
+- `npm run dev -- -p 3006` — started local dev server
+- Browser smoke — opened `/dashboard/businesses/acme-analytics`; local session is signed out, so the existing auth gate rendered
 
-**Result:** Success pending finish script commit/push
+**Result:** Success
 
 **Errors / Blockers:**
-- Full signed-in manual API testing requires a Supabase session cookie.
+- Full signed-in manual QA was not possible without an active Supabase browser session.
+- Existing Next.js multiple-lockfile workspace-root warning remains.
 
 **Next recommended task:**
-Wire the business detail UI to the new execution status and timeline APIs.
+Run the Execution Command Center manual test plan with a signed-in saved business, including milestones, blockers, next actions, assets, timeline, GitHub, and Vercel states.
 
 ### [2026-05-13 15:40] — Agent: Codex
 

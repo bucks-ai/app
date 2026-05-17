@@ -7,14 +7,21 @@
 Surface Unification — Intake and Tools Operator Console Aesthetic
 
 ## Current Working Feature
-Execution Status / Run History backend layer for saved businesses.
+Execution Status / Run History backend layer and Execution Command Center UI for saved businesses.
 
 ## Last Known Working State
 - Next.js 16 app initialized with TypeScript, Tailwind v4, App Router, `src/` directory
 - Homepage fully redesigned with 10 landing components under `src/components/landing/`
 - `/intake` visually unified as a launch-sequence wizard and Mission Control blueprint output
 - `/tools` visually unified as a permission-layer/control-room registry
+- Supabase auth and saved businesses are active
+- AI blueprint generation is active
+- Tool Permission Setup Queue is active
+- GitHub repo creation is active
+- Next.js scaffold preparation is active
+- Vercel project creation is active
 - Execution status API summarizes business phase, milestones, blockers, next actions, assets, and timeline
+- Execution Command Center on business detail shows progress, milestones, blockers, next actions, external assets, and timeline
 - Design system: `#080808` background, `#4F46E5` accent, amber human-required states, red blocked/risk states, minimal green success treatment, no emoji, no fake social proof
 - All routes (`/`, `/intake`, `/tools`, `/api/generate-blueprint`) building successfully
 - `npm run lint` — clean
@@ -89,12 +96,17 @@ _None at this time._
 | Next.js App Router | ✅ Active |
 | TypeScript | ✅ Active |
 | Tailwind CSS v4 | ✅ Active |
-| Idea Intake Wizard | ✅ Active (frontend-only mock flow) |
+| Idea Intake Wizard | ✅ Active |
 | Mock Blueprint Generator | ✅ Active (local TypeScript logic) |
-| Supabase | ⏳ Not yet integrated |
-| OpenAI API | ⚠️ Route scaffold active; requires `OPENAI_API_KEY` in `.env.local` |
+| Supabase Auth | ✅ Active |
+| Saved Businesses | ✅ Active |
+| AI Blueprint Generation | ✅ Active; requires `OPENAI_API_KEY` in `.env.local` |
 | Vercel AI SDK | ⏳ Not yet integrated |
 | LangGraph | ⏳ Not yet integrated |
 | Stripe | ⏳ Not yet integrated |
-| GitHub App | ⏳ Not yet integrated |
-| Vercel Deployment | ⚠️ Frontend UI ready; backend routes expected from separate branch |
+| Tool Permission Setup Queue | ✅ Active |
+| GitHub Repo Creation | ✅ Active |
+| Next.js Scaffold Preparation | ✅ Active |
+| Vercel Project Creation | ✅ Active |
+| Execution Status Backend APIs | ✅ Active |
+| Execution Command Center | ✅ Active on business detail |

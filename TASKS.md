@@ -18,6 +18,11 @@
 ## Next
 
 - [ ] Resolve Next.js workspace-root warning from multiple lockfiles (`turbopack.root` or workspace cleanup)
+- [ ] Verify Execution Command Center with signed-in business data
+- [ ] Verify milestones, progress, blockers, assets, and timeline in the Execution Command Center
+- [ ] Verify GitHub and Vercel assets appear in Execution Command Center external assets
+- [ ] Verify Execution Command Center mobile layout
+- [ ] Verify production deployment for the merged Execution Command Center flow
 - [ ] Improve real `/api/generate-blueprint` route — stream OpenAI structured output to BlueprintPreview
 - [ ] Build **Mission Control dashboard shell** — authenticated layout with sidebar nav and placeholder panels
 - [ ] Wire up **Early Access CTA** to a waitlist form (email capture, no backend yet — can use a form service)
@@ -54,3 +59,4 @@ _Nothing blocked right now._
 - [x] Build **mock Blueprint Preview** — intelligent frontend-only Mission Control dashboard for generated launch blueprints
 - [x] Build Vercel deployment execution UI for saved business detail pages
 - [x] Build Execution Status / Run History backend layer
+- [x] Build Execution Command Center UI for saved business detail pages
