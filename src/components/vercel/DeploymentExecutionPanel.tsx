@@ -128,7 +128,10 @@ export function DeploymentExecutionPanel({
   const activeProject = existingVercelProject ?? activityProject ?? statusProject;
 
   return (
-    <OperatorPanel className="p-6 shadow-[0_30px_120px_rgba(0,0,0,0.34)] sm:p-8">
+    <OperatorPanel
+      id="deployment-execution"
+      className="scroll-mt-28 p-6 shadow-[0_30px_120px_rgba(0,0,0,0.34)] sm:p-8"
+    >
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="max-w-3xl">
           <div className="flex flex-wrap items-center gap-3">

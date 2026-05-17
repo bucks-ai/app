@@ -18,6 +18,7 @@
 ## Next
 
 - [ ] Resolve Next.js workspace-root warning from multiple lockfiles (`turbopack.root` or workspace cleanup)
+- [ ] Merge backend execution status/timeline routes and QA Execution Command Center with signed-in business data
 - [ ] Improve real `/api/generate-blueprint` route — stream OpenAI structured output to BlueprintPreview
 - [ ] Build **Mission Control dashboard shell** — authenticated layout with sidebar nav and placeholder panels
 - [ ] Wire up **Early Access CTA** to a waitlist form (email capture, no backend yet — can use a form service)
@@ -53,3 +54,4 @@ _Nothing blocked right now._
 - [x] Build **Idea Intake form** — multi-step form: name, idea, goal, budget, timeline, constraints
 - [x] Build **mock Blueprint Preview** — intelligent frontend-only Mission Control dashboard for generated launch blueprints
 - [x] Build Vercel deployment execution UI for saved business detail pages
+- [x] Build Execution Command Center UI for saved business detail pages

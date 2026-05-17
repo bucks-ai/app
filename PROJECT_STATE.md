@@ -7,7 +7,7 @@
 Surface Unification — Intake and Tools Operator Console Aesthetic
 
 ## Current Working Feature
-Vercel deployment execution UI on saved business detail pages.
+Execution Command Center UI on saved business detail pages.
 
 ## Last Known Working State
 - Next.js 16 app initialized with TypeScript, Tailwind v4, App Router, `src/` directory
@@ -97,3 +97,4 @@ _None at this time._
 | Stripe | ⏳ Not yet integrated |
 | GitHub App | ⏳ Not yet integrated |
 | Vercel Deployment | ⚠️ Frontend UI ready; backend routes expected from separate branch |
+| Execution Command Center | ⚠️ Frontend UI ready; execution status/timeline routes expected from separate branch |
