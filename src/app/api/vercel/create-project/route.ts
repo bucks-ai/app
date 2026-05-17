@@ -4,11 +4,48 @@ import { hasVercelEnv } from "@/lib/vercel/env";
 import { getCurrentUser, getBusinessById, createAgentActivityLog } from "@/lib/projects";
 import { getToolPermissionsForBusiness, updateToolPermissionStatus } from "@/lib/tool-permissions";
 import { getLatestGitHubRepoForBusiness } from "@/lib/github/repo-metadata";
-import { prepareDeployableNextScaffold } from "@/lib/github/next-scaffold";
+import {
+  prepareDeployableNextScaffold,
+  ScaffoldPreparationError,
+} from "@/lib/github/next-scaffold";
 import { sanitizeVercelProjectName, createVercelProjectWithSetup } from "@/lib/vercel/client";
 
-function errorResponse(error: string, code: string, status: number) {
-  return Response.json({ ok: false, error, code }, { status });
+type ErrorDetail = {
+  failedFile?: string;
+  githubStatusCode?: number;
+  githubMessage?: string;
+};
+
+function errorResponse(
+  error: string,
+  code: string,
+  status: number,
+  detail?: ErrorDetail
+) {
+  return Response.json(
+    { ok: false, error, code, ...(detail ? { detail } : {}) },
+    { status }
+  );
+}
+
+function scaffoldErrorResponse(error: unknown) {
+  const detail =
+    error instanceof ScaffoldPreparationError
+      ? {
+          ...(error.failedFile ? { failedFile: error.failedFile } : {}),
+          ...(error.githubStatusCode
+            ? { githubStatusCode: error.githubStatusCode }
+            : {}),
+          ...(error.safeDetail ? { githubMessage: error.safeDetail } : {}),
+        }
+      : undefined;
+
+  return errorResponse(
+    "Starter scaffold could not be written to GitHub.",
+    "scaffold_failed",
+    500,
+    detail
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -116,11 +153,7 @@ export async function POST(request: NextRequest) {
         oneLineIdea: business.one_line_idea,
       });
     } catch (e) {
-      return errorResponse(
-        e instanceof Error ? e.message : "Scaffold preparation failed.",
-        "scaffold_failed",
-        500
-      );
+      return scaffoldErrorResponse(e);
     }
   }
 

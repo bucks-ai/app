@@ -1,7 +1,11 @@
 // Writes a minimal deployable Next.js starter scaffold to an existing GitHub repo.
 // Uses createOrUpdateGitHubFile serially — GitHub's API can reject parallel writes on a new repo.
 
-import { createOrUpdateGitHubFile } from "@/lib/github/client";
+import {
+  createOrUpdateGitHubFile,
+  GitHubFileWriteError,
+  type GitHubFileWriteAction,
+} from "@/lib/github/client";
 import { createAgentActivityLog } from "@/lib/projects";
 
 export interface PrepareScaffoldInput {
@@ -13,9 +17,34 @@ export interface PrepareScaffoldInput {
   oneLineIdea?: string | null;
 }
 
+export interface PreparedScaffoldFile {
+  path: string;
+  action: GitHubFileWriteAction;
+}
+
 export interface PrepareScaffoldResult {
   filesWritten: string[];
+  files: PreparedScaffoldFile[];
   activityLogId?: string;
+}
+
+export class ScaffoldPreparationError extends Error {
+  readonly failedFile?: string;
+  readonly githubStatusCode?: number;
+  readonly safeDetail?: string;
+
+  constructor(input: {
+    message: string;
+    failedFile?: string;
+    githubStatusCode?: number;
+    safeDetail?: string;
+  }) {
+    super(input.message);
+    this.name = "ScaffoldPreparationError";
+    this.failedFile = input.failedFile;
+    this.githubStatusCode = input.githubStatusCode;
+    this.safeDetail = input.safeDetail;
+  }
 }
 
 export async function prepareDeployableNextScaffold(
@@ -276,12 +305,30 @@ _This is a starter scaffold. A founder or agent will add real functionality once
     },
   ];
 
-  const filesWritten: string[] = [];
+  const fileResults: PreparedScaffoldFile[] = [];
 
   for (const file of files) {
-    await createOrUpdateGitHubFile({ owner, repo, file });
-    filesWritten.push(file.path);
+    try {
+      const result = await createOrUpdateGitHubFile({ owner, repo, file });
+      fileResults.push(result);
+    } catch (error) {
+      if (error instanceof GitHubFileWriteError) {
+        throw new ScaffoldPreparationError({
+          message: "Starter scaffold could not be written to GitHub.",
+          failedFile: error.filePath,
+          githubStatusCode: error.status,
+          safeDetail: error.githubMessage,
+        });
+      }
+
+      throw new ScaffoldPreparationError({
+        message: "Starter scaffold could not be written to GitHub.",
+        failedFile: file.path,
+      });
+    }
   }
+
+  const filesWritten = fileResults.map((file) => file.path);
 
   // Log the scaffold preparation
   const logResult = await createAgentActivityLog({
@@ -296,11 +343,13 @@ _This is a starter scaffold. A founder or agent will add real functionality once
       owner,
       repo,
       filesWritten,
+      files: fileResults,
     },
   });
 
   return {
     filesWritten,
+    files: fileResults,
     activityLogId: logResult.data?.id ?? undefined,
   };
 }

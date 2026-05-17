@@ -13,6 +13,38 @@ import type {
 const GITHUB_API_BASE = "https://api.github.com";
 const GITHUB_API_VERSION = "2022-11-28";
 
+export type GitHubFileWriteAction = "created" | "updated" | "unchanged";
+
+export interface GitHubFileWriteResult {
+  path: string;
+  action: GitHubFileWriteAction;
+}
+
+export class GitHubFileWriteError extends Error {
+  readonly filePath: string;
+  readonly status: number;
+  readonly operation: "read" | "write";
+  readonly githubMessage?: string;
+
+  constructor(input: {
+    filePath: string;
+    status: number;
+    operation: "read" | "write";
+    githubMessage?: string;
+  }) {
+    const verb = input.operation === "read" ? "read" : "write";
+    const suffix = input.githubMessage ? `: ${input.githubMessage}` : "";
+    super(
+      `GitHub file ${verb} failed for ${input.filePath} (${input.status})${suffix}`
+    );
+    this.name = "GitHubFileWriteError";
+    this.filePath = input.filePath;
+    this.status = input.status;
+    this.operation = input.operation;
+    this.githubMessage = input.githubMessage;
+  }
+}
+
 function githubHeaders(token: string): HeadersInit {
   return {
     Authorization: `Bearer ${token}`,
@@ -20,6 +52,54 @@ function githubHeaders(token: string): HeadersInit {
     "X-GitHub-Api-Version": GITHUB_API_VERSION,
     "Content-Type": "application/json",
   };
+}
+
+function encodeGitHubContentPath(path: string) {
+  return path.split("/").map(encodeURIComponent).join("/");
+}
+
+function getGitHubContentsUrl(input: {
+  owner: string;
+  repo: string;
+  path: string;
+  branch?: string;
+}) {
+  const url = new URL(
+    `${GITHUB_API_BASE}/repos/${encodeURIComponent(input.owner)}/${encodeURIComponent(
+      input.repo
+    )}/contents/${encodeGitHubContentPath(input.path)}`
+  );
+
+  if (input.branch) {
+    url.searchParams.set("ref", input.branch);
+  }
+
+  return url.toString();
+}
+
+async function readSafeGitHubMessage(res: Response): Promise<string | undefined> {
+  const text = await res.text();
+  if (!text.trim()) return undefined;
+
+  try {
+    const data = JSON.parse(text) as unknown;
+    if (
+      typeof data === "object" &&
+      data !== null &&
+      "message" in data &&
+      typeof data.message === "string"
+    ) {
+      return data.message;
+    }
+  } catch {
+    // Fall through to a bounded plain-text message.
+  }
+
+  return text.slice(0, 300);
+}
+
+function decodeBase64Content(content: string): string {
+  return Buffer.from(content.replace(/\s/g, ""), "base64").toString("utf-8");
 }
 
 export interface GitHubAuthenticatedUser {
@@ -86,30 +166,95 @@ export async function createOrUpdateGitHubFile(input: {
   owner: string;
   repo: string;
   file: GitHubFileTemplate;
-}): Promise<void> {
+  branch?: string;
+}): Promise<GitHubFileWriteResult> {
   const { token } = getGitHubEnv();
-  const { owner, repo, file } = input;
+  const { owner, repo, file, branch } = input;
 
   const encoded = Buffer.from(file.content, "utf-8").toString("base64");
+  const contentsUrl = getGitHubContentsUrl({
+    owner,
+    repo,
+    path: file.path,
+    branch,
+  });
+
+  const getRes = await fetch(contentsUrl, {
+    method: "GET",
+    headers: githubHeaders(token),
+  });
+
+  let existingSha: string | undefined;
+
+  if (getRes.ok) {
+    const existing = (await getRes.json()) as {
+      sha?: unknown;
+      content?: unknown;
+      type?: unknown;
+    };
+
+    if (typeof existing.sha !== "string" || existing.type === "dir") {
+      throw new GitHubFileWriteError({
+        filePath: file.path,
+        status: getRes.status,
+        operation: "read",
+        githubMessage: "Existing path is not a file.",
+      });
+    }
+
+    existingSha = existing.sha;
+
+    if (
+      typeof existing.content === "string" &&
+      decodeBase64Content(existing.content) === file.content
+    ) {
+      return { path: file.path, action: "unchanged" };
+    }
+  } else if (getRes.status !== 404) {
+    throw new GitHubFileWriteError({
+      filePath: file.path,
+      status: getRes.status,
+      operation: "read",
+      githubMessage: await readSafeGitHubMessage(getRes),
+    });
+  }
+
+  const body: {
+    message: string;
+    content: string;
+    branch?: string;
+    sha?: string;
+  } = {
+    message: existingSha ? `Update ${file.path}` : `Create ${file.path}`,
+    content: encoded,
+  };
+
+  if (branch) body.branch = branch;
+  if (existingSha) body.sha = existingSha;
 
   const res = await fetch(
-    `${GITHUB_API_BASE}/repos/${owner}/${repo}/contents/${file.path}`,
+    getGitHubContentsUrl({
+      owner,
+      repo,
+      path: file.path,
+    }),
     {
       method: "PUT",
       headers: githubHeaders(token),
-      body: JSON.stringify({
-        message: file.message,
-        content: encoded,
-      }),
+      body: JSON.stringify(body),
     }
   );
 
   if (!res.ok) {
-    const errBody = await res.text();
-    throw new Error(
-      `GitHub file write failed for ${file.path} (${res.status}): ${errBody}`
-    );
+    throw new GitHubFileWriteError({
+      filePath: file.path,
+      status: res.status,
+      operation: "write",
+      githubMessage: await readSafeGitHubMessage(res),
+    });
   }
+
+  return { path: file.path, action: existingSha ? "updated" : "created" };
 }
 
 export async function createStarterRepositoryFiles(input: {

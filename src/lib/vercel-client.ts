@@ -83,7 +83,7 @@ function friendlyError(status: number, code: string, payload: unknown) {
   }
 
   if (code === "scaffold_failed") {
-    return "The starter app could not be written to GitHub.";
+    return "Starter scaffold could not be written to GitHub. This can happen if the repo token lacks Contents: Read/Write permission or an existing file update failed.";
   }
 
   if (code === "vercel_create_failed") {
@@ -154,6 +154,8 @@ export async function prepareNextScaffold(
     const files = isRecord(data)
       ? asStringArray(data.files).length > 0
         ? asStringArray(data.files)
+        : asStringArray(data.filesWritten).length > 0
+          ? asStringArray(data.filesWritten)
         : asStringArray(data.writtenFiles)
       : [];
 
