@@ -1,5 +1,9 @@
 import type { DashboardBusiness } from "@/components/dashboard/mock-data";
 import type { BusinessExecutionStatus } from "@/types/execution-ui";
+import { AssetQuickLinks } from "@/components/workspace/AssetQuickLinks";
+import { CompactActivityCenter } from "@/components/workspace/CompactActivityCenter";
+import { CompactToolQueue } from "@/components/workspace/CompactToolQueue";
+import { resolvePrimaryNextAction } from "@/components/workspace/next-action";
 
 type TabKey =
   | "overview"
@@ -25,18 +29,28 @@ export function WorkspaceRightRail({
   const blockers = executionStatus?.blockers ?? [];
   const pendingApprovals =
     business.humanActionItems ?? [];
-  const recentActivity = executionStatus?.timeline?.slice(0, 3) ?? [];
-  const assets = executionStatus?.assets ?? [];
-
-  const keyAssets = assets.filter(
-    (a) =>
-      a.type === "github_repo" ||
-      a.type === "vercel_project" ||
-      a.type === "deployment_url"
-  );
+  const primaryAction = resolvePrimaryNextAction(business, executionStatus);
 
   return (
     <aside className="space-y-4">
+      <div className="rounded-lg border border-[#F59E0B]/25 bg-[#0F0F0F] p-4">
+        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#FCD34D]">
+          Required next
+        </p>
+        <button
+          type="button"
+          onClick={() => onTabChange(primaryAction.target)}
+          className="mt-3 w-full rounded border border-[#F59E0B]/20 bg-[#F59E0B]/8 px-3 py-2.5 text-left transition-colors hover:border-[#F59E0B]/40"
+        >
+          <p className="text-xs font-semibold text-[#F0F0F0]">
+            {primaryAction.label}
+          </p>
+          <p className="mt-1 text-xs leading-5 text-[#FDE68A]">
+            {primaryAction.description}
+          </p>
+        </button>
+      </div>
+
       {/* Next action */}
       {nextActions.length > 0 ? (
         <div className="rounded-lg border border-[#1C1C1C] bg-[#0F0F0F] p-4">
@@ -130,61 +144,65 @@ export function WorkspaceRightRail({
         </div>
       ) : null}
 
-      {/* Key assets */}
-      {keyAssets.length > 0 ? (
-        <div className="rounded-lg border border-[#1C1C1C] bg-[#0F0F0F] p-4">
+      <div className="rounded-lg border border-[#1C1C1C] bg-[#0F0F0F] p-4">
+        <div className="flex items-center justify-between">
           <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#A5B4FC]">
-            Assets
+            Tool queue
           </p>
-          <div className="mt-3 space-y-1.5">
-            {keyAssets.map((asset) => (
-              <div key={asset.id} className="flex items-center justify-between gap-2">
-                <span className="truncate text-xs text-[#888]">{asset.label}</span>
-                {asset.url ? (
-                  <a
-                    href={asset.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="shrink-0 font-mono text-[10px] uppercase tracking-widest text-[#4F46E5] transition-colors hover:text-[#A5B4FC]"
-                  >
-                    Open
-                  </a>
-                ) : (
-                  <span className="shrink-0 font-mono text-[10px] uppercase tracking-widest text-[#333]">
-                    Pending
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
+          <button
+            type="button"
+            onClick={() => onTabChange("tools")}
+            className="font-mono text-[10px] uppercase tracking-widest text-[#444] transition-colors hover:text-[#888]"
+          >
+            All
+          </button>
         </div>
-      ) : null}
+        <div className="mt-3">
+          <CompactToolQueue
+            business={business}
+            maxRows={3}
+            onOpenTools={() => onTabChange("tools")}
+          />
+        </div>
+      </div>
+
+      {/* Key assets */}
+      <div className="rounded-lg border border-[#1C1C1C] bg-[#0F0F0F] p-4">
+        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#A5B4FC]">
+          Assets
+        </p>
+        <div className="mt-3">
+          <AssetQuickLinks
+            business={business}
+            executionStatus={executionStatus}
+            compact
+          />
+        </div>
+      </div>
 
       {/* Recent activity */}
-      {recentActivity.length > 0 ? (
-        <div className="rounded-lg border border-[#1C1C1C] bg-[#0F0F0F] p-4">
-          <div className="flex items-center justify-between">
-            <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#A5B4FC]">
-              Recent activity
-            </p>
-            <button
-              type="button"
-              onClick={() => onTabChange("activity")}
-              className="font-mono text-[10px] uppercase tracking-widest text-[#444] transition-colors hover:text-[#888]"
-            >
-              All
-            </button>
-          </div>
-          <div className="mt-3 space-y-2">
-            {recentActivity.map((event) => (
-              <div key={event.id} className="flex items-start gap-2">
-                <div className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-[#333]" />
-                <p className="text-xs leading-5 text-[#666]">{event.title}</p>
-              </div>
-            ))}
-          </div>
+      <div className="rounded-lg border border-[#1C1C1C] bg-[#0F0F0F] p-4">
+        <div className="flex items-center justify-between">
+          <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#A5B4FC]">
+            Recent activity
+          </p>
+          <button
+            type="button"
+            onClick={() => onTabChange("activity")}
+            className="font-mono text-[10px] uppercase tracking-widest text-[#444] transition-colors hover:text-[#888]"
+          >
+            All
+          </button>
         </div>
-      ) : null}
+        <div className="mt-3">
+          <CompactActivityCenter
+            business={business}
+            executionStatus={executionStatus}
+            maxRows={3}
+            compact
+          />
+        </div>
+      </div>
     </aside>
   );
 }

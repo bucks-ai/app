@@ -259,24 +259,37 @@ export default async function DashboardPage() {
     .slice(0, 6)
     .map(toActivityItem);
 
-  const businessCards = businesses.map(toDashboardBusiness);
+  const businessCards = businesses.map((business, index) => {
+    const card = toDashboardBusiness(business);
+    const businessActions = actionsByBusiness[index]?.data ?? [];
+    const businessLogs = logsByBusiness[index]?.data ?? [];
+
+    return {
+      ...card,
+      humanActionItems: businessActions.map((action) =>
+        toHumanAction(action, business.idea_name)
+      ),
+      humanActions: businessActions.map((action) => action.title),
+      activity: businessLogs.slice(0, 5).map(toActivityItem),
+    };
+  });
 
   return (
     <DashboardShell>
       <div className="space-y-8">
         <OperatorPanel className="overflow-hidden p-6 shadow-[0_30px_140px_rgba(0,0,0,0.38)] sm:p-10">
-          <div className="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-4xl">
               <div className="flex flex-wrap items-center gap-3">
                 <SectionLabel>Mission Control</SectionLabel>
                 <StatusPill label="Live Supabase data" variant="success" />
               </div>
-              <h1 className="mt-5 text-4xl font-semibold tracking-tight text-[#F0F0F0] sm:text-5xl">
-                Saved startup builds and operator runs
+              <h1 className="mt-4 text-3xl font-semibold tracking-tight text-[#F0F0F0] sm:text-5xl">
+                Command queue for saved startup builds
               </h1>
-              <p className="mt-5 max-w-3xl text-base leading-8 text-[#888888] sm:text-lg">
-                You are viewing saved business projects tied to the current
-                authenticated Supabase user.
+              <p className="mt-4 max-w-3xl text-sm leading-7 text-[#888888] sm:text-base">
+                Each project card now leads with stage, health, open approvals,
+                asset readiness, and the next action to take.
               </p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row lg:flex-col xl:flex-row">
@@ -295,7 +308,7 @@ export default async function DashboardPage() {
             </div>
           </div>
 
-          <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <DataTile
               label="Saved businesses"
               value={`${businesses.length}`}
@@ -322,17 +335,17 @@ export default async function DashboardPage() {
           </div>
         </OperatorPanel>
 
-        <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+        <section className="grid gap-5 xl:grid-cols-[1.25fr_0.75fr]">
           <OperatorPanel className="p-6">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <SectionLabel>Saved businesses</SectionLabel>
+                <SectionLabel>Workspace re-entry</SectionLabel>
                 <h2 className="mt-2 text-2xl font-semibold tracking-tight text-[#F0F0F0]">
-                  Real build records
+                  Open project workspaces
                 </h2>
               </div>
               <p className="max-w-md text-sm leading-6 text-[#888888]">
-                These records belong to the signed-in user.
+                Sorted as a practical command queue instead of a gallery.
               </p>
             </div>
             <div className="mt-6 grid gap-4">

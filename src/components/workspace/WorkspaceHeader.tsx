@@ -42,10 +42,11 @@ export function WorkspaceHeader({
   const blockerCount = executionStatus?.blockers?.length ?? 0;
   const pendingApprovalCount =
     business.humanActionItems?.length ?? business.humanActions.length;
+  const latestRun = executionStatus?.timeline?.[0]?.status ?? executionStatus?.timeline?.[0]?.category;
 
   return (
     <div className="border-b border-[#1C1C1C] bg-[#0A0A0A] px-4 py-3 sm:px-6">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         {/* Left: back + identity */}
         <div className="min-w-0 flex-1">
           <Link
@@ -64,6 +65,9 @@ export function WorkspaceHeader({
               variant={healthVariant(health)}
             />
             <StatusPill label={phaseLabel(phase)} variant="neutral" />
+            {latestRun ? (
+              <StatusPill label={`Run: ${phaseLabel(latestRun)}`} variant="accent" />
+            ) : null}
           </div>
           {business.oneLineIdea ? (
             <p className="mt-0.5 truncate text-[13px] text-[#666]">

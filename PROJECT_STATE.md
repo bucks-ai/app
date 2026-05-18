@@ -7,7 +7,7 @@
 Surface Unification — Intake and Tools Operator Console Aesthetic
 
 ## Current Working Feature
-Execution Status / Run History backend layer and Execution Command Center UI for saved businesses.
+Business workspace UX polish: compact project workspace, dashboard command queue, and mobile action surfaces.
 
 ## Last Known Working State
 - Next.js 16 app initialized with TypeScript, Tailwind v4, App Router, `src/` directory
@@ -22,6 +22,8 @@ Execution Status / Run History backend layer and Execution Command Center UI for
 - Vercel project creation is active
 - Execution status API summarizes business phase, milestones, blockers, next actions, assets, and timeline
 - Execution Command Center on business detail shows progress, milestones, blockers, next actions, external assets, and timeline
+- Business detail is now a tabbed project workspace with sticky primary action, compact assets, compact tool queue, compact activity, and progressive disclosure for logs/history/blueprint detail
+- Dashboard saved-business cards now act as re-entry command cards with stage, progress, blockers, approvals, repo/deploy status, last activity, and primary next action
 - Design system: `#080808` background, `#4F46E5` accent, amber human-required states, red blocked/risk states, minimal green success treatment, no emoji, no fake social proof
 - All routes (`/`, `/intake`, `/tools`, `/api/generate-blueprint`) building successfully
 - `npm run lint` — clean

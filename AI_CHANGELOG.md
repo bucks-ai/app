@@ -30,6 +30,40 @@
 
 ## Entries
 
+### [2026-05-18 00:00] — Agent: Codex
+
+**Task attempted:** Polish business workspace UX and dashboard re-entry cards
+
+**Files changed:**
+- `src/components/workspace/next-action.ts` — Added shared primary next-action resolver
+- `src/components/workspace/CompactToolQueue.tsx` — Added compact tool approval rows
+- `src/components/workspace/CompactActivityCenter.tsx` — Added dense filtered activity center
+- `src/components/workspace/AssetQuickLinks.tsx` — Added compact external asset links
+- `src/components/workspace/CommandMenuHint.tsx` — Added local command shortcut placeholder
+- `src/components/workspace/BusinessWorkspace.tsx` — Added sticky controls, command hint, compact rail wiring, and mobile bottom next-action bar
+- `src/components/workspace/PrimaryActionStrip.tsx` — Reused shared resolver and strengthened primary CTA
+- `src/components/workspace/WorkspaceHeader.tsx` — Added latest run signal and tightened responsive layout
+- `src/components/workspace/WorkspaceRightRail.tsx` — Rebuilt right rail around compact action, tools, assets, and activity
+- `src/components/workspace/WorkspaceTabs.tsx` — Adjusted tab layout for sticky controls
+- `src/components/workspace/tabs/OverviewTab.tsx` — Moved assets/activity/tools into compact overview modules
+- `src/components/workspace/tabs/ActivityTab.tsx` — Reused compact filtered activity center
+- `src/components/workspace/tabs/ToolsTab.tsx` — Added compact approval summary above detailed tool controls
+- `src/components/dashboard/BusinessCard.tsx` — Converted cards into project workspace re-entry cards
+- `src/app/dashboard/page.tsx` — Passed per-business actions/activity into dashboard cards and tightened dashboard copy
+- `HANDOFF_business-workspace-polish.md` — Added handoff and manual QA plan
+- `PROJECT_STATE.md`, `TASKS.md`, `AI_CHANGELOG.md` — Updated project/session state
+
+**Commands run:**
+- Pending final verification in this session.
+
+**Result:** Pending verification
+
+**Errors / Blockers:**
+- Full signed-in manual QA depends on an active Supabase browser session.
+
+**Next recommended task:**
+Run signed-in QA for the polished business workspace and production deployment.
+
 ### [2026-05-17 00:00] — Agent: Codex
 
 **Task attempted:** Build Execution Status / Run History backend layer and Execution Command Center UI

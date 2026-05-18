@@ -14,6 +14,8 @@ import { WorkspaceTabs } from "@/components/workspace/WorkspaceTabs";
 import type { TabKey } from "@/components/workspace/WorkspaceTabs";
 import { WorkspaceRightRail } from "@/components/workspace/WorkspaceRightRail";
 import { WorkspaceDrawer } from "@/components/workspace/WorkspaceDrawer";
+import { CommandMenuHint } from "@/components/workspace/CommandMenuHint";
+import { resolvePrimaryNextAction } from "@/components/workspace/next-action";
 import { OverviewTab } from "@/components/workspace/tabs/OverviewTab";
 import { ActionsTab } from "@/components/workspace/tabs/ActionsTab";
 import { BuildTab } from "@/components/workspace/tabs/BuildTab";
@@ -89,9 +91,10 @@ export function BusinessWorkspace({
     business.humanActionItems?.length ?? business.humanActions.length;
   const blockerCount = executionStatus?.blockers?.length ?? 0;
   const actionCount = pendingApprovalCount + blockerCount;
+  const primaryAction = resolvePrimaryNextAction(business, executionStatus);
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="flex min-h-screen min-w-0 flex-col overflow-x-hidden">
       {/* Workspace header */}
       <WorkspaceHeader
         business={business}
@@ -99,19 +102,26 @@ export function BusinessWorkspace({
         onBlueprintOpen={() => setBlueprintOpen(true)}
       />
 
-      {/* Primary action strip */}
-      <PrimaryActionStrip
-        business={business}
-        executionStatus={executionStatus}
-        onTabChange={handleTabChange}
-      />
+      <div className="sticky top-0 z-30 bg-[#080808]/95 backdrop-blur">
+        {/* Primary action strip */}
+        <PrimaryActionStrip
+          business={business}
+          executionStatus={executionStatus}
+          onTabChange={handleTabChange}
+        />
 
-      {/* Tab bar */}
-      <WorkspaceTabs
-        activeTab={activeTab}
-        onTabChange={handleTabChange}
-        badgeCounts={{ actions: actionCount }}
-      />
+        <div className="flex items-center justify-between gap-3 border-b border-[#1C1C1C] bg-[#080808] pr-4 sm:pr-6">
+          {/* Tab bar */}
+          <WorkspaceTabs
+            activeTab={activeTab}
+            onTabChange={handleTabChange}
+            badgeCounts={{ actions: actionCount }}
+          />
+          <div className="hidden shrink-0 lg:block">
+            <CommandMenuHint onTabChange={handleTabChange} />
+          </div>
+        </div>
+      </div>
 
       {/* Body: main content + right rail */}
       <div className="flex flex-1 gap-0">
@@ -132,6 +142,7 @@ export function BusinessWorkspace({
             <DeployTab business={business} />
           ) : activeTab === "tools" ? (
             <ToolsTab
+              business={business}
               businessId={business.id}
               businessName={business.name}
             />
@@ -155,25 +166,20 @@ export function BusinessWorkspace({
       </div>
 
       {/* Mobile sticky bottom bar */}
-      <div className="sticky bottom-0 z-10 border-t border-[#1C1C1C] bg-[#080808] px-4 py-3 xl:hidden">
+      <div className="sticky bottom-0 z-30 border-t border-[#1C1C1C] bg-[#080808]/95 px-3 py-3 backdrop-blur xl:hidden">
         <div className="flex items-center gap-2">
-          {pendingApprovalCount > 0 ? (
-            <button
-              type="button"
-              onClick={() => handleTabChange("actions")}
-              className="flex-1 rounded border border-[#F59E0B]/30 bg-[#F59E0B]/10 px-3 py-2.5 font-mono text-[11px] uppercase tracking-widest text-[#FCD34D]"
-            >
-              {pendingApprovalCount} pending
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => handleTabChange("overview")}
-              className="flex-1 rounded border border-[#1C1C1C] bg-[#141414] px-3 py-2.5 font-mono text-[11px] uppercase tracking-widest text-[#888]"
-            >
-              Overview
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => handleTabChange(primaryAction.target)}
+            className="min-w-0 flex-1 rounded border border-[#F59E0B]/35 bg-[#F59E0B]/10 px-3 py-2.5 text-left"
+          >
+            <span className="block font-mono text-[10px] uppercase tracking-widest text-[#FCD34D]">
+              Next action
+            </span>
+            <span className="block truncate text-xs font-semibold text-[#F0F0F0]">
+              {primaryAction.label}
+            </span>
+          </button>
           <button
             type="button"
             onClick={() => handleTabChange("activity")}

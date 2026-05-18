@@ -31,7 +31,7 @@ export function WorkspaceTabs({
   badgeCounts,
 }: WorkspaceTabsProps) {
   return (
-    <div className="border-b border-[#1C1C1C] bg-[#080808]">
+    <div className="min-w-0 flex-1 bg-[#080808]">
       <div className="flex overflow-x-auto px-4 sm:px-6" style={{ scrollbarWidth: "none" }}>
         {TABS.map((tab) => {
           const count = badgeCounts?.[tab.key];
