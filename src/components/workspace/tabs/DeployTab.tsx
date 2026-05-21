@@ -1,4 +1,5 @@
 import type { DashboardBusiness } from "@/components/dashboard/mock-data";
+import { DeploymentStatusCard } from "@/components/deployment/DeploymentStatusCard";
 import { DeploymentExecutionPanel } from "@/components/vercel/DeploymentExecutionPanel";
 
 type DeployTabProps = {
@@ -7,7 +8,11 @@ type DeployTabProps = {
 
 export function DeployTab({ business }: DeployTabProps) {
   return (
-    <div>
+    <div className="space-y-5">
+      <DeploymentStatusCard
+        businessId={business.id}
+        initialProject={business.vercelProject ?? null}
+      />
       <DeploymentExecutionPanel
         businessId={business.id}
         businessName={business.name}

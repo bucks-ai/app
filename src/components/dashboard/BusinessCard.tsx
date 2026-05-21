@@ -1,7 +1,12 @@
 import Link from "next/link";
+import {
+  DeploymentStatusBadge,
+  deploymentStatusLabel,
+} from "@/components/deployment/DeploymentStatusBadge";
 import { SectionLabel } from "@/components/ui/SectionLabel";
 import { StatusPill } from "@/components/ui/StatusPill";
 import type { DashboardBusiness } from "@/components/dashboard/mock-data";
+import type { DeploymentStatus } from "@/types/deployment-ui";
 import { resolvePrimaryNextAction } from "@/components/workspace/next-action";
 
 type BusinessCardProps = {
@@ -17,11 +22,11 @@ export function BusinessCard({ business, label }: BusinessCardProps) {
     ).length ?? 0;
   const approvalCount = business.humanActionItems?.length ?? business.humanActions.length;
   const repoStatus = business.githubRepo ? "Repo ready" : "Repo pending";
-  const deployStatus = business.vercelProject?.deploymentUrl
-    ? "Live"
+  const deployStatus: DeploymentStatus = business.vercelProject?.deploymentUrl
+    ? "live"
     : business.vercelProject
-      ? "Vercel ready"
-      : "Deploy pending";
+      ? "not_deployed"
+      : "unknown";
   const lastActivity =
     business.activityLogs?.[0]?.message ?? business.activity?.[0]?.event ?? "No activity yet";
   const progress =
@@ -58,6 +63,7 @@ export function BusinessCard({ business, label }: BusinessCardProps) {
             label={approvalCount > 0 ? `${approvalCount} approvals` : "No approvals"}
             variant={approvalCount > 0 ? "warning" : "neutral"}
           />
+          <DeploymentStatusBadge status={deployStatus} />
         </div>
       </div>
 
@@ -105,7 +111,9 @@ export function BusinessCard({ business, label }: BusinessCardProps) {
             Deploy
           </p>
           <p className="mt-1 truncate text-sm font-semibold text-[#D4D4D4]">
-            {deployStatus}
+            {deployStatus === "not_deployed"
+              ? "Project created"
+              : deploymentStatusLabel(deployStatus)}
           </p>
         </div>
       </div>
