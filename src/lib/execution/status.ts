@@ -106,6 +106,36 @@ function milestone(input: ExecutionMilestone): ExecutionMilestone {
   return input;
 }
 
+// Returns the most recent deployment URL from either stored project metadata or
+// a vercel_deployment_ready activity log, whichever is available.
+function resolveDeploymentUrl(
+  vercelProject: VercelProjectMetadata | null,
+  logs: AgentActivityLogRecord[]
+): string | null {
+  if (vercelProject?.vercelDeploymentUrl) return vercelProject.vercelDeploymentUrl;
+  const readyLog = latestLog(logs, "vercel_deployment_ready");
+  const url = readyLog?.metadata?.deploymentUrl;
+  return typeof url === "string" && url ? url : null;
+}
+
+// Returns true when the most recent deployment status refresh ended in failure
+// and no subsequent ready log exists.
+function isLatestDeploymentFailed(logs: AgentActivityLogRecord[]): boolean {
+  const failedLog = latestLog(logs, "vercel_deployment_failed");
+  if (!failedLog) return false;
+  const readyLog = latestLog(logs, "vercel_deployment_ready");
+  if (!readyLog) return true;
+  // Compare timestamps — if failed log is newer, deployment is currently failed
+  return new Date(failedLog.created_at) > new Date(readyLog.created_at);
+}
+
+// Returns true when a status refresh found no deployments at all for the project.
+function isManualConnectionRequired(logs: AgentActivityLogRecord[]): boolean {
+  const refreshLog = latestLog(logs, "vercel_deployment_status_refreshed");
+  if (!refreshLog) return false;
+  return String(refreshLog.metadata?.status ?? "") === "manual_action_required";
+}
+
 function permissionMilestoneStatus(
   permission: ToolPermissionView | null
 ): ExecutionMilestoneStatus {
@@ -196,7 +226,8 @@ export function getExecutionMilestones(
   const vercelPermission = findToolPermission(toolPermissions, "vercel");
   const toolPermissionsSeededLog = latestLog(activityLogs, "tool_permissions_seeded");
   const scaffoldLog = latestLog(activityLogs, "github_next_scaffold_prepared");
-  const hasDeploymentUrl = Boolean(vercelProject?.vercelDeploymentUrl);
+  const liveDeploymentUrl = resolveDeploymentUrl(vercelProject, activityLogs);
+  const hasDeploymentUrl = Boolean(liveDeploymentUrl);
 
   return [
     milestone({
@@ -317,24 +348,22 @@ export function getExecutionMilestones(
       label: "Deployment available",
       description: "A live deployment URL is available for validation.",
       status: hasDeploymentUrl ? "complete" : vercelProject ? "warning" : "not_started",
-      completedAt: vercelProject?.createdAt,
+      completedAt: hasDeploymentUrl ? (vercelProject?.createdAt ?? undefined) : undefined,
       blockedReason:
         vercelProject && !hasDeploymentUrl
-          ? "Vercel project exists, but no deployment URL has been recorded yet."
+          ? "Vercel project exists, but no live deployment URL is recorded yet. Refresh deployment status or push to the linked branch."
           : undefined,
-      metadata: hasDeploymentUrl
-        ? { deploymentUrl: vercelProject?.vercelDeploymentUrl }
-        : undefined,
+      metadata: hasDeploymentUrl ? { deploymentUrl: liveDeploymentUrl } : undefined,
     }),
     milestone({
       id: "ready_for_validation",
       label: "Ready for validation",
       description: "The founder can start validating the generated business.",
       status: hasDeploymentUrl ? "complete" : vercelProject ? "warning" : "not_started",
-      completedAt: hasDeploymentUrl ? vercelProject?.createdAt : undefined,
+      completedAt: hasDeploymentUrl ? (vercelProject?.createdAt ?? undefined) : undefined,
       blockedReason: hasDeploymentUrl
         ? undefined
-        : "A deployment URL should be available before customer validation.",
+        : "A live deployment URL should be available before customer validation.",
     }),
   ];
 }
@@ -456,14 +485,40 @@ export function getExecutionBlockers(input: ExecutionStatusInput): ExecutionBloc
     });
   }
 
-  if (vercelProject && !vercelProject.vercelDeploymentUrl) {
+  const liveDeploymentUrl = resolveDeploymentUrl(vercelProject, input.activityLogs);
+  const deploymentFailed = isLatestDeploymentFailed(input.activityLogs);
+  const manualConnectionRequired = isManualConnectionRequired(input.activityLogs);
+
+  if (deploymentFailed && vercelProject) {
+    blockers.push({
+      id: "deployment_failed",
+      type: "deployment",
+      label: "Deployment failed",
+      description: "The latest Vercel deployment failed. Check the Vercel dashboard for build logs.",
+      severity: "high",
+      recommendedAction: "Review the Vercel build logs and push a fix to the linked branch.",
+      relatedToolId: "vercel",
+    });
+  } else if (manualConnectionRequired && vercelProject && !liveDeploymentUrl) {
+    blockers.push({
+      id: "manual_git_connection_required",
+      type: "deployment",
+      label: "Manual Git connection may be required",
+      description:
+        "A Vercel project exists but no deployments were found. The GitHub integration may need to be authorized in the Vercel dashboard.",
+      severity: "medium",
+      recommendedAction:
+        "Open the Vercel dashboard, go to Project Settings > Git, and connect the GitHub repository.",
+      relatedToolId: "vercel",
+    });
+  } else if (vercelProject && !liveDeploymentUrl && !deploymentFailed) {
     blockers.push({
       id: "deployment_status_unknown",
       type: "deployment",
       label: "Deployment status unknown",
-      description: "A Vercel project exists, but no deployment URL is recorded.",
+      description: "A Vercel project exists, but no live deployment URL is recorded.",
       severity: "low",
-      recommendedAction: "Check the Vercel project status and trigger or wait for deployment.",
+      recommendedAction: "Refresh deployment status or push to the linked branch to trigger a build.",
       relatedToolId: "vercel",
     });
   }
@@ -565,14 +620,55 @@ export function getExecutionNextActions(
     });
   }
 
-  if (vercelProject?.vercelDeploymentUrl) {
+  const liveDeploymentUrl = resolveDeploymentUrl(vercelProject, input.activityLogs);
+  const deploymentFailed = isLatestDeploymentFailed(input.activityLogs);
+  const manualConnectionRequired = isManualConnectionRequired(input.activityLogs);
+
+  if (vercelProject && !liveDeploymentUrl && !deploymentFailed) {
+    actions.push({
+      id: "refresh_deployment_status",
+      label: "Refresh deployment status",
+      description: "Check Vercel for the latest deployment state and live URL.",
+      actor: "bucks_ai",
+      priority: "medium",
+      href: `${hrefBase}#deployment-execution`,
+      actionType: "refresh_deployment_status",
+    });
+  }
+
+  if (vercelProject) {
+    actions.push({
+      id: "open_vercel_project",
+      label: "Open Vercel project",
+      description: "View the Vercel project dashboard, build logs, and domain settings.",
+      actor: "founder",
+      priority: "low",
+      href: vercelProject.vercelDashboardUrl,
+      actionType: "open_external_link",
+    });
+  }
+
+  if (manualConnectionRequired && vercelProject && !liveDeploymentUrl) {
+    actions.push({
+      id: "connect_git_manually",
+      label: "Connect Git in Vercel",
+      description:
+        "Open Vercel Project Settings > Git and authorize the GitHub repository to enable automatic deployments.",
+      actor: "founder",
+      priority: "high",
+      href: vercelProject.vercelDashboardUrl,
+      actionType: "manual_git_connection",
+    });
+  }
+
+  if (liveDeploymentUrl) {
     actions.push({
       id: "start_customer_validation",
       label: "Start customer validation",
       description: "Use the live deployment to begin founder-led validation.",
       actor: "founder",
       priority: "medium",
-      href: vercelProject.vercelDeploymentUrl,
+      href: liveDeploymentUrl,
       actionType: "start_validation",
     });
   }
@@ -639,12 +735,17 @@ export function getExecutionAssets(input: ExecutionStatusInput): ExecutionAsset[
     });
   }
 
-  if (input.vercelProject?.vercelDeploymentUrl) {
+  const liveDeploymentUrl = resolveDeploymentUrl(
+    input.vercelProject,
+    input.activityLogs
+  );
+
+  if (input.vercelProject && liveDeploymentUrl) {
     assets.push({
       id: `${input.vercelProject.activityLogId}:deployment`,
       type: "deployment",
       label: "Latest deployment",
-      url: input.vercelProject.vercelDeploymentUrl,
+      url: liveDeploymentUrl,
       status: "available",
       metadata: {
         projectId: input.vercelProject.vercelProjectId,

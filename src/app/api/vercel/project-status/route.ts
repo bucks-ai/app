@@ -3,7 +3,12 @@ import { hasSupabaseEnv } from "@/lib/supabase/env";
 import { hasVercelEnv } from "@/lib/vercel/env";
 import { getCurrentUser, getBusinessById } from "@/lib/projects";
 import { getLatestVercelProjectForBusiness } from "@/lib/vercel/project-metadata";
-import { listVercelDeployments } from "@/lib/vercel/client";
+import {
+  getLatestVercelDeploymentForProject,
+  normalizeVercelDeploymentStatus,
+  normalizeVercelDeploymentEnvironment,
+  extractDeploymentUrl,
+} from "@/lib/vercel/deployment-status";
 
 function errorResponse(error: string, code: string, status: number) {
   return Response.json({ ok: false, error, code }, { status });
@@ -51,8 +56,10 @@ export async function GET(request: NextRequest) {
     return Response.json({
       ok: true,
       data: {
-        vercelProject: null,
-        deployments: [],
+        project: null,
+        latestDeployment: null,
+        storedMetadata: { deploymentUrl: null },
+        warnings: [],
       },
     });
   }
@@ -60,37 +67,59 @@ export async function GET(request: NextRequest) {
   const meta = metaResult.data;
   const warnings: string[] = meta.warnings ? [...meta.warnings] : [];
 
-  // Optionally fetch live deployments from Vercel API
-  let deployments: unknown[] = [];
-  if (hasVercelEnv() && meta.vercelProjectId) {
-    try {
-      deployments = await listVercelDeployments({
-        projectId: meta.vercelProjectId,
-        limit: 5,
-      });
-    } catch (e) {
-      warnings.push(
-        `Could not fetch live deployments: ${e instanceof Error ? e.message : String(e)}`
-      );
-    }
-  } else if (!hasVercelEnv()) {
+  const project = {
+    projectId: meta.vercelProjectId,
+    projectName: meta.vercelProjectName,
+    dashboardUrl: meta.vercelDashboardUrl,
+    gitRepoFullName: meta.gitRepoFullName ?? null,
+    productionBranch: meta.productionBranch ?? null,
+    createdAt: meta.createdAt,
+  };
+
+  const storedMetadata = {
+    deploymentUrl: meta.vercelDeploymentUrl ?? null,
+  };
+
+  // Fetch latest deployment from Vercel API if token is available
+  let latestDeployment = null;
+
+  if (!hasVercelEnv()) {
     warnings.push("VERCEL_TOKEN not set — showing stored metadata only.");
+  } else {
+    const { deployment, warnings: fetchWarnings } =
+      await getLatestVercelDeploymentForProject({
+        projectId: meta.vercelProjectId,
+      });
+
+    warnings.push(...fetchWarnings);
+
+    if (deployment) {
+      const status = normalizeVercelDeploymentStatus(deployment.state);
+      const environment = normalizeVercelDeploymentEnvironment(deployment.target);
+      const deploymentUrl = status === "ready" ? extractDeploymentUrl(deployment) : null;
+
+      latestDeployment = {
+        status,
+        deploymentUrl,
+        deploymentId: deployment.uid,
+        environment,
+        createdAt: deployment.createdAt
+          ? new Date(deployment.createdAt).toISOString()
+          : null,
+        readyAt: deployment.readyAt
+          ? new Date(deployment.readyAt).toISOString()
+          : null,
+      };
+    }
   }
 
   return Response.json({
     ok: true,
     data: {
-      vercelProject: {
-        projectId: meta.vercelProjectId,
-        projectName: meta.vercelProjectName,
-        dashboardUrl: meta.vercelDashboardUrl,
-        deploymentUrl: meta.vercelDeploymentUrl ?? null,
-        gitRepoFullName: meta.gitRepoFullName ?? null,
-        productionBranch: meta.productionBranch ?? null,
-        createdAt: meta.createdAt,
-      },
-      deployments,
-      ...(warnings.length > 0 ? { warnings } : {}),
+      project,
+      latestDeployment,
+      storedMetadata,
+      warnings,
     },
   });
 }
