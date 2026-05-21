@@ -336,6 +336,27 @@ export function getExecutionMilestones(
         ? undefined
         : "A deployment URL should be available before customer validation.",
     }),
+    milestone({
+      id: "validation_workspace_created",
+      label: "Customer validation workspace created",
+      description: "Target personas, hypotheses, and interview leads have been seeded.",
+      status: hasLog(activityLogs, "validation_workspace_seeded") ? "complete" : "not_started",
+      completedAt: latestLog(activityLogs, "validation_workspace_seeded")?.created_at,
+    }),
+    milestone({
+      id: "validation_first_contact",
+      label: "First outreach contact added",
+      description: "At least one customer lead has been moved beyond 'identified' status.",
+      status: hasLog(activityLogs, "validation_lead_contacted") ? "complete" : "not_started",
+      completedAt: latestLog(activityLogs, "validation_lead_contacted")?.created_at,
+    }),
+    milestone({
+      id: "validation_first_feedback",
+      label: "First feedback note recorded",
+      description: "The founder has logged at least one customer discovery insight.",
+      status: hasLog(activityLogs, "validation_feedback_added") ? "complete" : "not_started",
+      completedAt: latestLog(activityLogs, "validation_feedback_added")?.created_at,
+    }),
   ];
 }
 
@@ -577,6 +598,58 @@ export function getExecutionNextActions(
     });
   }
 
+  const validationWorkspaceSeeded = hasLog(input.activityLogs, "validation_workspace_seeded");
+  const firstContactLogged = hasLog(input.activityLogs, "validation_lead_contacted");
+  const firstFeedbackLogged = hasLog(input.activityLogs, "validation_feedback_added");
+
+  if (!validationWorkspaceSeeded) {
+    actions.push({
+      id: "setup_validation_workspace",
+      label: "Set up validation workspace",
+      description: "Seed target personas, hypotheses, and 5 interview lead archetypes.",
+      actor: "founder",
+      priority: "medium",
+      href: `${hrefBase}#validation`,
+      actionType: "setup_validation_workspace",
+    });
+  }
+
+  if (validationWorkspaceSeeded && !firstContactLogged) {
+    actions.push({
+      id: "add_first_five_leads",
+      label: "Add first 5 leads",
+      description: "Replace the seeded lead archetypes with real contacts to reach out to.",
+      actor: "founder",
+      priority: "medium",
+      href: `${hrefBase}#validation`,
+      actionType: "add_leads",
+    });
+  }
+
+  if (firstContactLogged && !firstFeedbackLogged) {
+    actions.push({
+      id: "record_first_feedback_note",
+      label: "Record first feedback note",
+      description: "Log the first insight from a customer conversation.",
+      actor: "founder",
+      priority: "high",
+      href: `${hrefBase}#validation`,
+      actionType: "record_feedback",
+    });
+  }
+
+  if (firstFeedbackLogged) {
+    actions.push({
+      id: "review_validation_signal",
+      label: "Review validation signal",
+      description: "Check hypothesis status and decide whether to continue, pivot, or validate.",
+      actor: "founder",
+      priority: "medium",
+      href: `${hrefBase}#validation`,
+      actionType: "review_validation",
+    });
+  }
+
   return actions;
 }
 
@@ -684,6 +757,9 @@ export function determineCurrentPhase(
     vercel_project_created: "deployment",
     deployment_available: "deployment",
     ready_for_validation: "validation",
+    validation_workspace_created: "validation",
+    validation_first_contact: "validation",
+    validation_first_feedback: "operating",
   };
 
   const firstIncomplete = milestones.find(

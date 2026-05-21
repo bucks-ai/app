@@ -40,6 +40,16 @@ export function categorizeActivityLog(
     return "human";
   }
 
+  if (
+    activityType === "validation_workspace_seeded" ||
+    activityType === "validation_feedback_added" ||
+    activityType === "validation_status_updated" ||
+    activityType === "validation_lead_contacted" ||
+    activityType.startsWith("validation_")
+  ) {
+    return "validation";
+  }
+
   if (activityType.startsWith("system_") || activityType === "agent_activity") {
     return "system";
   }

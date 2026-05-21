@@ -38,6 +38,7 @@ export interface ExecutionTimelineEvent {
     | "github"
     | "vercel"
     | "human"
+    | "validation"
     | "system"
     | "other";
 }
