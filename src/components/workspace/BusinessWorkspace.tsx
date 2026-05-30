@@ -20,6 +20,7 @@ import { OverviewTab } from "@/components/workspace/tabs/OverviewTab";
 import { ActionsTab } from "@/components/workspace/tabs/ActionsTab";
 import { BuildTab } from "@/components/workspace/tabs/BuildTab";
 import { DeployTab } from "@/components/workspace/tabs/DeployTab";
+import { ValidationTab } from "@/components/workspace/tabs/ValidationTab";
 import { ToolsTab } from "@/components/workspace/tabs/ToolsTab";
 import { ActivityTab } from "@/components/workspace/tabs/ActivityTab";
 import { SettingsTab } from "@/components/workspace/tabs/SettingsTab";
@@ -35,6 +36,7 @@ function resolveInitialTab(searchParam: string | null): TabKey {
     "actions",
     "build",
     "deploy",
+    "validation",
     "tools",
     "activity",
     "settings",
@@ -140,6 +142,8 @@ export function BusinessWorkspace({
             <BuildTab business={business} />
           ) : activeTab === "deploy" ? (
             <DeployTab business={business} />
+          ) : activeTab === "validation" ? (
+            <ValidationTab business={business} />
           ) : activeTab === "tools" ? (
             <ToolsTab
               business={business}

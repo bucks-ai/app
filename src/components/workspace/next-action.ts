@@ -6,6 +6,7 @@ export type WorkspaceActionTarget =
   | "actions"
   | "build"
   | "deploy"
+  | "validation"
   | "tools"
   | "activity"
   | "settings";
@@ -159,11 +160,32 @@ export function resolvePrimaryNextAction(
     };
   }
 
+  const validationAction = executionStatus?.nextActions?.find((action) =>
+    [
+      "setup_validation_workspace",
+      "add_first_five_leads",
+      "record_first_feedback_note",
+      "review_validation_signal",
+      "start_customer_validation",
+    ].includes(action.id)
+  );
+  if (validationAction) {
+    return {
+      label: validationAction.title,
+      description:
+        validationAction.description ??
+        "Open Customer Validation and continue the demand signal workflow.",
+      target: "validation",
+      urgency: validationAction.priority === "high" ? "high" : "medium",
+      reason: "customer_validation",
+    };
+  }
+
   if (business.vercelProject?.deploymentUrl) {
     return {
-      label: "Start customer validation",
-      description: "Use the live deployment and saved assets to begin validation.",
-      target: "overview",
+      label: "Set up validation workspace",
+      description: "Use the live deployment and saved assets to begin customer validation.",
+      target: "validation",
       urgency: "medium",
       reason: "customer_validation",
     };
