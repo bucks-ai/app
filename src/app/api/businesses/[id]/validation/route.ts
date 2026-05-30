@@ -1,3 +1,6 @@
+// GET  /api/businesses/[id]/validation   — return full validation workspace
+// POST /api/businesses/[id]/validation   — seed workspace from blueprint
+
 import { hasSupabaseEnv } from "@/lib/supabase/env";
 import { getCurrentUser, getBusinessById } from "@/lib/projects";
 import {
@@ -11,7 +14,6 @@ function errorResponse(error: string, code: string, status: number) {
 
 // ---------------------------------------------------------------------------
 // GET /api/businesses/[id]/validation
-// Returns the full validation workspace. If empty, includes canSeed: true.
 // ---------------------------------------------------------------------------
 
 export async function GET(
@@ -32,7 +34,7 @@ export async function GET(
 
   const businessResult = await getBusinessById(id);
   if (businessResult.error || !businessResult.data) {
-    return errorResponse("Business not found.", "not_found", 404);
+    return errorResponse("Business not found.", "business_not_found", 404);
   }
 
   if (businessResult.data.user_id !== userResult.data.id) {
@@ -43,10 +45,12 @@ export async function GET(
 
   if (result.error || !result.data) {
     const code = result.code ?? "validation_error";
-    if (code === "validation_schema_missing") {
-      return errorResponse(result.error ?? "Validation schema missing.", code, 503);
-    }
-    return errorResponse(result.error ?? "Could not load validation workspace.", code, 500);
+    const httpStatus = code === "validation_schema_missing" ? 503 : 500;
+    return errorResponse(
+      result.error ?? "Could not load validation workspace.",
+      code,
+      httpStatus
+    );
   }
 
   return Response.json({ ok: true, data: result.data });
@@ -55,7 +59,6 @@ export async function GET(
 // ---------------------------------------------------------------------------
 // POST /api/businesses/[id]/validation
 // Body: { action: "seed" }
-// Seeds the validation workspace from the latest blueprint.
 // ---------------------------------------------------------------------------
 
 export async function POST(
@@ -76,7 +79,7 @@ export async function POST(
 
   const businessResult = await getBusinessById(id);
   if (businessResult.error || !businessResult.data) {
-    return errorResponse("Business not found.", "not_found", 404);
+    return errorResponse("Business not found.", "business_not_found", 404);
   }
 
   if (businessResult.data.user_id !== userResult.data.id) {
@@ -92,8 +95,8 @@ export async function POST(
 
   if (body.action !== "seed") {
     return errorResponse(
-      "Unknown action. Supported: seed.",
-      "invalid_action",
+      'Unknown action. Supported actions: "seed".',
+      "invalid_input",
       400
     );
   }
@@ -101,11 +104,13 @@ export async function POST(
   const result = await seedValidationWorkspaceFromBlueprint(id);
 
   if (result.error || !result.data) {
-    const code = result.code ?? "seed_error";
-    if (code === "validation_schema_missing") {
-      return errorResponse(result.error ?? "Validation schema missing.", code, 503);
-    }
-    return errorResponse(result.error ?? "Could not seed validation workspace.", code, 500);
+    const code = result.code ?? "seed_failed";
+    const httpStatus = code === "validation_schema_missing" ? 503 : 500;
+    return errorResponse(
+      result.error ?? "Could not seed validation workspace.",
+      code,
+      httpStatus
+    );
   }
 
   return Response.json({ ok: true, data: result.data }, { status: 201 });

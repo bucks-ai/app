@@ -1,14 +1,36 @@
-# HANDOFF: Customer Validation Backend
+# HANDOFF: Customer Validation Node — Backend
 
 **Branch:** `feature/customer-validation-backend`
-**Author:** Arnav (AI session)
-**Date:** 2026-05-21
+**Author:** Arnav (AI session, 2026-05-30)
+**Status:** Ready for Satvik review and SQL apply
 
 ---
 
-## What Was Built
+## Purpose
 
-The customer validation module gives founders a structured workspace to discover and validate their business idea through real customer conversations. It is entirely backend/data layer — no frontend UI changes were made.
+The Customer Validation Node gives founders a structured workspace to discover
+and validate their business idea through real customer conversations — before
+over-investing in product or deployment.
+
+This task builds the **data rail** (database schema, TypeScript types, server-side
+helpers, and REST API routes) that the Validation Node's future agents will use.
+
+No outreach is sent. No external tools are called. No UI is built in this task.
+
+---
+
+## Future Agents This Node Supports
+
+| Agent | Responsibility (deferred) |
+|-------|--------------------------|
+| Persona Agent | Enrich and segment personas from blueprint or web research |
+| Hypothesis Agent | Generate and auto-update hypothesis status based on feedback |
+| Lead Research Agent | Discover real people matching persona segments via LinkedIn/web |
+| Feedback Analysis Agent | Summarize notes, extract signal strength, tag hypotheses |
+| Validation Score Agent | Compute confidence scores, derive overall validation status |
+
+None of these agents are built in this task. The data rails (types, tables,
+helper functions) they will call are ready.
 
 ---
 
@@ -16,14 +38,15 @@ The customer validation module gives founders a structured workspace to discover
 
 | File | Purpose |
 |------|---------|
-| `src/types/validation.ts` | All TypeScript types for validation entities |
-| `supabase/validation.sql` | Database schema — tables, indexes, RLS |
-| `src/lib/validation.ts` | Server-side helper functions (auth-gated, ownership-verified) |
+| `src/types/validation.ts` | All TypeScript types for the Validation Node |
+| `supabase/validation.sql` | Tables, triggers, indexes, RLS |
+| `src/lib/validation.ts` | Server-side helper functions (auth-gated, typed) |
 | `src/app/api/businesses/[id]/validation/route.ts` | GET workspace, POST seed |
-| `src/app/api/businesses/[id]/validation/personas/route.ts` | POST create, PATCH update persona |
-| `src/app/api/businesses/[id]/validation/hypotheses/route.ts` | POST create, PATCH update hypothesis |
-| `src/app/api/businesses/[id]/validation/leads/route.ts` | POST create, PATCH update lead |
-| `src/app/api/businesses/[id]/validation/feedback/route.ts` | POST create feedback note |
+| `src/app/api/businesses/[id]/validation/personas/route.ts` | POST create, PATCH update |
+| `src/app/api/businesses/[id]/validation/hypotheses/route.ts` | POST create, PATCH update |
+| `src/app/api/businesses/[id]/validation/leads/route.ts` | POST create, PATCH update |
+| `src/app/api/businesses/[id]/validation/feedback/route.ts` | POST create |
+| `HANDOFF_customer-validation-backend.md` | This file |
 
 ---
 
@@ -32,42 +55,51 @@ The customer validation module gives founders a structured workspace to discover
 | File | Change |
 |------|--------|
 | `src/types/execution.ts` | Added `"validation"` to `ExecutionTimelineEvent.category` union |
-| `src/lib/execution/log-categories.ts` | Added `validation_*` activity type routing to `"validation"` category |
+| `src/lib/execution/log-categories.ts` | Routes `validation_*` activity types to `"validation"` category |
 | `src/lib/execution/status.ts` | Added 3 validation milestones + 4 validation next actions |
 
 ---
 
-## SQL to Run
+## SQL to Run (Satvik)
 
-**Satvik must run `supabase/validation.sql` in the Supabase SQL Editor after merging.**
+**After merging `feature/customer-validation-backend` into main, run
+`supabase/validation.sql` in the Supabase SQL Editor.**
 
 Steps:
-1. Go to [supabase.com](https://supabase.com) → the bucks.ai project → SQL Editor
+1. Go to [supabase.com](https://supabase.com) → bucks.ai project → SQL Editor
 2. Paste the entire contents of `supabase/validation.sql`
 3. Click Run
-4. Verify that 4 new tables appear: `validation_personas`, `validation_hypotheses`, `validation_leads`, `validation_feedback_notes`
+4. Verify four new tables appear:
+   - `validation_personas`
+   - `validation_hypotheses`
+   - `validation_leads`
+   - `validation_feedback_notes`
 
-The SQL is idempotent (`create table if not exists`, `create index if not exists`).
+The SQL is additive: `create table if not exists`, `create index if not exists`.
+Safe to run on a live project. The RLS policies are NOT idempotent — if re-running,
+drop existing policies first or wrap in a transaction.
 
 ---
 
 ## Database Tables
 
 ### `validation_personas`
-Target customer archetypes to interview.
-- Fields: `name`, `role`, `company_type`, `pain_points` (jsonb array), `goals` (jsonb array), `notes`, `priority`
+Target customer archetypes.
+Key fields: `name`, `segment`, `description`, `pain_points` (jsonb), `desired_outcomes` (jsonb), `channels` (jsonb), `willingness_to_pay`, `priority`, `status`
 
 ### `validation_hypotheses`
-Testable beliefs about market/customer/product.
-- Fields: `statement`, `rationale`, `status` (untested/testing/supported/rejected/inconclusive), `evidence`
+Testable beliefs about the market/customer/product.
+Key fields: `title`, `description`, `type`, `assumption`, `success_criteria`, `status`, `confidence` (0–100 int), `priority`
 
 ### `validation_leads`
-People to contact for customer discovery.
-- Fields: `name`, `company`, `role`, `contact_info`, `source`, `status`, `persona_id` (FK), `notes`, `outreach_script`
+People to contact for customer discovery interviews.
+Key fields: `name`, `company`, `role`, `segment`, `source`, `contact_url`, `email`, `status`, `notes`, `priority`
 
 ### `validation_feedback_notes`
-Raw insights from customer conversations.
-- Fields: `note`, `sentiment` (positive/negative/neutral), `lead_id` (FK), `persona_id` (FK), `hypothesis_id` (FK)
+Structured notes from customer conversations.
+Key fields: `lead_id` (FK nullable), `hypothesis_id` (FK nullable), `summary`, `pain_signal`, `willingness_to_pay_signal`, `objections` (jsonb), `quotes` (jsonb), `next_step`, `signal_strength`
+
+All tables have `updated_at` auto-stamped via a `set_updated_at()` trigger.
 
 ---
 
@@ -76,31 +108,40 @@ Raw insights from customer conversations.
 ### Workspace
 | Method | URL | Description |
 |--------|-----|-------------|
-| `GET` | `/api/businesses/:id/validation` | Returns full workspace (personas, hypotheses, leads, notes, summary) |
-| `POST` | `/api/businesses/:id/validation` | Body `{ action: "seed" }` — seeds from blueprint |
+| `GET` | `/api/businesses/:id/validation` | Full workspace + summary. `canSeed: true` if empty. |
+| `POST` | `/api/businesses/:id/validation` | Body: `{ "action": "seed" }` — seeds from blueprint. |
 
 ### Personas
-| Method | URL | Description |
-|--------|-----|-------------|
-| `POST` | `/api/businesses/:id/validation/personas` | Create persona |
-| `PATCH` | `/api/businesses/:id/validation/personas` | Update persona (body must include `id`) |
+| Method | URL | Body required |
+|--------|-----|---------------|
+| `POST` | `/api/businesses/:id/validation/personas` | `name` required |
+| `PATCH` | `/api/businesses/:id/validation/personas` | `id` (persona uuid) required |
 
 ### Hypotheses
-| Method | URL | Description |
-|--------|-----|-------------|
-| `POST` | `/api/businesses/:id/validation/hypotheses` | Create hypothesis |
-| `PATCH` | `/api/businesses/:id/validation/hypotheses` | Update hypothesis (body must include `id`) |
+| Method | URL | Body required |
+|--------|-----|---------------|
+| `POST` | `/api/businesses/:id/validation/hypotheses` | `title` required |
+| `PATCH` | `/api/businesses/:id/validation/hypotheses` | `id` (hypothesis uuid) required |
 
 ### Leads
-| Method | URL | Description |
-|--------|-----|-------------|
-| `POST` | `/api/businesses/:id/validation/leads` | Create lead |
-| `PATCH` | `/api/businesses/:id/validation/leads` | Update lead (body must include `id`) |
+| Method | URL | Body required |
+|--------|-----|---------------|
+| `POST` | `/api/businesses/:id/validation/leads` | `name` required |
+| `PATCH` | `/api/businesses/:id/validation/leads` | `id` (lead uuid) required |
 
 ### Feedback Notes
-| Method | URL | Description |
-|--------|-----|-------------|
-| `POST` | `/api/businesses/:id/validation/feedback` | Create feedback note |
+| Method | URL | Body required |
+|--------|-----|---------------|
+| `POST` | `/api/businesses/:id/validation/feedback` | `summary` required |
+
+All routes return:
+```json
+{ "ok": true,  "data": { ... } }
+{ "ok": false, "code": "...", "error": "..." }
+```
+
+Error codes: `unauthenticated`, `forbidden`, `business_not_found`, `invalid_input`,
+`validation_schema_missing`, `validation_create_failed`, `validation_update_failed`
 
 ---
 
@@ -108,93 +149,134 @@ Raw insights from customer conversations.
 
 | Function | Description |
 |----------|-------------|
-| `getValidationWorkspace(businessId)` | Returns full workspace with computed summary |
-| `seedValidationWorkspaceFromBlueprint(businessId)` | Seeds 2-3 personas, 3 hypotheses, 5 lead archetypes from blueprint |
-| `createValidationPersona(input)` | Create a persona |
-| `updateValidationPersona(input)` | Update a persona |
-| `createValidationHypothesis(input)` | Create a hypothesis |
-| `updateValidationHypothesis(input)` | Update a hypothesis |
-| `createValidationLead(input)` | Create a lead (logs `validation_lead_contacted` if status is not `identified`) |
-| `updateValidationLead(input)` | Update a lead (logs `validation_status_updated`) |
-| `createValidationFeedbackNote(input)` | Create a feedback note (logs `validation_feedback_added`) |
-| `getValidationSummary(businessId)` | Returns summary only (not full workspace) |
+| `getValidationWorkspace(businessId)` | Full workspace with computed summary |
+| `seedValidationWorkspaceFromBlueprint(businessId)` | Seeds 2 personas, 3 hypotheses, 5 leads |
+| `createValidationPersona(input)` | Create + log `validation_persona_created` |
+| `updateValidationPersona(input)` | Update persona |
+| `createValidationHypothesis(input)` | Create + log `validation_hypothesis_created` |
+| `updateValidationHypothesis(input)` | Update + log `validation_status_updated` if status changed |
+| `createValidationLead(input)` | Create + log `validation_lead_created` |
+| `updateValidationLead(input)` | Update + log `validation_status_updated` if status changed |
+| `createValidationFeedbackNote(input)` | Create + log `validation_feedback_added` |
+| `getValidationSummary(businessId)` | Summary only (lighter than full workspace) |
 
-All functions:
-- Require authenticated user
-- Verify business ownership
-- Return `{ data, error, code }` — never throw
-- Return `code: "validation_schema_missing"` when SQL has not been applied
+All functions: auth-required, ownership-verified, return `{data, error, code}`,
+return `code: "validation_schema_missing"` when SQL not applied.
+
+---
+
+## Activity Log Events Added
+
+| Activity type | When |
+|---------------|------|
+| `validation_workspace_seeded` | Seed action completes |
+| `validation_persona_created` | Any persona created |
+| `validation_hypothesis_created` | Any hypothesis created |
+| `validation_lead_created` | Any lead created |
+| `validation_feedback_added` | Any feedback note created |
+| `validation_status_updated` | Hypothesis or lead status changes |
 
 ---
 
 ## Execution Status Changes
 
-Three milestones added to the business execution status pipeline:
-1. **Customer validation workspace created** — triggered by `validation_workspace_seeded` activity log
-2. **First outreach contact added** — triggered by `validation_lead_contacted` log
-3. **First feedback note recorded** — triggered by `validation_feedback_added` log
+Three milestones added:
+1. **Customer validation workspace created** — `validation_workspace_seeded` log
+2. **First validation lead added** — `validation_lead_created` log
+3. **First feedback note recorded** — `validation_feedback_added` log
 
-Four next actions added:
-- **Set up validation workspace** — appears before workspace is seeded
-- **Add first 5 leads** — appears after seeding, before first contact
-- **Record first feedback note** — appears after first contact, before first feedback
-- **Review validation signal** — appears after first feedback is logged
+Four next actions added (appear conditionally based on workspace state):
+- Set up validation workspace
+- Add first 5 customer leads
+- Record first interview feedback
+- Review validation signal
 
 ---
 
-## How to Test
+## Manual Test Plan
 
-### After applying supabase/validation.sql:
-
-**1. Logged-out returns 401**
+### Before SQL is applied:
 ```
-GET /api/businesses/<any-id>/validation
-→ 401 { ok: false, code: "unauthenticated" }
+GET  /api/businesses/<id>/validation          → 503 { code: "validation_schema_missing" }
+POST /api/businesses/<id>/validation/feedback → 503 { code: "validation_schema_missing" }
 ```
 
-**2. Before SQL is applied, returns 503**
+### After SQL is applied:
 ```
-GET /api/businesses/<id>/validation
-→ 503 { ok: false, code: "validation_schema_missing" }
-```
+# 1. Logged-out user
+GET /api/businesses/<id>/validation           → 401 { code: "unauthenticated" }
 
-**3. GET empty workspace (SQL applied, no data)**
-```
-GET /api/businesses/<id>/validation
-→ 200 { ok: true, data: { summary: { canSeed: true, personaCount: 0, ... }, personas: [], ... } }
-```
+# 2. Empty workspace (fresh business)
+GET /api/businesses/<id>/validation           → 200 { data: { summary: { canSeed: true, ... } } }
 
-**4. Seed workspace from blueprint**
-```
+# 3. Seed workspace
 POST /api/businesses/<id>/validation
-Body: { "action": "seed" }
-→ 201 { ok: true, data: { seeded: true, personas: 2, hypotheses: 3, leads: 5 } }
+Body: { "action": "seed" }                   → 201 { data: { seeded: true, personas: 2, hypotheses: 3, leads: 5 } }
+
+# 4. Get workspace after seed
+GET /api/businesses/<id>/validation           → 200 { data: { personas: [...], hypotheses: [...], ... } }
+
+# 5. Add lead
+POST /api/businesses/<id>/validation/leads
+Body: { "name": "Alice Chen", "company": "Stripe", "role": "Eng Manager" }
+                                              → 201 { data: { id: "...", name: "Alice Chen", ... } }
+
+# 6. Update lead status
+PATCH /api/businesses/<id>/validation/leads
+Body: { "id": "<lead-uuid>", "status": "contacted" }
+                                              → 200 { data: { status: "contacted", ... } }
+
+# 7. Add feedback note
+POST /api/businesses/<id>/validation/feedback
+Body: {
+  "summary": "Pain is real but budget is tight",
+  "signal_strength": "medium",
+  "pain_signal": "Confirmed — wastes 3hrs/week",
+  "willingness_to_pay_signal": "Would pay up to $50/mo",
+  "quotes": ["This is the thing I hate most about my job"]
+}                                             → 201 { data: { id: "...", signal_strength: "medium", ... } }
 ```
 
-**5. Add a feedback note**
-```
-POST /api/businesses/<id>/validation/feedback
-Body: { "note": "They said pricing is fine", "sentiment": "positive" }
-→ 201 { ok: true, data: { id: "...", note: "...", ... } }
-```
+### What could not be manually tested (SQL not applied locally):
+- Actual Supabase queries against the four new tables
+- RLS enforcement
+- `updated_at` trigger behaviour
+- Seeded data accuracy against a real blueprint JSON
 
 ---
 
 ## Known Limitations
 
-1. **SQL not auto-applied** — Satvik must manually run `supabase/validation.sql`. Until then, all validation routes return `validation_schema_missing`.
-2. **No PATCH for feedback notes** — Feedback notes are append-only by design. Add a `[noteId]` route if edits are needed later.
-3. **No validation tab in frontend** — This is a pure backend/data layer. UI work is a separate task.
-4. **Seed is one-shot** — Calling seed again appends more records. Add a guard in `getValidationWorkspace` if needed.
-5. **Blueprint field extraction is best-effort** — The seeder reads common blueprint shapes but blueprint schema is untyped; fallback defaults are used when fields are missing.
+1. **SQL must be applied manually** — Satvik applies `supabase/validation.sql` after merge.
+2. **Feedback notes are append-only** — No PATCH on feedback; intended by design (audit trail).
+3. **No UI** — This is purely backend/data. Validation tab is a separate UI task.
+4. **Seed is not idempotent** — Calling seed twice appends more records. Guard in UI.
+5. **Blueprint extraction is best-effort** — Blueprint JSON is untyped; falls back to generic defaults if fields are missing.
+6. **No outreach or external tool calls** — Deliberately excluded; Lead Research Agent handles this later.
+7. **confidence is a manual field** — Validation Score Agent will compute it automatically in future.
+
+---
+
+## What Is Intentionally Deferred
+
+- Agent Registry entries for Persona / Hypothesis / Lead Research / Feedback Analysis / Validation Score agents
+- Outreach script generation or email sending
+- Lead enrichment via LinkedIn or web search
+- Automated confidence score computation
+- Feedback summarisation (Feedback Analysis Agent)
+- Customer Validation tab UI
+- Validation report / export
 
 ---
 
 ## Next UI Task
 
-Build a **Validation tab** in the business workspace (`src/app/dashboard/businesses/[id]/`) that:
+Build a **Customer Validation tab** inside the business workspace
+(`src/app/dashboard/businesses/[id]/`) that:
+
 - Calls `GET /api/businesses/:id/validation` to load the workspace
-- Shows personas, hypotheses, leads, and feedback notes in compact cards
-- Includes a "Seed workspace" button when `summary.canSeed === true`
-- Allows updating lead status via `PATCH /api/businesses/:id/validation/leads`
-- Allows logging feedback via `POST /api/businesses/:id/validation/feedback`
+- Shows `canSeed` prompt with a "Seed workspace" button when empty
+- Renders personas, hypotheses, leads, and feedback notes in compact cards
+- Allows lead status updates via `PATCH /api/businesses/:id/validation/leads`
+- Allows adding feedback notes via `POST /api/businesses/:id/validation/feedback`
+- Surfaces `summary.strongSignalCount` and `summary.status` as a progress indicator

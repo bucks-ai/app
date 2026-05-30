@@ -1,7 +1,15 @@
-// Server-side helpers for the Customer Validation Module.
-// All functions require an authenticated user and verify business ownership.
+// Customer Validation Node — server-side helpers.
+//
+// All public functions require an authenticated user and verify business
+// ownership before reading or writing data.
+//
 // Safe to call when supabase/validation.sql has not yet been applied —
-// returns error code "validation_schema_missing" in that case.
+// returns error code "validation_schema_missing" in that case so the API
+// layer can return a helpful message without crashing.
+//
+// This module is the data rail that future Customer Validation Node agents
+// (Persona Agent, Hypothesis Agent, Lead Research Agent, Feedback Analysis
+// Agent, Validation Score Agent) will call.
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
@@ -24,10 +32,11 @@ import type {
   ValidationWorkspace,
   ValidationSummary,
   ValidationStatus,
+  ValidationHypothesisType,
 } from "@/types/validation";
 
 // ---------------------------------------------------------------------------
-// Result wrapper
+// Result wrapper (matches pattern in src/lib/projects.ts)
 // ---------------------------------------------------------------------------
 
 type Result<T> =
@@ -49,6 +58,7 @@ const NO_CLIENT =
 // Internal helpers
 // ---------------------------------------------------------------------------
 
+/** Detects a "relation does not exist" Postgres error (table not created yet). */
 function isMissingTableError(e: { message?: string; code?: string }): boolean {
   return (
     e.code === "42P01" ||
@@ -58,8 +68,18 @@ function isMissingTableError(e: { message?: string; code?: string }): boolean {
   );
 }
 
+/** Strip undefined values so Supabase only updates supplied fields. */
 function omitUndefined(obj: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined));
+}
+
+/** Build update payload by dropping id + business_id from the input object. */
+function updatePayload(input: Record<string, unknown>): Record<string, unknown> {
+  return omitUndefined(
+    Object.fromEntries(
+      Object.entries(input).filter(([k]) => k !== "id" && k !== "business_id")
+    )
+  );
 }
 
 async function getAuthenticatedUser() {
@@ -139,11 +159,13 @@ export async function getValidationWorkspace(
       .from("validation_hypotheses")
       .select("*")
       .eq("business_id", businessId)
+      .order("priority", { ascending: true })
       .order("created_at", { ascending: true }),
     supabase
       .from("validation_leads")
       .select("*")
       .eq("business_id", businessId)
+      .order("priority", { ascending: true })
       .order("created_at", { ascending: true }),
     supabase
       .from("validation_feedback_notes")
@@ -180,9 +202,8 @@ export async function getValidationWorkspace(
     feedbackNoteCount: feedbackNotes.length,
     testedHypothesisCount: hypotheses.filter((h) => testedStatuses.has(h.status)).length,
     supportedHypothesisCount: hypotheses.filter((h) => h.status === "supported").length,
-    rejectedHypothesisCount: hypotheses.filter((h) => h.status === "rejected").length,
-    contactedLeadCount: leads.filter((l) => l.status !== "identified").length,
     interviewedLeadCount: leads.filter((l) => l.status === "interviewed").length,
+    strongSignalCount: feedbackNotes.filter((n) => n.signal_strength === "strong").length,
     canSeed: personas.length === 0 && hypotheses.length === 0,
   };
 
@@ -205,6 +226,7 @@ export async function seedValidationWorkspaceFromBlueprint(businessId: string): 
   const owned = await verifyOwnership(businessId, user.id);
   if (!owned) return err("Access denied.", "forbidden");
 
+  // Fetch the latest blueprint — seeding works with or without one
   const { data: blueprints } = await supabase
     .from("business_blueprints")
     .select("blueprint")
@@ -235,12 +257,6 @@ export async function seedValidationWorkspaceFromBlueprint(businessId: string): 
   }
 
   const insertedPersonas = (personaRes.data ?? []) as ValidationPersonaRecord[];
-  const firstPersonaId = insertedPersonas[0]?.id ?? null;
-
-  const leadsWithPersona = leadInserts.map((lead) => ({
-    ...lead,
-    persona_id: firstPersonaId,
-  }));
 
   const hypothesisRes = await supabase
     .from("validation_hypotheses")
@@ -251,7 +267,7 @@ export async function seedValidationWorkspaceFromBlueprint(businessId: string): 
 
   const leadRes = await supabase
     .from("validation_leads")
-    .insert(leadsWithPersona as unknown as Record<string, unknown>[])
+    .insert(leadInserts as unknown as Record<string, unknown>[])
     .select();
 
   if (leadRes.error) return err(leadRes.error.message, "query_error");
@@ -260,7 +276,7 @@ export async function seedValidationWorkspaceFromBlueprint(businessId: string): 
     business_id: businessId,
     user_id: user.id,
     activity_type: "validation_workspace_seeded",
-    message: `Validation workspace seeded with ${insertedPersonas.length} personas, ${(hypothesisRes.data ?? []).length} hypotheses, and ${(leadRes.data ?? []).length} leads.`,
+    message: `Customer Validation Node workspace seeded: ${insertedPersonas.length} personas, ${(hypothesisRes.data ?? []).length} hypotheses, ${(leadRes.data ?? []).length} leads.`,
     metadata: {
       personaCount: insertedPersonas.length,
       hypothesisCount: (hypothesisRes.data ?? []).length,
@@ -291,21 +307,27 @@ function buildPersonaSeeds(
       business_id: businessId,
       user_id: userId,
       name: "Early Adopter",
-      role: "Individual contributor or founder",
-      company_type: "Early-stage startup or SMB",
-      pain_points: ["Manual processes slowing them down", "Limited budget for tooling"],
-      goals: ["Validate the concept quickly", "Reduce operational overhead"],
+      segment: "Individual contributor or founder",
+      description: "Hands-on operator who moves fast and values time savings over polish.",
+      pain_points: ["Manual, repetitive processes slow them down", "Budget constraints limit tooling"],
+      desired_outcomes: ["Validate the concept quickly", "Reduce operational overhead"],
+      channels: ["Twitter / X", "Slack communities", "Direct outreach"],
+      willingness_to_pay: "High — will pay if saves >2 hrs/week",
       priority: "high",
+      status: "active",
     },
     {
       business_id: businessId,
       user_id: userId,
       name: "Decision Maker",
-      role: "VP, Director, or C-suite",
-      company_type: "Mid-market company (50-500 employees)",
-      pain_points: ["Justifying ROI on new tools", "Team adoption friction"],
-      goals: ["Scale efficiently", "Demonstrate measurable value to stakeholders"],
+      segment: "VP, Director, or C-suite at mid-market company",
+      description: "Budget owner who needs ROI justification and a risk-averse adoption path.",
+      pain_points: ["Justifying ROI on new tools", "Team adoption friction and change management"],
+      desired_outcomes: ["Scale without proportional headcount growth", "Demonstrate measurable value"],
+      channels: ["LinkedIn", "Industry conferences", "Peer referrals"],
+      willingness_to_pay: "Medium — needs clear ROI narrative",
       priority: "medium",
+      status: "active",
     },
   ];
 
@@ -317,7 +339,10 @@ function buildPersonaSeeds(
 
   if (rawPersonas.length === 0) {
     const targetCustomer = asStr(blueprint.targetCustomer ?? blueprint.target_customer);
-    if (targetCustomer) defaults[0].name = targetCustomer;
+    if (targetCustomer) {
+      defaults[0].name = targetCustomer;
+      defaults[0].segment = targetCustomer;
+    }
     return defaults;
   }
 
@@ -327,15 +352,14 @@ function buildPersonaSeeds(
       business_id: businessId,
       user_id: userId,
       name: asStr(obj.name ?? obj.title ?? obj.persona) ?? "Target Customer",
-      role: asStr(obj.role ?? obj.jobTitle ?? obj.job_title),
-      company_type: asStr(obj.companyType ?? obj.company_type ?? obj.company),
-      pain_points: asArr(obj.painPoints ?? obj.pain_points)
-        .map(String)
-        .filter(Boolean),
-      goals: asArr(obj.goals ?? obj.objectives)
-        .map(String)
-        .filter(Boolean),
+      segment: asStr(obj.segment ?? obj.role ?? obj.jobTitle ?? obj.job_title),
+      description: asStr(obj.description ?? obj.summary),
+      pain_points: asArr(obj.painPoints ?? obj.pain_points).map(String).filter(Boolean),
+      desired_outcomes: asArr(obj.goals ?? obj.objectives ?? obj.desiredOutcomes).map(String).filter(Boolean),
+      channels: asArr(obj.channels).map(String).filter(Boolean),
+      willingness_to_pay: asStr(obj.willingnessToPay ?? obj.willingness_to_pay),
       priority: "high" as const,
+      status: "active",
     };
   });
 }
@@ -348,12 +372,10 @@ function buildHypothesisSeeds(
   const businessName =
     asStr(blueprint?.ideaName ?? blueprint?.idea_name ?? blueprint?.name) ?? "this business";
   const problem = asStr(blueprint?.problem ?? blueprint?.coreProblem ?? blueprint?.core_problem);
-  const solution = asStr(
-    blueprint?.solution ?? blueprint?.coreSolution ?? blueprint?.core_solution
-  );
+  const solution = asStr(blueprint?.solution ?? blueprint?.coreSolution ?? blueprint?.core_solution);
   const targetCustomer = asStr(blueprint?.targetCustomer ?? blueprint?.target_customer);
 
-  const customerDesc = targetCustomer ?? "Target customers";
+  const customerDesc = targetCustomer ?? "target customers";
   const problemDesc = problem ?? "the identified problem";
   const solutionDesc = solution ?? "the proposed solution";
 
@@ -361,25 +383,35 @@ function buildHypothesisSeeds(
     {
       business_id: businessId,
       user_id: userId,
-      statement: `${customerDesc} experience ${problemDesc} frequently enough to pay for a solution.`,
-      rationale: `If the pain is not frequent or severe, there is no viable market for ${businessName}.`,
+      title: `${customerDesc} experience ${problemDesc} frequently enough to pay for a solution`,
+      description: `If the pain is infrequent or low-severity, there is no viable market for ${businessName}.`,
+      type: "customer" as ValidationHypothesisType,
+      assumption: `${customerDesc} encounter this problem at least weekly and consider it a priority.`,
+      success_criteria: "5+ interviewees describe the problem unprompted and rank it top-3.",
       status: "untested",
+      priority: "high",
     },
     {
       business_id: businessId,
       user_id: userId,
-      statement: `${customerDesc} would switch to ${solutionDesc} given adequate awareness and onboarding.`,
-      rationale:
-        "Switching cost is a common blocker even when the pain is clearly acknowledged.",
+      title: `${customerDesc} would switch to ${solutionDesc} given adequate awareness and onboarding`,
+      description: "Switching cost is a common blocker even when pain is acknowledged.",
+      type: "product" as ValidationHypothesisType,
+      assumption: "The switching cost is low enough that customers would trial within 30 days.",
+      success_criteria: "3+ interviewees say they would trial within 30 days given a free account.",
       status: "untested",
+      priority: "high",
     },
     {
       business_id: businessId,
       user_id: userId,
-      statement: `The willingness-to-pay for ${solutionDesc} is sufficient to support the intended pricing model.`,
-      rationale:
-        "Validating price sensitivity early prevents over-engineering a feature set customers cannot justify purchasing.",
+      title: "Willingness-to-pay is sufficient to support the intended pricing model",
+      description: "Validates the revenue hypothesis before building pricing infrastructure.",
+      type: "revenue" as ValidationHypothesisType,
+      assumption: `${customerDesc} will pay the target price tier without significant objection.`,
+      success_criteria: "5+ interviewees confirm price is acceptable or lower than current spend.",
       status: "untested",
+      priority: "medium",
     },
   ];
 }
@@ -392,48 +424,25 @@ function buildLeadSeeds(
   const targetCustomer =
     asStr(blueprint?.targetCustomer ?? blueprint?.target_customer) ?? "Target Buyer";
 
-  const archetypes = [
-    {
-      name: `${targetCustomer} — Lead 1`,
-      role: "Early adopter",
-      company: "Startup (1-20 employees)",
-      notes: "Seed archetype. Replace with a real contact.",
-    },
-    {
-      name: `${targetCustomer} — Lead 2`,
-      role: "Power user",
-      company: "SMB (20-100 employees)",
-      notes: "Seed archetype. Replace with a real contact.",
-    },
-    {
-      name: `${targetCustomer} — Lead 3`,
-      role: "Decision maker",
-      company: "Mid-market (100-500 employees)",
-      notes: "Seed archetype. Replace with a real contact.",
-    },
-    {
-      name: `${targetCustomer} — Lead 4`,
-      role: "Budget owner",
-      company: "Enterprise (500+ employees)",
-      notes: "Seed archetype. Replace with a real contact.",
-    },
-    {
-      name: `${targetCustomer} — Lead 5`,
-      role: "End user",
-      company: "Agency or consultancy",
-      notes: "Seed archetype. Replace with a real contact.",
-    },
+  const archetypes: { role: string; company: string; segment: string }[] = [
+    { role: "Founder / early employee", company: "Startup (1–20 employees)", segment: "Early adopter" },
+    { role: "Power user / practitioner", company: "SMB (20–100 employees)", segment: "SMB practitioner" },
+    { role: "Decision maker / budget owner", company: "Mid-market (100–500 employees)", segment: "Mid-market buyer" },
+    { role: "Enterprise champion", company: "Enterprise (500+ employees)", segment: "Enterprise evaluator" },
+    { role: "Consultant / agency operator", company: "Agency or consultancy", segment: "Service provider" },
   ];
 
-  return archetypes.map((a) => ({
+  return archetypes.map((a, i) => ({
     business_id: businessId,
     user_id: userId,
-    name: a.name,
+    name: `${targetCustomer} — Lead ${i + 1}`,
     role: a.role,
     company: a.company,
+    segment: a.segment,
     source: "blueprint" as const,
     status: "identified" as const,
-    notes: a.notes,
+    notes: "Seed archetype. Replace name, company, and contact details with a real person.",
+    priority: i < 2 ? ("high" as const) : ("medium" as const),
   }));
 }
 
@@ -462,8 +471,16 @@ export async function createValidationPersona(
   if (error) {
     if (isMissingTableError(error as { message?: string; code?: string }))
       return err("Validation schema missing.", "validation_schema_missing");
-    return err(error.message, "query_error");
+    return err(error.message, "validation_create_failed");
   }
+
+  void createAgentActivityLog({
+    business_id: input.business_id,
+    user_id: user.id,
+    activity_type: "validation_persona_created",
+    message: `Persona "${input.name}" added to validation workspace.`,
+    metadata: { personaName: input.name, priority: input.priority },
+  });
 
   return ok(data as ValidationPersonaRecord);
 }
@@ -480,17 +497,9 @@ export async function updateValidationPersona(
   const owned = await verifyOwnership(input.business_id, user.id);
   if (!owned) return err("Access denied.", "forbidden");
 
-  const updateFields = omitUndefined(
-    Object.fromEntries(
-      Object.entries(input as unknown as Record<string, unknown>).filter(
-        ([k]) => k !== "id" && k !== "business_id"
-      )
-    )
-  );
-
   const { data, error } = await supabase
     .from("validation_personas")
-    .update({ ...updateFields, updated_at: new Date().toISOString() })
+    .update(updatePayload(input as unknown as Record<string, unknown>))
     .eq("id", input.id)
     .eq("user_id", user.id)
     .select()
@@ -499,7 +508,7 @@ export async function updateValidationPersona(
   if (error) {
     if (isMissingTableError(error as { message?: string; code?: string }))
       return err("Validation schema missing.", "validation_schema_missing");
-    return err(error.message, "query_error");
+    return err(error.message, "validation_update_failed");
   }
 
   return ok(data as ValidationPersonaRecord);
@@ -530,8 +539,16 @@ export async function createValidationHypothesis(
   if (error) {
     if (isMissingTableError(error as { message?: string; code?: string }))
       return err("Validation schema missing.", "validation_schema_missing");
-    return err(error.message, "query_error");
+    return err(error.message, "validation_create_failed");
   }
+
+  void createAgentActivityLog({
+    business_id: input.business_id,
+    user_id: user.id,
+    activity_type: "validation_hypothesis_created",
+    message: `Hypothesis "${input.title}" added to validation workspace.`,
+    metadata: { hypothesisTitle: input.title, type: input.type, priority: input.priority },
+  });
 
   return ok(data as ValidationHypothesisRecord);
 }
@@ -548,17 +565,11 @@ export async function updateValidationHypothesis(
   const owned = await verifyOwnership(input.business_id, user.id);
   if (!owned) return err("Access denied.", "forbidden");
 
-  const updateFields = omitUndefined(
-    Object.fromEntries(
-      Object.entries(input as unknown as Record<string, unknown>).filter(
-        ([k]) => k !== "id" && k !== "business_id"
-      )
-    )
-  );
+  const payload = updatePayload(input as unknown as Record<string, unknown>);
 
   const { data, error } = await supabase
     .from("validation_hypotheses")
-    .update({ ...updateFields, updated_at: new Date().toISOString() })
+    .update(payload)
     .eq("id", input.id)
     .eq("user_id", user.id)
     .select()
@@ -567,7 +578,17 @@ export async function updateValidationHypothesis(
   if (error) {
     if (isMissingTableError(error as { message?: string; code?: string }))
       return err("Validation schema missing.", "validation_schema_missing");
-    return err(error.message, "query_error");
+    return err(error.message, "validation_update_failed");
+  }
+
+  if (input.status) {
+    void createAgentActivityLog({
+      business_id: input.business_id,
+      user_id: user.id,
+      activity_type: "validation_status_updated",
+      message: `Hypothesis status updated to "${input.status}".`,
+      metadata: { hypothesisId: input.id, newStatus: input.status },
+    });
   }
 
   return ok(data as ValidationHypothesisRecord);
@@ -598,18 +619,16 @@ export async function createValidationLead(
   if (error) {
     if (isMissingTableError(error as { message?: string; code?: string }))
       return err("Validation schema missing.", "validation_schema_missing");
-    return err(error.message, "query_error");
+    return err(error.message, "validation_create_failed");
   }
 
-  if (input.status && input.status !== "identified") {
-    void createAgentActivityLog({
-      business_id: input.business_id,
-      user_id: user.id,
-      activity_type: "validation_lead_contacted",
-      message: `First outreach lead added: ${input.name}.`,
-      metadata: { leadName: input.name, status: input.status, source: input.source },
-    });
-  }
+  void createAgentActivityLog({
+    business_id: input.business_id,
+    user_id: user.id,
+    activity_type: "validation_lead_created",
+    message: `Lead "${input.name}" added to validation workspace.`,
+    metadata: { leadName: input.name, source: input.source, priority: input.priority },
+  });
 
   return ok(data as ValidationLeadRecord);
 }
@@ -626,17 +645,11 @@ export async function updateValidationLead(
   const owned = await verifyOwnership(input.business_id, user.id);
   if (!owned) return err("Access denied.", "forbidden");
 
-  const updateFields = omitUndefined(
-    Object.fromEntries(
-      Object.entries(input as unknown as Record<string, unknown>).filter(
-        ([k]) => k !== "id" && k !== "business_id"
-      )
-    )
-  );
+  const payload = updatePayload(input as unknown as Record<string, unknown>);
 
   const { data, error } = await supabase
     .from("validation_leads")
-    .update({ ...updateFields, updated_at: new Date().toISOString() })
+    .update(payload)
     .eq("id", input.id)
     .eq("user_id", user.id)
     .select()
@@ -645,15 +658,15 @@ export async function updateValidationLead(
   if (error) {
     if (isMissingTableError(error as { message?: string; code?: string }))
       return err("Validation schema missing.", "validation_schema_missing");
-    return err(error.message, "query_error");
+    return err(error.message, "validation_update_failed");
   }
 
-  if (input.status && input.status !== "identified") {
+  if (input.status) {
     void createAgentActivityLog({
       business_id: input.business_id,
       user_id: user.id,
       activity_type: "validation_status_updated",
-      message: `Lead status updated to "${input.status}".`,
+      message: `Lead "${data.name}" status updated to "${input.status}".`,
       metadata: { leadId: input.id, newStatus: input.status },
     });
   }
@@ -686,16 +699,16 @@ export async function createValidationFeedbackNote(
   if (error) {
     if (isMissingTableError(error as { message?: string; code?: string }))
       return err("Validation schema missing.", "validation_schema_missing");
-    return err(error.message, "query_error");
+    return err(error.message, "validation_create_failed");
   }
 
   void createAgentActivityLog({
     business_id: input.business_id,
     user_id: user.id,
     activity_type: "validation_feedback_added",
-    message: "Validation feedback note recorded.",
+    message: "Customer feedback note recorded.",
     metadata: {
-      sentiment: input.sentiment ?? "neutral",
+      signalStrength: input.signal_strength ?? "unrated",
       hasLead: Boolean(input.lead_id),
       hasHypothesis: Boolean(input.hypothesis_id),
     },
@@ -705,7 +718,7 @@ export async function createValidationFeedbackNote(
 }
 
 // ---------------------------------------------------------------------------
-// Summary
+// getValidationSummary (lightweight — workspace summary only)
 // ---------------------------------------------------------------------------
 
 export async function getValidationSummary(

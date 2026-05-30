@@ -1,15 +1,15 @@
+// POST /api/businesses/[id]/validation/feedback   — create structured feedback note
+
 import { hasSupabaseEnv } from "@/lib/supabase/env";
 import { getCurrentUser, getBusinessById } from "@/lib/projects";
 import { createValidationFeedbackNote } from "@/lib/validation";
 import type {
   NewValidationFeedbackNoteInput,
-  ValidationSentiment,
+  ValidationSignalStrength,
 } from "@/types/validation";
 
-const VALID_SENTIMENTS = new Set<ValidationSentiment>([
-  "positive",
-  "negative",
-  "neutral",
+const VALID_SIGNAL_STRENGTHS = new Set<ValidationSignalStrength>([
+  "weak", "medium", "strong",
 ]);
 
 function errorResponse(error: string, code: string, status: number) {
@@ -38,7 +38,7 @@ export async function POST(
 
   const businessResult = await getBusinessById(id);
   if (businessResult.error || !businessResult.data) {
-    return errorResponse("Business not found.", "not_found", 404);
+    return errorResponse("Business not found.", "business_not_found", 404);
   }
 
   if (businessResult.data.user_id !== userResult.data.id) {
@@ -52,35 +52,33 @@ export async function POST(
     return errorResponse("Invalid JSON body.", "invalid_input", 400);
   }
 
-  const note = body.note as string | undefined;
-  if (!note?.trim()) {
-    return errorResponse("note is required.", "invalid_input", 400);
-  }
+  const summary = typeof body.summary === "string" ? body.summary.trim() : "";
+  if (!summary) return errorResponse("summary is required.", "invalid_input", 400);
 
-  const rawSentiment = body.sentiment as string | undefined;
-  const sentiment: ValidationSentiment | null =
-    rawSentiment && VALID_SENTIMENTS.has(rawSentiment as ValidationSentiment)
-      ? (rawSentiment as ValidationSentiment)
-      : null;
+  const rawSignal = body.signal_strength as string | undefined;
 
   const input: NewValidationFeedbackNoteInput = {
     business_id: id,
     user_id: userResult.data.id,
-    note: note.trim(),
-    sentiment,
+    summary,
     lead_id: (body.lead_id as string | null) ?? null,
-    persona_id: (body.persona_id as string | null) ?? null,
     hypothesis_id: (body.hypothesis_id as string | null) ?? null,
+    pain_signal: (body.pain_signal as string | null) ?? null,
+    willingness_to_pay_signal: (body.willingness_to_pay_signal as string | null) ?? null,
+    objections: Array.isArray(body.objections) ? (body.objections as string[]) : null,
+    quotes: Array.isArray(body.quotes) ? (body.quotes as string[]) : null,
+    next_step: (body.next_step as string | null) ?? null,
+    signal_strength: VALID_SIGNAL_STRENGTHS.has(rawSignal as ValidationSignalStrength)
+      ? (rawSignal as ValidationSignalStrength)
+      : null,
   };
 
   const result = await createValidationFeedbackNote(input);
 
   if (result.error || !result.data) {
-    const code = result.code ?? "create_error";
-    if (code === "validation_schema_missing") {
-      return errorResponse(result.error ?? "Validation schema missing.", code, 503);
-    }
-    return errorResponse(result.error ?? "Could not create feedback note.", code, 500);
+    const code = result.code ?? "validation_create_failed";
+    return errorResponse(result.error ?? "Could not create feedback note.", code,
+      code === "validation_schema_missing" ? 503 : 500);
   }
 
   return Response.json({ ok: true, data: result.data }, { status: 201 });
