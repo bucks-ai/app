@@ -1,7 +1,12 @@
 import Link from "next/link";
+import {
+  DeploymentStatusBadge,
+  deploymentStatusLabel,
+} from "@/components/deployment/DeploymentStatusBadge";
 import { StatusPill } from "@/components/ui/StatusPill";
 import type { DashboardBusiness } from "@/components/dashboard/mock-data";
 import type { BusinessExecutionStatus } from "@/types/execution-ui";
+import type { DeploymentStatus } from "@/types/deployment-ui";
 
 type WorkspaceHeaderProps = {
   business: DashboardBusiness;
@@ -31,6 +36,21 @@ function phaseLabel(phase: string): string {
     .join(" ");
 }
 
+function deploymentStatusFromBusiness(
+  business: DashboardBusiness,
+  executionStatus?: BusinessExecutionStatus | null
+): DeploymentStatus {
+  const deploymentMilestone = executionStatus?.milestones.find(
+    (milestone) => milestone.id === "deployment"
+  );
+
+  if (business.vercelProject?.deploymentUrl) return "live";
+  if (deploymentMilestone?.status === "blocked") return "failed";
+  if (deploymentMilestone?.status === "in_progress") return "building";
+  if (business.vercelProject) return "not_deployed";
+  return "no_project";
+}
+
 export function WorkspaceHeader({
   business,
   executionStatus,
@@ -43,6 +63,7 @@ export function WorkspaceHeader({
   const pendingApprovalCount =
     business.humanActionItems?.length ?? business.humanActions.length;
   const latestRun = executionStatus?.timeline?.[0]?.status ?? executionStatus?.timeline?.[0]?.category;
+  const deploymentStatus = deploymentStatusFromBusiness(business, executionStatus);
 
   return (
     <div className="border-b border-[#1C1C1C] bg-[#0A0A0A] px-4 py-3 sm:px-6">
@@ -68,6 +89,7 @@ export function WorkspaceHeader({
             {latestRun ? (
               <StatusPill label={`Run: ${phaseLabel(latestRun)}`} variant="accent" />
             ) : null}
+            <DeploymentStatusBadge status={deploymentStatus} />
           </div>
           {business.oneLineIdea ? (
             <p className="mt-0.5 truncate text-[13px] text-[#666]">
@@ -148,6 +170,11 @@ export function WorkspaceHeader({
               >
                 Live
               </a>
+            ) : null}
+            {!business.vercelProject?.deploymentUrl ? (
+              <span className="rounded border border-[#1C1C1C] bg-[#141414] px-2.5 py-1.5 font-mono text-[11px] uppercase tracking-widest text-[#666]">
+                {deploymentStatusLabel(deploymentStatus)}
+              </span>
             ) : null}
             {onBlueprintOpen ? (
               <button

@@ -26,7 +26,6 @@ function findAsset(
 export function AssetQuickLinks({
   business,
   executionStatus,
-  onBlueprintOpen,
   compact = false,
 }: AssetQuickLinksProps) {
   const assets = executionStatus?.assets ?? [];
@@ -36,39 +35,25 @@ export function AssetQuickLinks({
 
   const quickAssets: QuickAsset[] = [
     {
-      id: "github",
-      label: "GitHub",
-      value: business.githubRepo?.fullName ?? githubAsset?.label ?? "Pending",
-      href: business.githubRepo?.repoUrl ?? githubAsset?.url,
+      id: "deployment",
+      label: "Live App URL",
+      value: business.vercelProject?.deploymentUrl
+        ? business.vercelProject.deploymentUrl
+        : deploymentAsset?.label ??
+          (business.vercelProject || vercelAsset ? "Deployment pending" : "Pending"),
+      href: business.vercelProject?.deploymentUrl ?? deploymentAsset?.url,
     },
     {
       id: "vercel",
-      label: "Vercel",
+      label: "Vercel Project",
       value: business.vercelProject?.projectName ?? vercelAsset?.label ?? "Pending",
       href: business.vercelProject?.dashboardUrl ?? vercelAsset?.url,
     },
     {
-      id: "deployment",
-      label: "Live",
-      value: business.vercelProject?.deploymentUrl ? "Deployment URL" : deploymentAsset?.label ?? "Pending",
-      href: business.vercelProject?.deploymentUrl ?? deploymentAsset?.url,
-    },
-    {
-      id: "blueprint",
-      label: "Blueprint",
-      value: business.blueprintSummary ? "Available" : "Pending",
-      onClick: onBlueprintOpen,
-    },
-    {
-      id: "tools",
-      label: "Tools",
-      value:
-        business.toolPermissions && business.toolPermissions.length > 0
-          ? `${business.toolPermissions.length} records`
-          : business.permissions.length > 0
-            ? `${business.permissions.length} demo`
-            : "Pending",
-      href: "?tab=tools",
+      id: "github",
+      label: "GitHub Repo",
+      value: business.githubRepo?.fullName ?? githubAsset?.label ?? "Pending",
+      href: business.githubRepo?.repoUrl ?? githubAsset?.url,
     },
   ];
 

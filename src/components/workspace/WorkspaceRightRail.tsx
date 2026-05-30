@@ -1,5 +1,10 @@
 import type { DashboardBusiness } from "@/components/dashboard/mock-data";
+import {
+  DeploymentStatusBadge,
+  deploymentStatusLabel,
+} from "@/components/deployment/DeploymentStatusBadge";
 import type { BusinessExecutionStatus } from "@/types/execution-ui";
+import type { DeploymentStatus } from "@/types/deployment-ui";
 import { AssetQuickLinks } from "@/components/workspace/AssetQuickLinks";
 import { CompactActivityCenter } from "@/components/workspace/CompactActivityCenter";
 import { CompactToolQueue } from "@/components/workspace/CompactToolQueue";
@@ -20,6 +25,21 @@ type WorkspaceRightRailProps = {
   onTabChange: (tab: TabKey) => void;
 };
 
+function deploymentStatusFromBusiness(
+  business: DashboardBusiness,
+  executionStatus?: BusinessExecutionStatus | null
+): DeploymentStatus {
+  const deploymentMilestone = executionStatus?.milestones.find(
+    (milestone) => milestone.id === "deployment"
+  );
+
+  if (business.vercelProject?.deploymentUrl) return "live";
+  if (deploymentMilestone?.status === "blocked") return "failed";
+  if (deploymentMilestone?.status === "in_progress") return "building";
+  if (business.vercelProject) return "not_deployed";
+  return "no_project";
+}
+
 export function WorkspaceRightRail({
   business,
   executionStatus,
@@ -30,6 +50,7 @@ export function WorkspaceRightRail({
   const pendingApprovals =
     business.humanActionItems ?? [];
   const primaryAction = resolvePrimaryNextAction(business, executionStatus);
+  const deploymentStatus = deploymentStatusFromBusiness(business, executionStatus);
 
   return (
     <aside className="space-y-4">
@@ -48,6 +69,22 @@ export function WorkspaceRightRail({
           <p className="mt-1 text-xs leading-5 text-[#FDE68A]">
             {primaryAction.description}
           </p>
+        </button>
+      </div>
+
+      <div className="rounded-lg border border-[#1C1C1C] bg-[#0F0F0F] p-4">
+        <div className="flex items-center justify-between gap-2">
+          <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#A5B4FC]">
+            Deploy
+          </p>
+          <DeploymentStatusBadge status={deploymentStatus} />
+        </div>
+        <button
+          type="button"
+          onClick={() => onTabChange("deploy")}
+          className="mt-3 w-full rounded border border-[#1C1C1C] bg-[#080808] px-3 py-2 text-left text-xs font-semibold text-[#D4D4D4] transition-colors hover:border-[#4F46E5]/45"
+        >
+          {deploymentStatusLabel(deploymentStatus)}
         </button>
       </div>
 
