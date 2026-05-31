@@ -366,6 +366,27 @@ export function getExecutionMilestones(
         : "A live deployment URL should be available before customer validation.",
     }),
     milestone({
+      id: "research_workspace_generated",
+      label: "Research workspace generated",
+      description: "Opportunity thesis, segments, competitors, and risks have been seeded for research.",
+      status: hasLog(activityLogs, "research_workspace_generated") ? "complete" : "not_started",
+      completedAt: latestLog(activityLogs, "research_workspace_generated")?.created_at,
+    }),
+    milestone({
+      id: "research_opportunity_scored",
+      label: "Opportunity score created",
+      description: "The research report has an opportunity score set.",
+      status: hasLog(activityLogs, "research_report_created") ? "complete" : "not_started",
+      completedAt: latestLog(activityLogs, "research_report_created")?.created_at,
+    }),
+    milestone({
+      id: "research_first_hypothesis",
+      label: "First research hypothesis created",
+      description: "At least one research hypothesis has been defined for validation.",
+      status: hasLog(activityLogs, "research_hypothesis_created") ? "complete" : "not_started",
+      completedAt: latestLog(activityLogs, "research_hypothesis_created")?.created_at,
+    }),
+    milestone({
       id: "validation_workspace_created",
       label: "Customer validation workspace created",
       description: "Target personas, hypotheses, and interview leads have been seeded.",
@@ -694,6 +715,58 @@ export function getExecutionNextActions(
     });
   }
 
+  const researchWorkspaceGenerated = hasLog(input.activityLogs, "research_workspace_generated");
+  const researchReportCreated = hasLog(input.activityLogs, "research_report_created");
+  const researchHypothesisCreated = hasLog(input.activityLogs, "research_hypothesis_created");
+
+  if (!researchWorkspaceGenerated) {
+    actions.push({
+      id: "run_research_mode",
+      label: "Run research mode",
+      description: "Generate the research workspace to map opportunity, competitors, and risks.",
+      actor: "founder",
+      priority: "medium",
+      href: `${hrefBase}#research`,
+      actionType: "run_research_mode",
+    });
+  }
+
+  if (researchWorkspaceGenerated && !researchReportCreated) {
+    actions.push({
+      id: "review_opportunity_score",
+      label: "Review opportunity score",
+      description: "Set an opportunity score on the research report and review the thesis.",
+      actor: "founder",
+      priority: "medium",
+      href: `${hrefBase}#research`,
+      actionType: "review_opportunity_score",
+    });
+  }
+
+  if (researchWorkspaceGenerated && !researchHypothesisCreated) {
+    actions.push({
+      id: "validate_highest_risk_assumption",
+      label: "Validate highest-risk assumption",
+      description: "Pick the riskiest hypothesis from the research workspace and design a test.",
+      actor: "founder",
+      priority: "medium",
+      href: `${hrefBase}#research`,
+      actionType: "validate_assumption",
+    });
+  }
+
+  if (researchHypothesisCreated) {
+    actions.push({
+      id: "move_research_hypotheses_to_validation",
+      label: "Move hypotheses to validation",
+      description: "Promote confirmed research hypotheses into the Customer Validation workspace.",
+      actor: "founder",
+      priority: "low",
+      href: `${hrefBase}#validation`,
+      actionType: "promote_to_validation",
+    });
+  }
+
   const validationWorkspaceSeeded = hasLog(input.activityLogs, "validation_workspace_seeded");
   const firstContactLogged = hasLog(input.activityLogs, "validation_lead_contacted");
   const firstFeedbackLogged = hasLog(input.activityLogs, "validation_feedback_added");
@@ -858,6 +931,9 @@ export function determineCurrentPhase(
     vercel_project_created: "deployment",
     deployment_available: "deployment",
     ready_for_validation: "validation",
+    research_workspace_generated: "operating",
+    research_opportunity_scored: "operating",
+    research_first_hypothesis: "operating",
     validation_workspace_created: "validation",
     validation_first_contact: "validation",
     validation_first_feedback: "operating",

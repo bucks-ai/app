@@ -39,6 +39,7 @@ export interface ExecutionTimelineEvent {
     | "vercel"
     | "human"
     | "validation"
+    | "research"
     | "system"
     | "other";
 }

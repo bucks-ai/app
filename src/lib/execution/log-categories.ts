@@ -50,6 +50,23 @@ export function categorizeActivityLog(
     return "validation";
   }
 
+  if (
+    activityType === "research_workspace_generated" ||
+    activityType === "research_report_created" ||
+    activityType === "research_segment_created" ||
+    activityType === "research_buyer_budget_created" ||
+    activityType === "research_competitor_created" ||
+    activityType === "research_monetization_created" ||
+    activityType === "research_distribution_created" ||
+    activityType === "research_risk_created" ||
+    activityType === "research_hypothesis_created" ||
+    activityType === "research_evidence_created" ||
+    activityType === "research_status_updated" ||
+    activityType.startsWith("research_")
+  ) {
+    return "research";
+  }
+
   if (activityType.startsWith("system_") || activityType === "agent_activity") {
     return "system";
   }
