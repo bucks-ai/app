@@ -3,6 +3,7 @@ import type { BusinessExecutionStatus } from "@/types/execution-ui";
 
 export type WorkspaceActionTarget =
   | "overview"
+  | "research"
   | "actions"
   | "build"
   | "deploy"
@@ -25,6 +26,10 @@ export type PrimaryWorkspaceAction = {
     | "vercel_approval"
     | "create_vercel_project"
     | "failed_run"
+    | "run_research_mode"
+    | "review_opportunity_score"
+    | "promote_research_hypothesis"
+    | "review_pivot_risk"
     | "customer_validation"
     | "review_activity";
 };
@@ -87,6 +92,83 @@ export function resolvePrimaryNextAction(
       target: "actions",
       urgency: "critical",
       reason: "human_required",
+    };
+  }
+
+  const researchAction = executionStatus?.nextActions?.find((action) =>
+    [
+      "run_research_mode",
+      "review_opportunity_score",
+      "validate_highest_risk_assumption",
+      "move_research_hypotheses_to_validation",
+    ].includes(action.id)
+  );
+  if (researchAction) {
+    const moveToValidation = researchAction.id === "move_research_hypotheses_to_validation";
+
+    return {
+      label: researchAction.title,
+      description:
+        researchAction.description ??
+        "Open Research Mode and continue mapping the opportunity.",
+      target: moveToValidation ? "validation" : "research",
+      urgency: researchAction.priority === "high" ? "high" : "medium",
+      reason: moveToValidation ? "promote_research_hypothesis" : "run_research_mode",
+    };
+  }
+
+  const researchGenerated = business.activityLogs?.some(
+    (log) => log.activityType === "research_workspace_generated"
+  );
+  const researchReportCreated = business.activityLogs?.some(
+    (log) => log.activityType === "research_report_created"
+  );
+  const researchHypothesisCreated = business.activityLogs?.some(
+    (log) => log.activityType === "research_hypothesis_created"
+  );
+  const lowOpportunitySignal = business.activityLogs?.some((log) => {
+    const metadata = log.metadata as Record<string, unknown> | null | undefined;
+    const score = metadata?.opportunityScore ?? metadata?.opportunity_score;
+    return typeof score === "number" && score < 45;
+  });
+
+  if (!researchGenerated && business.blueprintSummary) {
+    return {
+      label: "Run research mode",
+      description: "Generate the research workspace to map opportunity, competitors, and risks.",
+      target: "research",
+      urgency: "medium",
+      reason: "run_research_mode",
+    };
+  }
+
+  if (lowOpportunitySignal) {
+    return {
+      label: "Review pivot risk",
+      description: "The opportunity score looks weak; review research before pushing deeper into build.",
+      target: "research",
+      urgency: "high",
+      reason: "review_pivot_risk",
+    };
+  }
+
+  if (researchGenerated && !researchReportCreated) {
+    return {
+      label: "Review opportunity score",
+      description: "Set or review the opportunity score before validation begins.",
+      target: "research",
+      urgency: "medium",
+      reason: "review_opportunity_score",
+    };
+  }
+
+  if (researchHypothesisCreated) {
+    return {
+      label: "Move hypotheses to validation",
+      description: "Promote the riskiest research hypothesis into Customer Validation.",
+      target: "validation",
+      urgency: "medium",
+      reason: "promote_research_hypothesis",
     };
   }
 

@@ -17,6 +17,7 @@ import { WorkspaceDrawer } from "@/components/workspace/WorkspaceDrawer";
 import { CommandMenuHint } from "@/components/workspace/CommandMenuHint";
 import { resolvePrimaryNextAction } from "@/components/workspace/next-action";
 import { OverviewTab } from "@/components/workspace/tabs/OverviewTab";
+import { ResearchTab } from "@/components/workspace/tabs/ResearchTab";
 import { ActionsTab } from "@/components/workspace/tabs/ActionsTab";
 import { BuildTab } from "@/components/workspace/tabs/BuildTab";
 import { DeployTab } from "@/components/workspace/tabs/DeployTab";
@@ -33,6 +34,7 @@ type BusinessWorkspaceProps = {
 function resolveInitialTab(searchParam: string | null): TabKey {
   const valid: TabKey[] = [
     "overview",
+    "research",
     "actions",
     "build",
     "deploy",
@@ -138,6 +140,8 @@ export function BusinessWorkspace({
             />
           ) : activeTab === "actions" ? (
             <ActionsTab business={business} executionStatus={executionStatus} />
+          ) : activeTab === "research" ? (
+            <ResearchTab business={business} />
           ) : activeTab === "build" ? (
             <BuildTab business={business} />
           ) : activeTab === "deploy" ? (

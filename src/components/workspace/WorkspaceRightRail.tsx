@@ -9,10 +9,12 @@ import { AssetQuickLinks } from "@/components/workspace/AssetQuickLinks";
 import { CompactActivityCenter } from "@/components/workspace/CompactActivityCenter";
 import { CompactToolQueue } from "@/components/workspace/CompactToolQueue";
 import { resolvePrimaryNextAction } from "@/components/workspace/next-action";
+import { ResearchRailCard } from "@/components/research/ResearchRailCard";
 import { ValidationRailCard } from "@/components/validation/ValidationRailCard";
 
 type TabKey =
   | "overview"
+  | "research"
   | "actions"
   | "build"
   | "deploy"
@@ -93,6 +95,11 @@ export function WorkspaceRightRail({
       <ValidationRailCard
         businessId={business.id}
         onOpenValidation={() => onTabChange("validation")}
+      />
+
+      <ResearchRailCard
+        businessId={business.id}
+        onOpenResearch={() => onTabChange("research")}
       />
 
       {/* Next action */}

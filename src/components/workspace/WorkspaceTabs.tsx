@@ -2,6 +2,7 @@
 
 export type TabKey =
   | "overview"
+  | "research"
   | "actions"
   | "build"
   | "deploy"
@@ -12,6 +13,7 @@ export type TabKey =
 
 export const TABS: { key: TabKey; label: string }[] = [
   { key: "overview", label: "Overview" },
+  { key: "research", label: "Research" },
   { key: "actions", label: "Actions" },
   { key: "build", label: "Build" },
   { key: "deploy", label: "Deploy" },

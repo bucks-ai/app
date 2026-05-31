@@ -9,9 +9,11 @@ type CommandMenuHintProps = {
 
 const shortcuts: { label: string; tab: TabKey }[] = [
   { label: "Overview", tab: "overview" },
+  { label: "Research", tab: "research" },
   { label: "Actions", tab: "actions" },
   { label: "Build", tab: "build" },
   { label: "Deploy", tab: "deploy" },
+  { label: "Validation", tab: "validation" },
   { label: "Tools", tab: "tools" },
   { label: "Activity", tab: "activity" },
 ];

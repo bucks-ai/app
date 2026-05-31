@@ -3,10 +3,12 @@ import type { BusinessExecutionStatus } from "@/types/execution-ui";
 import { AssetQuickLinks } from "@/components/workspace/AssetQuickLinks";
 import { CompactActivityCenter } from "@/components/workspace/CompactActivityCenter";
 import { CompactToolQueue } from "@/components/workspace/CompactToolQueue";
+import { ResearchOverviewCard } from "@/components/research/ResearchOverviewCard";
 import { ValidationOverviewCard } from "@/components/validation/ValidationOverviewCard";
 
 type TabKey =
   | "overview"
+  | "research"
   | "actions"
   | "build"
   | "deploy"
@@ -180,6 +182,11 @@ export function OverviewTab({
       <ValidationOverviewCard
         businessId={business.id}
         onOpenValidation={() => onTabChange("validation")}
+      />
+
+      <ResearchOverviewCard
+        businessId={business.id}
+        onOpenResearch={() => onTabChange("research")}
       />
 
       <div className="rounded-lg border border-[#1C1C1C] bg-[#0F0F0F] p-4">
