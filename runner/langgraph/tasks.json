@@ -1,0 +1,10 @@
+[
+  {
+    "id": "operating-team-ui",
+    "title": "Build Operating Team UI",
+    "type": "ui",
+    "preferred_worker": "codex",
+    "branch": "feature/operating-team-ui",
+    "status": "queued"
+  }
+]
