@@ -9,11 +9,11 @@ type DataTileProps = {
 };
 
 const valueToneClasses = {
-  accent: "text-[#A5B4FC]",
-  success: "text-[#86EFAC]",
-  warning: "text-[#FCD34D]",
-  danger: "text-[#FCA5A5]",
-  neutral: "text-[#F0F0F0]",
+  accent: "text-accent",
+  success: "text-success",
+  warning: "text-warning",
+  danger: "text-error",
+  neutral: "text-foreground",
 };
 
 export function DataTile({
@@ -25,7 +25,7 @@ export function DataTile({
 }: DataTileProps) {
   return (
     <div
-      className={`rounded-lg border border-[#1C1C1C] bg-[#080808] p-4 ${className}`}
+      className={`rounded-lg border border-border bg-background p-4 ${className}`}
     >
       <SectionLabel tone="muted">{label}</SectionLabel>
       <p
@@ -34,7 +34,7 @@ export function DataTile({
         {value}
       </p>
       {detail ? (
-        <p className="mt-2 text-sm leading-6 text-[#888888]">{detail}</p>
+        <p className="mt-2 text-sm leading-6 text-secondary">{detail}</p>
       ) : null}
     </div>
   );

@@ -84,36 +84,36 @@ export function FeedbackNotes({
   }
 
   return (
-    <div id="validation-feedback" className="rounded-lg border border-[#1C1C1C] bg-[#0F0F0F] p-4 scroll-mt-28">
+    <div id="validation-feedback" className="rounded-lg border border-border bg-surface p-4 scroll-mt-28">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#A5B4FC]">
+          <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
             Feedback notes
           </p>
-          <p className="mt-1 text-xs text-[#666]">Capture the evidence from discovery calls.</p>
+          <p className="mt-1 text-xs text-muted">Capture the evidence from discovery calls.</p>
         </div>
         <button
           type="button"
           onClick={() => setOpen((value) => !value)}
-          className="rounded-md border border-[#4F46E5]/40 bg-[#4F46E5]/10 px-3 py-2 text-xs font-semibold text-[#C7D2FE] transition-colors hover:border-[#4F46E5]/70"
+          className="rounded-md border border-accent/40 bg-accent/10 px-3 py-2 text-xs font-semibold text-accent transition-colors hover:border-accent/70"
         >
           {open ? "Close" : "Add feedback"}
         </button>
       </div>
 
       {open ? (
-        <form onSubmit={handleSubmit} className="mt-3 grid gap-2 rounded border border-[#1C1C1C] bg-[#080808] p-3 md:grid-cols-2">
+        <form onSubmit={handleSubmit} className="mt-3 grid gap-2 rounded border border-border bg-background p-3 md:grid-cols-2">
           <textarea
             value={summary}
             onChange={(event) => setSummary(event.target.value)}
             placeholder="Customer said..."
             rows={4}
-            className="min-h-28 rounded border border-[#1C1C1C] bg-[#141414] px-3 py-2 text-sm text-[#F0F0F0] outline-none focus:border-[#4F46E5]/70 md:col-span-2"
+            className="min-h-28 rounded border border-border bg-elevated px-3 py-2 text-sm text-foreground outline-none focus:border-accent/70 md:col-span-2"
           />
           <select
             value={leadId}
             onChange={(event) => setLeadId(event.target.value)}
-            className="min-h-10 rounded border border-[#1C1C1C] bg-[#141414] px-3 text-sm text-[#F0F0F0] outline-none focus:border-[#4F46E5]/70"
+            className="min-h-10 rounded border border-border bg-elevated px-3 text-sm text-foreground outline-none focus:border-accent/70"
           >
             <option value="">No lead attached</option>
             {leads.map((lead) => (
@@ -125,7 +125,7 @@ export function FeedbackNotes({
           <select
             value={hypothesisId}
             onChange={(event) => setHypothesisId(event.target.value)}
-            className="min-h-10 rounded border border-[#1C1C1C] bg-[#141414] px-3 text-sm text-[#F0F0F0] outline-none focus:border-[#4F46E5]/70"
+            className="min-h-10 rounded border border-border bg-elevated px-3 text-sm text-foreground outline-none focus:border-accent/70"
           >
             <option value="">No hypothesis attached</option>
             {hypotheses.map((hypothesis) => (
@@ -138,26 +138,26 @@ export function FeedbackNotes({
             value={painSignal}
             onChange={(event) => setPainSignal(event.target.value)}
             placeholder="Pain signal"
-            className="min-h-10 rounded border border-[#1C1C1C] bg-[#141414] px-3 text-sm text-[#F0F0F0] outline-none focus:border-[#4F46E5]/70"
+            className="min-h-10 rounded border border-border bg-elevated px-3 text-sm text-foreground outline-none focus:border-accent/70"
           />
           <input
             value={willingnessSignal}
             onChange={(event) => setWillingnessSignal(event.target.value)}
             placeholder="Willingness to pay"
-            className="min-h-10 rounded border border-[#1C1C1C] bg-[#141414] px-3 text-sm text-[#F0F0F0] outline-none focus:border-[#4F46E5]/70"
+            className="min-h-10 rounded border border-border bg-elevated px-3 text-sm text-foreground outline-none focus:border-accent/70"
           />
           <input
             value={nextStep}
             onChange={(event) => setNextStep(event.target.value)}
             placeholder="Next step"
-            className="min-h-10 rounded border border-[#1C1C1C] bg-[#141414] px-3 text-sm text-[#F0F0F0] outline-none focus:border-[#4F46E5]/70"
+            className="min-h-10 rounded border border-border bg-elevated px-3 text-sm text-foreground outline-none focus:border-accent/70"
           />
           <select
             value={signalStrength}
             onChange={(event) =>
               setSignalStrength(event.target.value as ValidationSignalStrength | "")
             }
-            className="min-h-10 rounded border border-[#1C1C1C] bg-[#141414] px-3 text-sm text-[#F0F0F0] outline-none focus:border-[#4F46E5]/70"
+            className="min-h-10 rounded border border-border bg-elevated px-3 text-sm text-foreground outline-none focus:border-accent/70"
           >
             <option value="">No signal rating</option>
             {SIGNALS.map((signal) => (
@@ -169,7 +169,7 @@ export function FeedbackNotes({
           <button
             type="submit"
             disabled={saving || !summary.trim()}
-            className="min-h-10 rounded-md border border-[#4F46E5]/45 bg-[#4F46E5]/15 px-3 text-sm font-semibold text-[#C7D2FE] transition-colors hover:border-[#4F46E5]/70 disabled:cursor-not-allowed disabled:opacity-60 md:col-span-2"
+            className="min-h-10 rounded-md border border-accent/45 bg-accent/15 px-3 text-sm font-semibold text-accent transition-colors hover:border-accent/70 disabled:cursor-not-allowed disabled:opacity-60 md:col-span-2"
           >
             {saving ? "Adding..." : "Add feedback"}
           </button>
@@ -177,7 +177,7 @@ export function FeedbackNotes({
       ) : null}
 
       {error ? (
-        <p className="mt-3 rounded border border-[#EF4444]/30 bg-[#EF4444]/10 px-3 py-2 text-sm leading-6 text-[#FECACA]">
+        <p className="mt-3 rounded border border-error/30 bg-error/10 px-3 py-2 text-sm leading-6 text-error">
           {error}
         </p>
       ) : null}
@@ -185,14 +185,14 @@ export function FeedbackNotes({
       <div className="mt-3 space-y-2">
         {feedbackNotes.length > 0 ? (
           feedbackNotes.map((note) => (
-            <div key={note.id} className="rounded border border-[#1C1C1C] bg-[#080808] p-3">
+            <div key={note.id} className="rounded border border-border bg-background p-3">
               <div className="flex flex-wrap items-start justify-between gap-2">
-                <p className="min-w-0 text-sm leading-6 text-[#D4D4D4]">{note.summary}</p>
+                <p className="min-w-0 text-sm leading-6 text-secondary">{note.summary}</p>
                 {note.signal_strength ? (
                   <ValidationStatusBadge value={note.signal_strength} />
                 ) : null}
               </div>
-              <div className="mt-2 flex flex-wrap gap-2 text-xs text-[#666]">
+              <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted">
                 {leadName(note.lead_id) ? <span>Lead: {leadName(note.lead_id)}</span> : null}
                 {hypothesisTitle(note.hypothesis_id) ? (
                   <span>Hypothesis: {hypothesisTitle(note.hypothesis_id)}</span>
@@ -206,7 +206,7 @@ export function FeedbackNotes({
             </div>
           ))
         ) : (
-          <p className="rounded border border-[#1C1C1C] bg-[#080808] px-3 py-4 text-sm text-[#666]">
+          <p className="rounded border border-border bg-background px-3 py-4 text-sm text-muted">
             No feedback yet.
           </p>
         )}

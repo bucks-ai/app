@@ -76,10 +76,10 @@ export function OperatingTeamPanel({ businessId }: OperatingTeamPanelProps) {
   if (loadState === "loading") {
     return (
       <div className="space-y-3">
-        <div className="h-40 animate-pulse rounded-lg border border-[#1C1C1C] bg-[#0F0F0F]" />
+        <div className="h-40 animate-pulse rounded-lg border border-border bg-surface" />
         <div className="grid gap-3 lg:grid-cols-2">
-          <div className="h-64 animate-pulse rounded-lg border border-[#1C1C1C] bg-[#0F0F0F]" />
-          <div className="h-64 animate-pulse rounded-lg border border-[#1C1C1C] bg-[#0F0F0F]" />
+          <div className="h-64 animate-pulse rounded-lg border border-border bg-surface" />
+          <div className="h-64 animate-pulse rounded-lg border border-border bg-surface" />
         </div>
       </div>
     );
@@ -87,17 +87,17 @@ export function OperatingTeamPanel({ businessId }: OperatingTeamPanelProps) {
 
   if (loadState === "error") {
     return (
-      <div className="rounded-lg border border-[#EF4444]/25 bg-[#EF4444]/8 p-5">
-        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#FCA5A5]">
+      <div className="rounded-lg border border-error/25 bg-error/8 p-5">
+        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-error">
           Operating team unavailable
         </p>
-        <p className="mt-3 break-words text-sm leading-6 text-[#FECACA]">
+        <p className="mt-3 break-words text-sm leading-6 text-error">
           {message ?? "The operating team could not be loaded."}
         </p>
         <button
           type="button"
           onClick={() => void loadOperatingTeam()}
-          className="mt-4 rounded-md border border-[#EF4444]/35 bg-[#080808] px-3 py-2 text-xs font-semibold text-[#FCA5A5] transition-colors hover:border-[#EF4444]/60"
+          className="mt-4 rounded-md border border-error/35 bg-background px-3 py-2 text-xs font-semibold text-error transition-colors hover:border-error/60"
         >
           Retry
         </button>
@@ -107,11 +107,11 @@ export function OperatingTeamPanel({ businessId }: OperatingTeamPanelProps) {
 
   if (!registry || registry.agents.length === 0) {
     return (
-      <div className="rounded-lg border border-[#1C1C1C] bg-[#0F0F0F] p-5">
-        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#A5B4FC]">
+      <div className="rounded-lg border border-border bg-surface p-5">
+        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
           Operating Team
         </p>
-        <p className="mt-3 text-sm leading-6 text-[#888]">
+        <p className="mt-3 text-sm leading-6 text-secondary">
           No agents are available for this business yet.
         </p>
       </div>
@@ -129,11 +129,11 @@ export function OperatingTeamPanel({ businessId }: OperatingTeamPanelProps) {
       />
 
       {runsWarning ? (
-        <div className="rounded-lg border border-[#F59E0B]/25 bg-[#F59E0B]/8 p-4">
-          <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#FCD34D]">
+        <div className="rounded-lg border border-warning/25 bg-warning/8 p-4">
+          <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-warning">
             Agent run history
           </p>
-          <p className="mt-2 break-words text-sm leading-6 text-[#FDE68A]">
+          <p className="mt-2 break-words text-sm leading-6 text-warning">
             {runsWarning}
           </p>
         </div>

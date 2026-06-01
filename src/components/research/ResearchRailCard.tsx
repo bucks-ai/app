@@ -45,9 +45,9 @@ export function ResearchRailCard({
   const action = resolveResearchNextAction(workspace);
 
   return (
-    <div className="rounded-lg border border-[#1C1C1C] bg-[#0F0F0F] p-4">
+    <div className="rounded-lg border border-border bg-surface p-4">
       <div className="flex items-center justify-between gap-2">
-        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#A5B4FC]">
+        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
           Research
         </p>
         {workspace ? <ResearchStatusBadge value={workspace.summary.status} /> : null}
@@ -55,15 +55,15 @@ export function ResearchRailCard({
       <button
         type="button"
         onClick={onOpenResearch}
-        className="mt-3 w-full rounded border border-[#1C1C1C] bg-[#080808] px-3 py-2 text-left transition-colors hover:border-[#4F46E5]/45"
+        className="mt-3 w-full rounded border border-border bg-background px-3 py-2 text-left transition-colors hover:border-accent/45"
       >
-        <p className="truncate text-xs font-semibold text-[#D4D4D4]">
+        <p className="truncate text-xs font-semibold text-secondary">
           {workspace
             ? `Opportunity ${workspace.summary.opportunityScore ?? "--"}`
             : message}
         </p>
         {workspace ? (
-          <p className="mt-1 break-words text-xs leading-5 text-[#666]">
+          <p className="mt-1 break-words text-xs leading-5 text-muted">
             {action.title}
           </p>
         ) : null}

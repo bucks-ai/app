@@ -371,10 +371,10 @@ export function PermissionControlRoom({
                 }
               />
             </div>
-            <h2 className="mt-4 text-3xl font-semibold tracking-tight text-[#F0F0F0]">
+            <h2 className="mt-4 text-3xl font-semibold tracking-tight text-foreground">
               Tool Setup Queue
             </h2>
-            <p className="mt-3 text-sm leading-7 text-[#888888] sm:text-base">
+            <p className="mt-3 text-sm leading-7 text-secondary sm:text-base">
               {businessId
                 ? `Approve the external tools bucks.ai needs for ${
                     businessName ?? "this business"
@@ -389,7 +389,7 @@ export function PermissionControlRoom({
                 type="button"
                 disabled={seedBusy}
                 onClick={handleSeed}
-                className="rounded-md bg-[#4F46E5] px-4 py-3 text-sm font-semibold text-[#F0F0F0] transition-colors hover:bg-[#6366F1] disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-md bg-accent px-4 py-3 text-sm font-semibold text-accent-contrast transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {seedBusy ? "Creating..." : "Create setup queue"}
               </button>
@@ -397,7 +397,7 @@ export function PermissionControlRoom({
             {signedOutCta ? (
               <Link
                 href="/login"
-                className="rounded-md border border-[#1C1C1C] bg-[#080808] px-4 py-3 text-center text-sm font-semibold text-[#D4D4D4] transition-colors hover:border-[#4F46E5]/60 hover:text-[#F0F0F0]"
+                className="rounded-md border border-border bg-background px-4 py-3 text-center text-sm font-semibold text-secondary transition-colors hover:border-accent/60 hover:text-foreground"
               >
                 Sign in -&gt;
               </Link>
@@ -409,8 +409,8 @@ export function PermissionControlRoom({
           <div
             className={`mt-6 rounded-md border px-4 py-3 text-sm leading-6 ${
               message === API_UNAVAILABLE
-                ? "border-[#F59E0B]/30 bg-[#F59E0B]/10 text-[#FDE68A]"
-                : "border-[#EF4444]/30 bg-[#EF4444]/10 text-[#FCA5A5]"
+                ? "border-warning/30 bg-warning/10 text-warning"
+                : "border-error/30 bg-error/10 text-error"
             }`}
           >
             {message}
@@ -465,10 +465,10 @@ export function PermissionControlRoom({
       {loadState === "empty" ? (
         <OperatorPanel className="p-6 text-center">
           <StatusPill label="Empty" variant="neutral" />
-          <h3 className="mt-4 text-2xl font-semibold text-[#F0F0F0]">
+          <h3 className="mt-4 text-2xl font-semibold text-foreground">
             No setup queue exists yet.
           </h3>
-          <p className="mx-auto mt-3 max-w-2xl text-sm leading-7 text-[#888888]">
+          <p className="mx-auto mt-3 max-w-2xl text-sm leading-7 text-secondary">
             Create a setup queue to seed GitHub, Vercel, Supabase, Stripe,
             PostHog, Gmail/Workspace, Resend, Cloudflare, and OpenAI permission
             records for this business.
@@ -478,7 +478,7 @@ export function PermissionControlRoom({
               type="button"
               disabled={seedBusy}
               onClick={handleSeed}
-              className="mt-5 rounded-md bg-[#4F46E5] px-4 py-3 text-sm font-semibold text-[#F0F0F0] transition-colors hover:bg-[#6366F1] disabled:cursor-not-allowed disabled:opacity-50"
+              className="mt-5 rounded-md bg-accent px-4 py-3 text-sm font-semibold text-accent-contrast transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
             >
               {seedBusy ? "Creating..." : "Create setup queue"}
             </button>

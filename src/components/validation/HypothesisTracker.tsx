@@ -46,18 +46,18 @@ export function HypothesisTracker({
   }
 
   return (
-    <div className="rounded-lg border border-[#1C1C1C] bg-[#0F0F0F] p-4">
+    <div className="rounded-lg border border-border bg-surface p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#A5B4FC]">
+        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
           Hypotheses
         </p>
-        <span className="font-mono text-[10px] uppercase tracking-widest text-[#444]">
+        <span className="font-mono text-[10px] uppercase tracking-widest text-muted">
           {hypotheses.length} tracked
         </span>
       </div>
 
       {error ? (
-        <p className="mt-3 rounded border border-[#EF4444]/30 bg-[#EF4444]/10 px-3 py-2 text-sm leading-6 text-[#FECACA]">
+        <p className="mt-3 rounded border border-error/30 bg-error/10 px-3 py-2 text-sm leading-6 text-error">
           {error}
         </p>
       ) : null}
@@ -67,23 +67,23 @@ export function HypothesisTracker({
           hypotheses.map((hypothesis) => (
             <div
               key={hypothesis.id}
-              className="rounded border border-[#1C1C1C] bg-[#080808] p-3"
+              className="rounded border border-border bg-background p-3"
             >
               <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-sm font-semibold text-[#F0F0F0]">
+                    <p className="text-sm font-semibold text-foreground">
                       {hypothesis.title}
                     </p>
                     <ValidationStatusBadge value={hypothesis.priority} />
                   </div>
                   {hypothesis.assumption ? (
-                    <p className="mt-1 text-xs leading-5 text-[#888]">
+                    <p className="mt-1 text-xs leading-5 text-secondary">
                       {hypothesis.assumption}
                     </p>
                   ) : null}
                   {hypothesis.success_criteria ? (
-                    <p className="mt-1 text-xs leading-5 text-[#666]">
+                    <p className="mt-1 text-xs leading-5 text-muted">
                       Success: {hypothesis.success_criteria}
                     </p>
                   ) : null}
@@ -99,7 +99,7 @@ export function HypothesisTracker({
                         event.target.value as ValidationHypothesisStatus
                       )
                     }
-                    className="min-h-9 rounded border border-[#1C1C1C] bg-[#141414] px-2.5 py-2 text-xs text-[#D4D4D4] outline-none transition-colors focus:border-[#4F46E5]/70 disabled:opacity-60"
+                    className="min-h-9 rounded border border-border bg-elevated px-2.5 py-2 text-xs text-secondary outline-none transition-colors focus:border-accent/70 disabled:opacity-60"
                   >
                     {STATUSES.map((status) => (
                       <option key={status} value={status}>
@@ -112,7 +112,7 @@ export function HypothesisTracker({
             </div>
           ))
         ) : (
-          <p className="rounded border border-[#1C1C1C] bg-[#080808] px-3 py-4 text-sm text-[#666]">
+          <p className="rounded border border-border bg-background px-3 py-4 text-sm text-muted">
             No hypotheses yet.
           </p>
         )}

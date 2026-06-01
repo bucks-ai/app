@@ -11,20 +11,20 @@ export function HumanActionQueue({ actions }: HumanActionQueueProps) {
       {actions.map((action) => (
         <div
           key={`${action.business}-${action.title}`}
-          className="rounded-md border border-[#F59E0B]/25 bg-[#F59E0B]/10 p-4"
+          className="rounded-md border border-warning/25 bg-warning/10 p-4"
         >
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#FCD34D]">
+              <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-warning">
                 {action.business}
               </p>
-              <h3 className="mt-2 text-base font-semibold text-[#F0F0F0]">
+              <h3 className="mt-2 text-base font-semibold text-foreground">
                 {action.title}
               </h3>
             </div>
             <StatusPill label={action.status} variant="warning" />
           </div>
-          <p className="mt-3 text-sm leading-6 text-[#FDE68A]">{action.reason}</p>
+          <p className="mt-3 text-sm leading-6 text-warning">{action.reason}</p>
         </div>
       ))}
     </div>

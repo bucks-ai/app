@@ -42,7 +42,7 @@ export function ExecutionProgressHeader({
   const tone = progressTone(status);
 
   return (
-    <div className="rounded-lg border border-[#1C1C1C] bg-[#080808] p-5">
+    <div className="rounded-lg border border-border bg-background p-5">
       <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
         <div className="max-w-3xl">
           <div className="flex flex-wrap items-center gap-3">
@@ -52,50 +52,50 @@ export function ExecutionProgressHeader({
               <ExecutionStatusPill label="Fallback mode" status="warning" />
             ) : null}
           </div>
-          <h2 className="mt-4 text-3xl font-semibold tracking-tight text-[#F0F0F0]">
+          <h2 className="mt-4 text-3xl font-semibold tracking-tight text-foreground">
             {phaseLabels[status.currentPhase]}
           </h2>
-          <p className="mt-3 text-sm leading-7 text-[#888888] sm:text-base">
+          <p className="mt-3 text-sm leading-7 text-secondary sm:text-base">
             Live execution posture for this business: phase, milestones, blockers,
             recommended actions, external assets, and latest run history.
           </p>
         </div>
 
-        <div className="w-full max-w-sm rounded-lg border border-[#1C1C1C] bg-[#0F0F0F] p-4">
+        <div className="w-full max-w-sm rounded-lg border border-border bg-surface p-4">
           <div className="flex items-end justify-between gap-4">
             <div>
-              <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#444444]">
+              <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted">
                 Overall progress
               </p>
               <p className={`mt-2 text-4xl font-semibold tracking-tight ${
                 tone === "danger"
-                  ? "text-[#FCA5A5]"
+                  ? "text-error"
                   : tone === "warning"
-                    ? "text-[#FCD34D]"
+                    ? "text-warning"
                     : tone === "success"
-                      ? "text-[#86EFAC]"
-                      : "text-[#A5B4FC]"
+                      ? "text-success"
+                      : "text-accent"
               }`}
               >
                 {status.progressPercent}%
               </p>
             </div>
             {status.updatedAt ? (
-              <p className="pb-1 text-right text-xs leading-5 text-[#666666]">
+              <p className="pb-1 text-right text-xs leading-5 text-muted">
                 Updated {new Date(status.updatedAt).toLocaleString()}
               </p>
             ) : null}
           </div>
-          <div className="mt-4 h-2 overflow-hidden rounded-full bg-[#1C1C1C]">
+          <div className="mt-4 h-2 overflow-hidden rounded-full bg-border">
             <div
               className={`h-full rounded-full ${
                 tone === "danger"
-                  ? "bg-[#EF4444]"
+                  ? "bg-error"
                   : tone === "warning"
-                    ? "bg-[#F59E0B]"
+                    ? "bg-warning"
                     : tone === "success"
-                      ? "bg-[#22C55E]"
-                      : "bg-[#4F46E5]"
+                      ? "bg-success"
+                      : "bg-accent"
               }`}
               style={{ width: `${status.progressPercent}%` }}
             />

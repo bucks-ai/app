@@ -102,7 +102,7 @@ export function ExecutionCommandCenter({
               <StatusPill label="Backend pending" variant="warning" />
             ) : null}
           </div>
-          <p className="mt-3 max-w-3xl text-sm leading-7 text-[#888888]">
+          <p className="mt-3 max-w-3xl text-sm leading-7 text-secondary">
             Command view for where this business stands, what is complete, what
             is blocked, and what should happen next.
           </p>
@@ -111,34 +111,34 @@ export function ExecutionCommandCenter({
           type="button"
           onClick={handleRefresh}
           disabled={loadState === "loading"}
-          className="w-full rounded-md border border-[#1C1C1C] bg-[#080808] px-4 py-3 text-sm font-semibold text-[#D4D4D4] transition-colors hover:border-[#4F46E5]/60 hover:text-[#F0F0F0] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+          className="w-full rounded-md border border-border bg-background px-4 py-3 text-sm font-semibold text-secondary transition-colors hover:border-accent/60 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
         >
           {isRefreshing ? "Refreshing..." : "Refresh status"}
         </button>
       </div>
 
       {loadState === "loading" && !status ? (
-        <div className="rounded-lg border border-[#1C1C1C] bg-[#080808] p-5">
+        <div className="rounded-lg border border-border bg-background p-5">
           <StatusPill label="Loading" variant="accent" />
-          <p className="mt-4 text-sm leading-6 text-[#888888]">
+          <p className="mt-4 text-sm leading-6 text-secondary">
             Loading execution status and timeline.
           </p>
         </div>
       ) : null}
 
       {loadState === "error" ? (
-        <div className="rounded-lg border border-[#EF4444]/30 bg-[#EF4444]/10 p-5">
+        <div className="rounded-lg border border-error/30 bg-error/10 p-5">
           <StatusPill label="Execution status unavailable" variant="danger" />
-          <p className="mt-4 text-sm leading-6 text-[#FECACA]">
+          <p className="mt-4 text-sm leading-6 text-error">
             {message ?? "Execution status could not be loaded."}
           </p>
         </div>
       ) : null}
 
       {loadState === "backend_missing" ? (
-        <div className="mb-5 rounded-lg border border-[#F59E0B]/30 bg-[#F59E0B]/10 p-5">
+        <div className="mb-5 rounded-lg border border-warning/30 bg-warning/10 p-5">
           <StatusPill label="Fallback mode" variant="warning" />
-          <p className="mt-4 text-sm leading-6 text-[#FDE68A]">
+          <p className="mt-4 text-sm leading-6 text-warning">
             {message ?? BACKEND_MISSING} Showing a compact status inferred from
             existing blueprint, permissions, assets, and activity logs.
           </p>

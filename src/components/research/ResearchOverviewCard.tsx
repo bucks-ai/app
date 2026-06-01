@@ -45,15 +45,15 @@ export function ResearchOverviewCard({
   const targetCustomer = workspace?.report?.target_customer;
 
   return (
-    <div className="rounded-lg border border-[#1C1C1C] bg-[#0F0F0F] p-4">
+    <div className="rounded-lg border border-border bg-surface p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#A5B4FC]">
+        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
           Research
         </p>
         <button
           type="button"
           onClick={onOpenResearch}
-          className="font-mono text-[10px] uppercase tracking-widest text-[#444] transition-colors hover:text-[#888]"
+          className="font-mono text-[10px] uppercase tracking-widest text-muted transition-colors hover:text-secondary"
         >
           Open
         </button>
@@ -63,16 +63,16 @@ export function ResearchOverviewCard({
         <div className="mt-3 space-y-3">
           <div className="flex flex-wrap items-center gap-2">
             <ResearchStatusBadge value={workspace.summary.status} />
-            <span className="rounded border border-[#1C1C1C] bg-[#080808] px-2.5 py-1 text-xs text-[#888]">
+            <span className="rounded border border-border bg-background px-2.5 py-1 text-xs text-secondary">
               Score {workspace.summary.opportunityScore ?? "--"}
             </span>
           </div>
-          <p className="break-words text-sm leading-6 text-[#D4D4D4]">
+          <p className="break-words text-sm leading-6 text-secondary">
             {topSegment ?? targetCustomer ?? "Target customer not captured yet."}
           </p>
         </div>
       ) : (
-        <p className="mt-3 text-sm leading-6 text-[#666]">{message}</p>
+        <p className="mt-3 text-sm leading-6 text-muted">{message}</p>
       )}
     </div>
   );

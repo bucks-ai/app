@@ -95,15 +95,15 @@ export function ResearchNextActionCard({
 
   return (
     <div
-      className={`rounded-lg border border-[#F59E0B]/25 bg-[#F59E0B]/8 ${
+      className={`rounded-lg border border-warning/25 bg-warning/8 ${
         compact ? "p-3" : "p-4"
       }`}
     >
-      <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-[#FCD34D]">
+      <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-warning">
         Next research action
       </p>
-      <p className="mt-2 text-sm font-semibold text-[#F0F0F0]">{action.title}</p>
-      <p className="mt-1 break-words text-xs leading-5 text-[#FDE68A]">
+      <p className="mt-2 text-sm font-semibold text-foreground">{action.title}</p>
+      <p className="mt-1 break-words text-xs leading-5 text-warning">
         {action.description}
       </p>
       {handleClick ? (
@@ -111,7 +111,7 @@ export function ResearchNextActionCard({
           type="button"
           onClick={handleClick}
           disabled={loading}
-          className="mt-3 inline-flex max-w-full items-center justify-center whitespace-normal rounded-md border border-[#F59E0B]/35 bg-[#080808] px-3 py-2 text-xs font-semibold text-[#FCD34D] transition-colors hover:border-[#F59E0B]/60 disabled:cursor-not-allowed disabled:opacity-60"
+          className="mt-3 inline-flex max-w-full items-center justify-center whitespace-normal rounded-md border border-warning/35 bg-background px-3 py-2 text-xs font-semibold text-warning transition-colors hover:border-warning/60 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {loading ? "Working..." : action.cta}
         </button>

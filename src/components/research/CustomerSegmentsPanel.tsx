@@ -10,10 +10,10 @@ function score(value: number | null) {
 }
 
 function InlineList({ items }: { items: string[] | null }) {
-  if (!items || items.length === 0) return <span className="text-[#555]">Not captured</span>;
+  if (!items || items.length === 0) return <span className="text-muted">Not captured</span>;
 
   return (
-    <span className="break-words text-[#888]">
+    <span className="break-words text-secondary">
       {items.slice(0, 3).join(", ")}
       {items.length > 3 ? ` +${items.length - 3}` : ""}
     </span>
@@ -22,12 +22,12 @@ function InlineList({ items }: { items: string[] | null }) {
 
 export function CustomerSegmentsPanel({ segments }: CustomerSegmentsPanelProps) {
   return (
-    <div className="rounded-lg border border-[#1C1C1C] bg-[#0F0F0F] p-4">
+    <div className="rounded-lg border border-border bg-surface p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#A5B4FC]">
+        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
           Customer segments
         </p>
-        <span className="font-mono text-[10px] uppercase tracking-widest text-[#444]">
+        <span className="font-mono text-[10px] uppercase tracking-widest text-muted">
           {segments.length} total
         </span>
       </div>
@@ -37,14 +37,14 @@ export function CustomerSegmentsPanel({ segments }: CustomerSegmentsPanelProps) 
           segments.map((segment) => (
             <div
               key={segment.id}
-              className="min-w-0 rounded border border-[#1C1C1C] bg-[#080808] p-3"
+              className="min-w-0 rounded border border-border bg-background p-3"
             >
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="break-words text-sm font-semibold text-[#F0F0F0]">
+                  <p className="break-words text-sm font-semibold text-foreground">
                     {segment.name}
                   </p>
-                  <p className="mt-1 break-words text-xs leading-5 text-[#888]">
+                  <p className="mt-1 break-words text-xs leading-5 text-secondary">
                     {segment.description ?? "No description captured."}
                   </p>
                 </div>
@@ -60,26 +60,26 @@ export function CustomerSegmentsPanel({ segments }: CustomerSegmentsPanelProps) 
                   ["Pay", score(segment.ability_to_pay)],
                   ["Reach", score(segment.reachability)],
                 ].map(([label, value]) => (
-                  <div key={label} className="rounded border border-[#1C1C1C] bg-[#0F0F0F] p-2">
-                    <p className="font-mono text-[10px] uppercase tracking-widest text-[#444]">
+                  <div key={label} className="rounded border border-border bg-surface p-2">
+                    <p className="font-mono text-[10px] uppercase tracking-widest text-muted">
                       {label}
                     </p>
-                    <p className="mt-1 text-xs font-semibold text-[#D4D4D4]">{value}</p>
+                    <p className="mt-1 text-xs font-semibold text-secondary">{value}</p>
                   </div>
                 ))}
               </div>
 
               <div className="mt-3 space-y-2 text-xs leading-5">
                 <p>
-                  <span className="font-mono uppercase tracking-widest text-[#444]">
+                  <span className="font-mono uppercase tracking-widest text-muted">
                     Market
                   </span>{" "}
-                  <span className="break-words text-[#888]">
+                  <span className="break-words text-secondary">
                     {segment.market_size_guess ?? "Not captured"}
                   </span>
                 </p>
                 <p>
-                  <span className="font-mono uppercase tracking-widest text-[#444]">
+                  <span className="font-mono uppercase tracking-widest text-muted">
                     Channels
                   </span>{" "}
                   <InlineList items={segment.channels} />
@@ -88,7 +88,7 @@ export function CustomerSegmentsPanel({ segments }: CustomerSegmentsPanelProps) 
             </div>
           ))
         ) : (
-          <p className="rounded border border-[#1C1C1C] bg-[#080808] px-3 py-4 text-sm text-[#666]">
+          <p className="rounded border border-border bg-background px-3 py-4 text-sm text-muted">
             No customer segments yet.
           </p>
         )}

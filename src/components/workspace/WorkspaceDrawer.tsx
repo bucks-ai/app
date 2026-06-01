@@ -37,16 +37,16 @@ export function WorkspaceDrawer({
       />
 
       {/* Panel */}
-      <aside className="relative z-10 flex h-full w-full max-w-xl flex-col border-l border-[#1C1C1C] bg-[#0A0A0A] shadow-2xl">
+      <aside className="relative z-10 flex h-full w-full max-w-xl flex-col border-l border-border bg-surface shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-[#1C1C1C] px-5 py-4">
-          <p className="font-mono text-xs uppercase tracking-[0.24em] text-[#A5B4FC]">
+        <div className="flex items-center justify-between border-b border-border px-5 py-4">
+          <p className="font-mono text-xs uppercase tracking-[0.24em] text-accent">
             {title}
           </p>
           <button
             type="button"
             onClick={onClose}
-            className="rounded border border-[#1C1C1C] bg-[#141414] px-3 py-1.5 font-mono text-[11px] uppercase tracking-widest text-[#888] transition-colors hover:text-[#F0F0F0]"
+            className="rounded border border-border bg-elevated px-3 py-1.5 font-mono text-[11px] uppercase tracking-widest text-secondary transition-colors hover:text-foreground"
           >
             Close
           </button>

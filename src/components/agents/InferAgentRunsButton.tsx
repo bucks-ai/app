@@ -49,7 +49,7 @@ export function InferAgentRunsButton({
         type="button"
         onClick={handleInfer}
         disabled={disabled || loading}
-        className="rounded-md border border-[#4F46E5]/40 bg-[#4F46E5] px-3 py-2 text-xs font-semibold text-[#F0F0F0] transition-colors hover:bg-[#6366F1] disabled:cursor-not-allowed disabled:border-[#1C1C1C] disabled:bg-[#1C1C1C] disabled:text-[#666]"
+        className="rounded-md border border-accent/40 bg-accent px-3 py-2 text-xs font-semibold text-accent-contrast transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:border-border disabled:bg-border disabled:text-muted"
       >
         {loading ? "Building history..." : "Build run history"}
       </button>
@@ -57,10 +57,10 @@ export function InferAgentRunsButton({
         <p
           className={`mt-2 max-w-md break-words text-xs leading-5 ${
             tone === "success"
-              ? "text-[#86EFAC]"
+              ? "text-success"
               : tone === "warning"
-                ? "text-[#FCD34D]"
-                : "text-[#FCA5A5]"
+                ? "text-warning"
+                : "text-error"
           }`}
         >
           {message}

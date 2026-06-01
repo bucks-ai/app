@@ -13,9 +13,9 @@ import { WorkspaceHeader } from "@/components/workspace/WorkspaceHeader";
 import { PrimaryActionStrip } from "@/components/workspace/PrimaryActionStrip";
 import { WorkspaceTabs } from "@/components/workspace/WorkspaceTabs";
 import type { TabKey } from "@/components/workspace/WorkspaceTabs";
+import { WorkspaceSidebar } from "@/components/workspace/WorkspaceSidebar";
 import { WorkspaceRightRail } from "@/components/workspace/WorkspaceRightRail";
 import { WorkspaceDrawer } from "@/components/workspace/WorkspaceDrawer";
-import { CommandMenuHint } from "@/components/workspace/CommandMenuHint";
 import {
   resolvePrimaryNextAction,
   type WorkspaceAgentState,
@@ -147,77 +147,92 @@ export function BusinessWorkspace({
   const blockerCount = executionStatus?.blockers?.length ?? 0;
   const actionCount = pendingApprovalCount + blockerCount;
   const primaryAction = resolvePrimaryNextAction(business, executionStatus, agentState);
+  const badgeCounts = { actions: actionCount };
 
-  return (
-    <div className="flex min-h-screen min-w-0 flex-col overflow-x-hidden">
-      {/* Workspace header */}
-      <WorkspaceHeader
+  const activeTabContent =
+    activeTab === "overview" ? (
+      <OverviewTab
         business={business}
         executionStatus={executionStatus}
+        onTabChange={handleTabChange}
         onBlueprintOpen={() => setBlueprintOpen(true)}
       />
+    ) : activeTab === "actions" ? (
+      <ActionsTab business={business} executionStatus={executionStatus} />
+    ) : activeTab === "research" ? (
+      <ResearchTab business={business} />
+    ) : activeTab === "build" ? (
+      <BuildTab business={business} />
+    ) : activeTab === "deploy" ? (
+      <DeployTab business={business} />
+    ) : activeTab === "validation" ? (
+      <ValidationTab business={business} />
+    ) : activeTab === "team" ? (
+      <OperatingTeamTab business={business} />
+    ) : activeTab === "tools" ? (
+      <ToolsTab
+        business={business}
+        businessId={business.id}
+        businessName={business.name}
+      />
+    ) : activeTab === "activity" ? (
+      <ActivityTab business={business} executionStatus={executionStatus} />
+    ) : activeTab === "settings" ? (
+      <SettingsTab business={business} />
+    ) : null;
 
-      <div className="sticky top-0 z-30 bg-[#080808]/95 backdrop-blur">
-        {/* Primary action strip */}
-        <PrimaryActionStrip
+  return (
+    <div className="flex min-h-screen flex-col overflow-x-hidden bg-background pt-[69px]">
+      <div className="flex min-w-0 flex-1">
+        {/* Desktop left navigation */}
+        <WorkspaceSidebar
+          activeTab={activeTab}
           business={business}
           executionStatus={executionStatus}
-          agentState={agentState}
+          badgeCounts={badgeCounts}
           onTabChange={handleTabChange}
         />
 
-        <div className="flex items-center justify-between gap-3 border-b border-[#1C1C1C] bg-[#080808] pr-4 sm:pr-6">
-          {/* Tab bar */}
-          <WorkspaceTabs
-            activeTab={activeTab}
-            onTabChange={handleTabChange}
-            badgeCounts={{ actions: actionCount }}
-          />
-          <div className="hidden shrink-0 lg:block">
-            <CommandMenuHint onTabChange={handleTabChange} />
-          </div>
-        </div>
-      </div>
-
-      {/* Body: main content + right rail */}
-      <div className="flex flex-1 gap-0">
-        {/* Main content */}
-        <main className="min-w-0 flex-1 p-4 sm:p-6">
-          {activeTab === "overview" ? (
-            <OverviewTab
+        {/* Main column: sticky command bar + scrolling content */}
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div
+            className="sticky top-[69px] z-30 border-b border-border backdrop-blur"
+            style={{ background: "var(--surface-glass)" }}
+          >
+            <WorkspaceHeader
               business={business}
               executionStatus={executionStatus}
-              onTabChange={handleTabChange}
               onBlueprintOpen={() => setBlueprintOpen(true)}
             />
-          ) : activeTab === "actions" ? (
-            <ActionsTab business={business} executionStatus={executionStatus} />
-          ) : activeTab === "research" ? (
-            <ResearchTab business={business} />
-          ) : activeTab === "build" ? (
-            <BuildTab business={business} />
-          ) : activeTab === "deploy" ? (
-            <DeployTab business={business} />
-          ) : activeTab === "validation" ? (
-            <ValidationTab business={business} />
-          ) : activeTab === "team" ? (
-            <OperatingTeamTab business={business} />
-          ) : activeTab === "tools" ? (
-            <ToolsTab
-              business={business}
-              businessId={business.id}
-              businessName={business.name}
-            />
-          ) : activeTab === "activity" ? (
-            <ActivityTab business={business} executionStatus={executionStatus} />
-          ) : activeTab === "settings" ? (
-            <SettingsTab business={business} />
-          ) : null}
-        </main>
 
-        {/* Right rail (desktop only) */}
-        <div className="hidden w-72 shrink-0 border-l border-[#1C1C1C] p-4 xl:block">
-          <div className="sticky top-4">
+            {/* Primary next action — desktop */}
+            <div className="hidden border-t border-border-subtle lg:block">
+              <PrimaryActionStrip
+                business={business}
+                executionStatus={executionStatus}
+                agentState={agentState}
+                onTabChange={handleTabChange}
+              />
+            </div>
+
+            {/* Tabs — mobile / tablet */}
+            <div className="border-t border-border-subtle lg:hidden">
+              <WorkspaceTabs
+                activeTab={activeTab}
+                onTabChange={handleTabChange}
+                badgeCounts={badgeCounts}
+              />
+            </div>
+          </div>
+
+          <main className="min-w-0 flex-1 px-4 py-5 pb-24 sm:px-6 lg:px-8 lg:pb-8">
+            <div className="mx-auto max-w-5xl">{activeTabContent}</div>
+          </main>
+        </div>
+
+        {/* Status rail — wide desktop only */}
+        <aside className="hidden w-80 shrink-0 border-l border-border 2xl:block">
+          <div className="sticky top-[69px] max-h-[calc(100vh-69px)] overflow-y-auto p-4">
             <WorkspaceRightRail
               business={business}
               executionStatus={executionStatus}
@@ -225,28 +240,33 @@ export function BusinessWorkspace({
               onTabChange={handleTabChange}
             />
           </div>
-        </div>
+        </aside>
       </div>
 
-      {/* Mobile sticky bottom bar */}
-      <div className="sticky bottom-0 z-30 border-t border-[#1C1C1C] bg-[#080808]/95 px-3 py-3 backdrop-blur xl:hidden">
+      {/* Mobile sticky bottom action bar */}
+      <div
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-border px-3 py-2.5 backdrop-blur lg:hidden"
+        style={{ background: "var(--surface-glass)" }}
+      >
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => handleTabChange(primaryAction.target)}
-            className="min-w-0 flex-1 rounded border border-[#F59E0B]/35 bg-[#F59E0B]/10 px-3 py-2.5 text-left"
+            className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-warning/35 bg-warning/10 px-3 py-2 text-left"
           >
-            <span className="block font-mono text-[10px] uppercase tracking-widest text-[#FCD34D]">
-              Next action
-            </span>
-            <span className="block truncate text-xs font-semibold text-[#F0F0F0]">
-              {primaryAction.label}
+            <span className="block min-w-0">
+              <span className="block font-mono text-[10px] uppercase tracking-[0.18em] text-warning">
+                Next action
+              </span>
+              <span className="block truncate text-xs font-semibold text-foreground">
+                {primaryAction.label}
+              </span>
             </span>
           </button>
           <button
             type="button"
             onClick={() => handleTabChange("activity")}
-            className="rounded border border-[#1C1C1C] bg-[#141414] px-3 py-2.5 font-mono text-[11px] uppercase tracking-widest text-[#888]"
+            className="shrink-0 rounded-lg border border-border bg-elevated px-3 py-2.5 font-mono text-[11px] uppercase tracking-[0.18em] text-secondary"
           >
             Activity
           </button>
@@ -260,21 +280,21 @@ export function BusinessWorkspace({
         title="Blueprint"
       >
         <div className="space-y-4">
-          <p className="text-sm leading-7 text-[#888]">
+          <p className="text-sm leading-7 text-secondary">
             {business.blueprintSummary ??
               "No blueprint summary is available for this project."}
           </p>
 
           {business.nextActions.length > 0 ? (
             <div>
-              <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.24em] text-[#A5B4FC]">
+              <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
                 Next autonomous actions
               </p>
               <ul className="space-y-1.5">
                 {business.nextActions.map((action, i) => (
                   <li
                     key={i}
-                    className="rounded border border-[#1C1C1C] bg-[#141414] px-3 py-2 text-xs text-[#888]"
+                    className="rounded-lg border border-border bg-elevated px-3 py-2 text-xs text-secondary"
                   >
                     {action}
                   </li>
