@@ -1,38 +1,143 @@
 @import "tailwindcss";
 
+/*
+  bucks.ai design foundation
+  --------------------------
+  Semantic tokens drive the public marketing surfaces (home, intake, auth,
+  tools) and adapt to light / dark. The signed-in dashboard hardcodes its own
+  dark palette, so it is unaffected by theme switches.
+
+  Default theme is dark to preserve the existing app look. A small inline script
+  in layout.tsx promotes the saved or system preference before first paint, and
+  the toggle in the navbar overrides it.
+*/
+
 :root {
-  --background: #080808;
-  --foreground: #F0F0F0;
-  --surface: #0F0F0F;
-  --elevated: #141414;
-  --border: #1C1C1C;
-  --border-subtle: #141414;
-  --text-primary: #F0F0F0;
-  --text-secondary: #888888;
-  --text-muted: #444444;
-  --accent: #4F46E5;
-  --accent-hover: #6366F1;
-  --success: #22C55E;
-  --warning: #F59E0B;
-  --error: #EF4444;
-  --bg-base: #080808;
-  --bg-surface: #0F0F0F;
-  --bg-elevated: #141414;
+  color-scheme: dark;
+
+  /* surfaces */
+  --background: #08090a;
+  --surface: #0d0e10;
+  --surface-elevated: #141517;
+  --surface-glass: rgba(13, 14, 16, 0.72);
+
+  /* text */
+  --foreground: #f4f5f6;
+  --text-secondary: #9aa0a8;
+  --text-muted: #62666e;
+
+  /* lines */
+  --border: #1f2125;
+  --border-subtle: #17181b;
+
+  /* brand */
+  --accent: #6366f1;
+  --accent-hover: #7c7ff5;
+  --accent-contrast: #ffffff;
+  --accent-soft: rgba(99, 102, 241, 0.14);
+  --accent-ring: rgba(99, 102, 241, 0.35);
+
+  /* status */
+  --success: #34d399;
+  --warning: #fbbf24;
+  --error: #f87171;
+
+  /* glow used behind the hero */
+  --glow: radial-gradient(
+    60% 60% at 50% 0%,
+    rgba(99, 102, 241, 0.16) 0%,
+    rgba(99, 102, 241, 0) 70%
+  );
+
+  /* shape + depth */
+  --radius: 0.875rem;
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.28);
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.02) inset,
+    0 12px 40px rgba(0, 0, 0, 0.45);
 }
 
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --background: #fbfbfc;
+  --surface: #ffffff;
+  --surface-elevated: #ffffff;
+  --surface-glass: rgba(255, 255, 255, 0.78);
+
+  --foreground: #0b0c0f;
+  --text-secondary: #545962;
+  --text-muted: #8a8f98;
+
+  --border: #e7e8ec;
+  --border-subtle: #f0f1f3;
+
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
+  --accent-contrast: #ffffff;
+  --accent-soft: rgba(79, 70, 229, 0.1);
+  --accent-ring: rgba(79, 70, 229, 0.3);
+
+  --success: #059669;
+  --warning: #d97706;
+  --error: #dc2626;
+
+  --glow: radial-gradient(
+    60% 60% at 50% 0%,
+    rgba(79, 70, 229, 0.1) 0%,
+    rgba(79, 70, 229, 0) 70%
+  );
+
+  --shadow-soft: 0 1px 2px rgba(15, 23, 42, 0.06),
+    0 8px 24px rgba(15, 23, 42, 0.06);
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.6) inset,
+    0 10px 36px rgba(15, 23, 42, 0.08);
+}
+
+/* Expose tokens as Tailwind utilities (bg-surface, text-muted, border-border, ...) */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-elevated: var(--surface-elevated);
+  --color-border: var(--border);
+  --color-border-subtle: var(--border-subtle);
+  --color-secondary: var(--text-secondary);
+  --color-muted: var(--text-muted);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-contrast: var(--accent-contrast);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-error: var(--error);
+
+  --radius-card: var(--radius);
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-feature-settings: "cv01", "cv03", "ss01";
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-html {
-  scroll-behavior: smooth;
+/* Smooth theme transition on the marketing surfaces only */
+.theme-transition,
+.theme-transition * {
+  transition: background-color 0.25s ease, border-color 0.25s ease,
+    color 0.25s ease;
+}
+
+/* Tightened display headings */
+.text-balance {
+  text-wrap: balance;
 }
