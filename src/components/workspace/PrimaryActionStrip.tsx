@@ -2,12 +2,14 @@ import type { DashboardBusiness } from "@/components/dashboard/mock-data";
 import type { BusinessExecutionStatus } from "@/types/execution-ui";
 import {
   resolvePrimaryNextAction,
+  type WorkspaceAgentState,
   type WorkspaceActionTarget,
 } from "@/components/workspace/next-action";
 
 type PrimaryActionStripProps = {
   business: DashboardBusiness;
   executionStatus?: BusinessExecutionStatus | null;
+  agentState?: WorkspaceAgentState;
   onTabChange: (tab: WorkspaceActionTarget) => void;
 };
 
@@ -29,9 +31,10 @@ const urgencyCtaStyles = {
 export function PrimaryActionStrip({
   business,
   executionStatus,
+  agentState,
   onTabChange,
 }: PrimaryActionStripProps) {
-  const action = resolvePrimaryNextAction(business, executionStatus);
+  const action = resolvePrimaryNextAction(business, executionStatus, agentState);
   const blockerCount = executionStatus?.blockers?.length ?? 0;
   const pendingApprovals =
     (business.humanActionItems?.length ?? business.humanActions.length);

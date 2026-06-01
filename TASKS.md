@@ -62,3 +62,4 @@ _Nothing blocked right now._
 - [x] Build Execution Status / Run History backend layer
 - [x] Build Execution Command Center UI for saved business detail pages
 - [x] Polish business workspace UX with compact components and dashboard re-entry cards
+- [x] Build Operating Team UI for the 21-agent registry and agent run history

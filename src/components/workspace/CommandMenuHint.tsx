@@ -14,6 +14,7 @@ const shortcuts: { label: string; tab: TabKey }[] = [
   { label: "Build", tab: "build" },
   { label: "Deploy", tab: "deploy" },
   { label: "Validation", tab: "validation" },
+  { label: "Team", tab: "team" },
   { label: "Tools", tab: "tools" },
   { label: "Activity", tab: "activity" },
 ];

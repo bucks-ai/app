@@ -8,6 +8,7 @@ export type WorkspaceActionTarget =
   | "build"
   | "deploy"
   | "validation"
+  | "team"
   | "tools"
   | "activity"
   | "settings";
@@ -31,7 +32,23 @@ export type PrimaryWorkspaceAction = {
     | "promote_research_hypothesis"
     | "review_pivot_risk"
     | "customer_validation"
+    | "agent_runs_sql_missing"
+    | "build_agent_history"
+    | "review_blocked_agents"
+    | "open_operating_team"
     | "review_activity";
+};
+
+export type WorkspaceAgentState = {
+  registryLoaded?: boolean;
+  totalAgents?: number;
+  activeCount?: number;
+  completedCount?: number;
+  blockedCount?: number;
+  waitingCount?: number;
+  monitoringCount?: number;
+  runCount?: number;
+  agentRunsSchemaMissing?: boolean;
 };
 
 function permissionIsReady(status?: string | null) {
@@ -69,7 +86,8 @@ function eventLooksFailed(status?: string | null, title?: string | null) {
 
 export function resolvePrimaryNextAction(
   business: DashboardBusiness,
-  executionStatus?: BusinessExecutionStatus | null
+  executionStatus?: BusinessExecutionStatus | null,
+  agentState?: WorkspaceAgentState
 ): PrimaryWorkspaceAction {
   const criticalBlocker = executionStatus?.blockers?.find(
     (blocker) => blocker.severity === "critical" || blocker.severity === "blocked"
@@ -270,6 +288,47 @@ export function resolvePrimaryNextAction(
       target: "validation",
       urgency: "medium",
       reason: "customer_validation",
+    };
+  }
+
+  if (agentState?.agentRunsSchemaMissing) {
+    return {
+      label: "Apply Agent Runs SQL",
+      description: "Install supabase/agent-runs.sql so the operating team can persist run history.",
+      target: "team",
+      urgency: "high",
+      reason: "agent_runs_sql_missing",
+    };
+  }
+
+  if ((agentState?.runCount ?? 0) === 0 && (business.activityLogs?.length ?? 0) > 0) {
+    return {
+      label: "Build agent run history",
+      description: "Backfill inferred runs from existing activity logs.",
+      target: "team",
+      urgency: "medium",
+      reason: "build_agent_history",
+    };
+  }
+
+  const blockedAgentCount = (agentState?.blockedCount ?? 0) + (agentState?.waitingCount ?? 0);
+  if (blockedAgentCount > 0) {
+    return {
+      label: "Review blocked agents",
+      description: `${blockedAgentCount} operating team agent${blockedAgentCount === 1 ? "" : "s"} need a dependency or approval.`,
+      target: "team",
+      urgency: "medium",
+      reason: "review_blocked_agents",
+    };
+  }
+
+  if (agentState?.registryLoaded === false || (agentState?.totalAgents ?? 0) > 0) {
+    return {
+      label: "Open Operating Team",
+      description: "Review the agent roster, node coverage, and latest run history.",
+      target: "team",
+      urgency: "low",
+      reason: "open_operating_team",
     };
   }
 

@@ -5,6 +5,7 @@ import { CompactActivityCenter } from "@/components/workspace/CompactActivityCen
 import { CompactToolQueue } from "@/components/workspace/CompactToolQueue";
 import { ResearchOverviewCard } from "@/components/research/ResearchOverviewCard";
 import { ValidationOverviewCard } from "@/components/validation/ValidationOverviewCard";
+import { OperatingTeamOverviewCard } from "@/components/agents/OperatingTeamOverviewCard";
 
 type TabKey =
   | "overview"
@@ -13,6 +14,7 @@ type TabKey =
   | "build"
   | "deploy"
   | "validation"
+  | "team"
   | "tools"
   | "activity"
   | "settings";
@@ -187,6 +189,11 @@ export function OverviewTab({
       <ResearchOverviewCard
         businessId={business.id}
         onOpenResearch={() => onTabChange("research")}
+      />
+
+      <OperatingTeamOverviewCard
+        businessId={business.id}
+        onOpenTeam={() => onTabChange("team")}
       />
 
       <div className="rounded-lg border border-[#1C1C1C] bg-[#0F0F0F] p-4">

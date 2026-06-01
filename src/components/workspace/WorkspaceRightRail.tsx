@@ -11,6 +11,8 @@ import { CompactToolQueue } from "@/components/workspace/CompactToolQueue";
 import { resolvePrimaryNextAction } from "@/components/workspace/next-action";
 import { ResearchRailCard } from "@/components/research/ResearchRailCard";
 import { ValidationRailCard } from "@/components/validation/ValidationRailCard";
+import { OperatingTeamRailCard } from "@/components/agents/OperatingTeamRailCard";
+import type { WorkspaceAgentState } from "@/components/workspace/next-action";
 
 type TabKey =
   | "overview"
@@ -19,6 +21,7 @@ type TabKey =
   | "build"
   | "deploy"
   | "validation"
+  | "team"
   | "tools"
   | "activity"
   | "settings";
@@ -26,6 +29,7 @@ type TabKey =
 type WorkspaceRightRailProps = {
   business: DashboardBusiness;
   executionStatus?: BusinessExecutionStatus | null;
+  agentState?: WorkspaceAgentState;
   onTabChange: (tab: TabKey) => void;
 };
 
@@ -47,13 +51,14 @@ function deploymentStatusFromBusiness(
 export function WorkspaceRightRail({
   business,
   executionStatus,
+  agentState,
   onTabChange,
 }: WorkspaceRightRailProps) {
   const nextActions = executionStatus?.nextActions ?? [];
   const blockers = executionStatus?.blockers ?? [];
   const pendingApprovals =
     business.humanActionItems ?? [];
-  const primaryAction = resolvePrimaryNextAction(business, executionStatus);
+  const primaryAction = resolvePrimaryNextAction(business, executionStatus, agentState);
   const deploymentStatus = deploymentStatusFromBusiness(business, executionStatus);
 
   return (
@@ -100,6 +105,11 @@ export function WorkspaceRightRail({
       <ResearchRailCard
         businessId={business.id}
         onOpenResearch={() => onTabChange("research")}
+      />
+
+      <OperatingTeamRailCard
+        businessId={business.id}
+        onOpenTeam={() => onTabChange("team")}
       />
 
       {/* Next action */}

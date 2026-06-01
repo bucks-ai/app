@@ -8,6 +8,7 @@ import {
   fetchBusinessExecutionStatus,
   fetchExecutionTimeline,
 } from "@/lib/execution-client";
+import { fetchAgentRegistry, fetchAgentRuns } from "@/lib/agents-client";
 import { WorkspaceHeader } from "@/components/workspace/WorkspaceHeader";
 import { PrimaryActionStrip } from "@/components/workspace/PrimaryActionStrip";
 import { WorkspaceTabs } from "@/components/workspace/WorkspaceTabs";
@@ -15,13 +16,17 @@ import type { TabKey } from "@/components/workspace/WorkspaceTabs";
 import { WorkspaceRightRail } from "@/components/workspace/WorkspaceRightRail";
 import { WorkspaceDrawer } from "@/components/workspace/WorkspaceDrawer";
 import { CommandMenuHint } from "@/components/workspace/CommandMenuHint";
-import { resolvePrimaryNextAction } from "@/components/workspace/next-action";
+import {
+  resolvePrimaryNextAction,
+  type WorkspaceAgentState,
+} from "@/components/workspace/next-action";
 import { OverviewTab } from "@/components/workspace/tabs/OverviewTab";
 import { ResearchTab } from "@/components/workspace/tabs/ResearchTab";
 import { ActionsTab } from "@/components/workspace/tabs/ActionsTab";
 import { BuildTab } from "@/components/workspace/tabs/BuildTab";
 import { DeployTab } from "@/components/workspace/tabs/DeployTab";
 import { ValidationTab } from "@/components/workspace/tabs/ValidationTab";
+import { OperatingTeamTab } from "@/components/workspace/tabs/OperatingTeamTab";
 import { ToolsTab } from "@/components/workspace/tabs/ToolsTab";
 import { ActivityTab } from "@/components/workspace/tabs/ActivityTab";
 import { SettingsTab } from "@/components/workspace/tabs/SettingsTab";
@@ -39,6 +44,7 @@ function resolveInitialTab(searchParam: string | null): TabKey {
     "build",
     "deploy",
     "validation",
+    "team",
     "tools",
     "activity",
     "settings",
@@ -61,6 +67,9 @@ export function BusinessWorkspace({
   const [blueprintOpen, setBlueprintOpen] = useState(false);
   const [executionStatus, setExecutionStatus] =
     useState<BusinessExecutionStatus | null>(initialExecutionStatus ?? null);
+  const [agentState, setAgentState] = useState<WorkspaceAgentState>({
+    registryLoaded: false,
+  });
 
   // Sync tab to URL
   const handleTabChange = useCallback(
@@ -91,11 +100,53 @@ export function BusinessWorkspace({
     void load();
   }, [business.id]);
 
+  // Load compact agent state for primary next-action decisions
+  useEffect(() => {
+    let ignore = false;
+
+    async function loadAgents() {
+      const [registryResult, runsResult] = await Promise.all([
+        fetchAgentRegistry(business.id),
+        fetchAgentRuns(business.id),
+      ]);
+
+      if (ignore) return;
+
+      if (!registryResult.ok) {
+        setAgentState({
+          registryLoaded: false,
+          agentRunsSchemaMissing:
+            runsResult.ok ? Boolean(runsResult.warning) : runsResult.code === "agent_runs_schema_missing",
+        });
+        return;
+      }
+
+      setAgentState({
+        registryLoaded: true,
+        totalAgents: registryResult.data.summary.totalAgents,
+        activeCount: registryResult.data.summary.activeCount,
+        completedCount: registryResult.data.summary.completedCount,
+        blockedCount: registryResult.data.summary.blockedCount,
+        waitingCount: registryResult.data.summary.waitingCount,
+        monitoringCount: registryResult.data.summary.monitoringCount,
+        runCount: runsResult.ok ? runsResult.data.summary.totalRuns : 0,
+        agentRunsSchemaMissing:
+          runsResult.ok ? Boolean(runsResult.warning) : runsResult.code === "agent_runs_schema_missing",
+      });
+    }
+
+    void loadAgents();
+
+    return () => {
+      ignore = true;
+    };
+  }, [business.id]);
+
   const pendingApprovalCount =
     business.humanActionItems?.length ?? business.humanActions.length;
   const blockerCount = executionStatus?.blockers?.length ?? 0;
   const actionCount = pendingApprovalCount + blockerCount;
-  const primaryAction = resolvePrimaryNextAction(business, executionStatus);
+  const primaryAction = resolvePrimaryNextAction(business, executionStatus, agentState);
 
   return (
     <div className="flex min-h-screen min-w-0 flex-col overflow-x-hidden">
@@ -108,11 +159,12 @@ export function BusinessWorkspace({
 
       <div className="sticky top-0 z-30 bg-[#080808]/95 backdrop-blur">
         {/* Primary action strip */}
-        <PrimaryActionStrip
-          business={business}
-          executionStatus={executionStatus}
-          onTabChange={handleTabChange}
-        />
+          <PrimaryActionStrip
+            business={business}
+            executionStatus={executionStatus}
+            agentState={agentState}
+            onTabChange={handleTabChange}
+          />
 
         <div className="flex items-center justify-between gap-3 border-b border-[#1C1C1C] bg-[#080808] pr-4 sm:pr-6">
           {/* Tab bar */}
@@ -148,6 +200,8 @@ export function BusinessWorkspace({
             <DeployTab business={business} />
           ) : activeTab === "validation" ? (
             <ValidationTab business={business} />
+          ) : activeTab === "team" ? (
+            <OperatingTeamTab business={business} />
           ) : activeTab === "tools" ? (
             <ToolsTab
               business={business}
@@ -167,6 +221,7 @@ export function BusinessWorkspace({
             <WorkspaceRightRail
               business={business}
               executionStatus={executionStatus}
+              agentState={agentState}
               onTabChange={handleTabChange}
             />
           </div>

@@ -7,6 +7,7 @@ export type TabKey =
   | "build"
   | "deploy"
   | "validation"
+  | "team"
   | "tools"
   | "activity"
   | "settings";
@@ -18,6 +19,7 @@ export const TABS: { key: TabKey; label: string }[] = [
   { key: "build", label: "Build" },
   { key: "deploy", label: "Deploy" },
   { key: "validation", label: "Validation" },
+  { key: "team", label: "Team" },
   { key: "tools", label: "Tools" },
   { key: "activity", label: "Activity" },
   { key: "settings", label: "Settings" },
