@@ -15,23 +15,23 @@ export function VercelDeployGate({
   actionHref,
 }: VercelDeployGateProps) {
   return (
-    <div className="rounded-lg border border-[#F59E0B]/30 bg-[#F59E0B]/10 p-5">
+    <div className="rounded-lg border border-warning/30 bg-warning/10 p-5">
       <div className="flex flex-wrap items-center gap-3">
         <SectionLabel tone="warning">Deployment gate</SectionLabel>
         <StatusPill label="Founder approval" variant="warning" />
       </div>
-      <h3 className="mt-4 text-2xl font-semibold tracking-tight text-[#F0F0F0]">
+      <h3 className="mt-4 text-2xl font-semibold tracking-tight text-foreground">
         {title}
       </h3>
-      <p className="mt-3 text-sm leading-7 text-[#FDE68A]">{description}</p>
-      <p className="mt-3 text-sm leading-7 text-[#D4D4D4]">
+      <p className="mt-3 text-sm leading-7 text-warning">{description}</p>
+      <p className="mt-3 text-sm leading-7 text-secondary">
         Vercel deployment is approval-gated because it creates a real external
         project using a server-side Vercel token.
       </p>
       {actionLabel && actionHref ? (
         <a
           href={actionHref}
-          className="mt-5 inline-flex rounded-md border border-[#F59E0B]/40 bg-[#080808] px-4 py-3 text-sm font-semibold text-[#FDE68A] transition-colors hover:border-[#F59E0B]/70 hover:text-[#FEF3C7]"
+          className="mt-5 inline-flex rounded-md border border-warning/40 bg-background px-4 py-3 text-sm font-semibold text-warning transition-colors hover:border-warning/70 hover:text-warning"
         >
           {actionLabel}
         </a>

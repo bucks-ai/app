@@ -16,34 +16,34 @@ export function AgentNodeGroup({ node, latestRuns }: AgentNodeGroupProps) {
   ).length;
 
   return (
-    <section id={`agents-${node.nodeId}`} className="rounded-lg border border-[#1C1C1C] bg-[#080808] p-3 sm:p-4">
+    <section id={`agents-${node.nodeId}`} className="rounded-lg border border-border bg-background p-3 sm:p-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
-          <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#A5B4FC]">
+          <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
             {node.nodeLabel}
           </p>
-          <p className="mt-2 max-w-3xl break-words text-sm leading-6 text-[#888]">
+          <p className="mt-2 max-w-3xl break-words text-sm leading-6 text-secondary">
             {node.nodeDescription}
           </p>
         </div>
         <div className="grid grid-cols-3 gap-2 text-center sm:flex sm:shrink-0 sm:flex-wrap sm:justify-end">
-          <span className="rounded border border-[#4F46E5]/20 bg-[#4F46E5]/8 px-2 py-1.5">
-            <span className="block font-mono text-[10px] uppercase tracking-widest text-[#A5B4FC]">
+          <span className="rounded border border-accent/20 bg-accent/8 px-2 py-1.5">
+            <span className="block font-mono text-[10px] uppercase tracking-widest text-accent">
               Ready
             </span>
-            <span className="text-sm font-semibold text-[#F0F0F0]">{node.readyCount}</span>
+            <span className="text-sm font-semibold text-foreground">{node.readyCount}</span>
           </span>
-          <span className="rounded border border-[#22C55E]/20 bg-[#22C55E]/8 px-2 py-1.5">
-            <span className="block font-mono text-[10px] uppercase tracking-widest text-[#86EFAC]">
+          <span className="rounded border border-success/20 bg-success/8 px-2 py-1.5">
+            <span className="block font-mono text-[10px] uppercase tracking-widest text-success">
               Done
             </span>
-            <span className="text-sm font-semibold text-[#F0F0F0]">{node.completedCount}</span>
+            <span className="text-sm font-semibold text-foreground">{node.completedCount}</span>
           </span>
-          <span className="rounded border border-[#EF4444]/20 bg-[#EF4444]/8 px-2 py-1.5">
-            <span className="block font-mono text-[10px] uppercase tracking-widest text-[#FCA5A5]">
+          <span className="rounded border border-error/20 bg-error/8 px-2 py-1.5">
+            <span className="block font-mono text-[10px] uppercase tracking-widest text-error">
               Held
             </span>
-            <span className="text-sm font-semibold text-[#F0F0F0]">
+            <span className="text-sm font-semibold text-foreground">
               {blockedCount + waitingCount}
             </span>
           </span>

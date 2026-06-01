@@ -123,7 +123,7 @@ export function VercelProjectCard({
   return (
     <form
       onSubmit={handleSubmit}
-      className="rounded-lg border border-[#1C1C1C] bg-[#080808] p-5"
+      className="rounded-lg border border-border bg-background p-5"
     >
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="max-w-2xl">
@@ -131,16 +131,16 @@ export function VercelProjectCard({
             <SectionLabel tone="warning">External action</SectionLabel>
             <StatusPill label="Creates real project" variant="warning" />
           </div>
-          <h3 className="mt-4 text-2xl font-semibold tracking-tight text-[#F0F0F0]">
+          <h3 className="mt-4 text-2xl font-semibold tracking-tight text-foreground">
             Create the Vercel deployment project.
           </h3>
-          <p className="mt-3 text-sm leading-7 text-[#888888]">
+          <p className="mt-3 text-sm leading-7 text-secondary">
             This creates a real Vercel project using a server-side Vercel token.
             The generated app contains no secrets, no custom domain, no payments,
             no emails, and no production customer data.
           </p>
           {oneLineIdea ? (
-            <p className="mt-3 rounded-md border border-[#1C1C1C] bg-[#0F0F0F] p-3 text-sm leading-6 text-[#D4D4D4]">
+            <p className="mt-3 rounded-md border border-border bg-surface p-3 text-sm leading-6 text-secondary">
               {oneLineIdea}
             </p>
           ) : null}
@@ -148,42 +148,42 @@ export function VercelProjectCard({
       </div>
 
       <label className="mt-6 block">
-        <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#888888]">
+        <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-secondary">
           Vercel project name
         </span>
         <input
           value={projectName}
           onChange={(event) => setProjectName(event.target.value)}
-          className="mt-2 w-full rounded-md border border-[#1C1C1C] bg-[#0F0F0F] px-4 py-3 text-sm text-[#F0F0F0] outline-none transition-colors placeholder:text-[#444444] focus:border-[#4F46E5]/70"
+          className="mt-2 w-full rounded-md border border-border bg-surface px-4 py-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted focus:border-accent/70"
           placeholder={defaultProjectName}
           aria-invalid={!projectNameIsValid}
         />
       </label>
 
       <div className="mt-5 grid gap-3">
-        <label className="flex gap-3 rounded-md border border-[#1C1C1C] bg-[#0F0F0F] p-4 text-sm leading-6 text-[#D4D4D4]">
+        <label className="flex gap-3 rounded-md border border-border bg-surface p-4 text-sm leading-6 text-secondary">
           <input
             type="checkbox"
             checked={prepareScaffold}
             onChange={(event) => setPrepareScaffold(event.target.checked)}
-            className="mt-1 h-4 w-4 accent-[#4F46E5]"
+            className="mt-1 h-4 w-4 accent-accent"
           />
           <span>Prepare deployable Next.js starter before creating project</span>
         </label>
-        <label className="flex gap-3 rounded-md border border-[#1C1C1C] bg-[#0F0F0F] p-4 text-sm leading-6 text-[#D4D4D4]">
+        <label className="flex gap-3 rounded-md border border-border bg-surface p-4 text-sm leading-6 text-secondary">
           <input
             type="checkbox"
             checked={attemptInitialDeployment}
             onChange={(event) => setAttemptInitialDeployment(event.target.checked)}
-            className="mt-1 h-4 w-4 accent-[#4F46E5]"
+            className="mt-1 h-4 w-4 accent-accent"
           />
           <span>Attempt initial deployment if supported</span>
         </label>
       </div>
 
-      <div className="mt-5 rounded-md border border-[#F59E0B]/30 bg-[#F59E0B]/10 p-4">
+      <div className="mt-5 rounded-md border border-warning/30 bg-warning/10 p-4">
         <StatusPill label="External action warning" variant="warning" />
-        <ul className="mt-3 space-y-2 text-sm leading-6 text-[#FDE68A]">
+        <ul className="mt-3 space-y-2 text-sm leading-6 text-warning">
           <li>This creates a real Vercel project.</li>
           <li>It uses a server-side Vercel token.</li>
           <li>It does not copy the current app&apos;s secrets.</li>
@@ -194,24 +194,24 @@ export function VercelProjectCard({
       </div>
 
       {state.status === "error" ? (
-        <div className="mt-5 rounded-md border border-[#EF4444]/30 bg-[#EF4444]/10 p-4">
+        <div className="mt-5 rounded-md border border-error/30 bg-error/10 p-4">
           <StatusPill label="Create blocked" variant="danger" />
-          <p className="mt-3 text-sm font-semibold text-[#FCA5A5]">{state.error}</p>
-          <p className="mt-2 text-sm leading-6 text-[#FECACA]">
+          <p className="mt-3 text-sm font-semibold text-error">{state.error}</p>
+          <p className="mt-2 text-sm leading-6 text-error">
             {friendlyDetailForError(state.code)}
           </p>
         </div>
       ) : null}
 
       <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm leading-6 text-[#888888]">
+        <p className="text-sm leading-6 text-secondary">
           bucks.ai will not create the project unless Vercel is approved in the
           setup queue.
         </p>
         <button
           type="submit"
           disabled={!projectNameIsValid || isLoading}
-          className="rounded-md bg-[#4F46E5] px-5 py-3 text-sm font-semibold text-[#F0F0F0] transition-colors hover:bg-[#6366F1] disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-md bg-accent px-5 py-3 text-sm font-semibold text-accent-contrast transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isLoading ? "Creating Vercel project..." : "Create Vercel project"}
         </button>

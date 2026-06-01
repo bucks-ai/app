@@ -17,32 +17,32 @@ function assetTypeLabel(type: ExecutionAsset["type"]) {
 
 export function ExecutionAssetsPanel({ assets }: ExecutionAssetsPanelProps) {
   return (
-    <div className="rounded-lg border border-[#1C1C1C] bg-[#080808] p-5">
+    <div className="rounded-lg border border-border bg-background p-5">
       <SectionLabel>External assets</SectionLabel>
       <div className="mt-4 space-y-3">
         {assets.length > 0 ? (
           assets.map((asset) => (
-            <div key={asset.id} className="rounded-md border border-[#1C1C1C] bg-[#0F0F0F] p-4">
+            <div key={asset.id} className="rounded-md border border-border bg-surface p-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
-                  <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#444444]">
+                  <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted">
                     {assetTypeLabel(asset.type)}
                   </p>
-                  <h3 className="mt-2 break-words text-sm font-semibold text-[#F0F0F0]">
+                  <h3 className="mt-2 break-words text-sm font-semibold text-foreground">
                     {asset.label}
                   </h3>
                 </div>
                 {asset.status ? <ExecutionStatusPill label={asset.status} /> : null}
               </div>
               {asset.description ? (
-                <p className="mt-3 text-sm leading-6 text-[#888888]">{asset.description}</p>
+                <p className="mt-3 text-sm leading-6 text-secondary">{asset.description}</p>
               ) : null}
               {asset.url ? (
                 <Link
                   href={asset.url}
                   target={asset.url.startsWith("http") ? "_blank" : undefined}
                   rel={asset.url.startsWith("http") ? "noreferrer" : undefined}
-                  className="mt-4 inline-flex max-w-full rounded-md border border-[#4F46E5]/35 px-3 py-2 text-sm font-semibold text-[#A5B4FC] transition-colors hover:border-[#818CF8]/70 hover:text-[#C7D2FE]"
+                  className="mt-4 inline-flex max-w-full rounded-md border border-accent/35 px-3 py-2 text-sm font-semibold text-accent transition-colors hover:border-accent/70 hover:text-accent"
                 >
                   <span className="truncate">Open asset</span>
                 </Link>
@@ -50,7 +50,7 @@ export function ExecutionAssetsPanel({ assets }: ExecutionAssetsPanelProps) {
             </div>
           ))
         ) : (
-          <p className="rounded-md border border-[#1C1C1C] bg-[#0F0F0F] p-4 text-sm leading-6 text-[#888888]">
+          <p className="rounded-md border border-border bg-surface p-4 text-sm leading-6 text-secondary">
             No external assets are recorded yet.
           </p>
         )}

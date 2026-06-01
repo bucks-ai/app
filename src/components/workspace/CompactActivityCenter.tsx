@@ -104,8 +104,8 @@ export function CompactActivityCenter({
               onClick={() => setFilter(item.key)}
               className={`shrink-0 rounded border px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-widest transition-colors ${
                 filter === item.key
-                  ? "border-[#4F46E5]/40 bg-[#4F46E5]/10 text-[#A5B4FC]"
-                  : "border-[#1C1C1C] bg-[#080808] text-[#555] hover:text-[#888]"
+                  ? "border-accent/40 bg-accent/10 text-accent"
+                  : "border-border bg-background text-muted hover:text-secondary"
               }`}
             >
               {item.label}
@@ -115,7 +115,7 @@ export function CompactActivityCenter({
       ) : null}
 
       {visible.length === 0 ? (
-        <p className="rounded border border-[#1C1C1C] bg-[#080808] px-3 py-3 text-xs leading-5 text-[#666]">
+        <p className="rounded border border-border bg-background px-3 py-3 text-xs leading-5 text-muted">
           No activity has been recorded for this view yet.
         </p>
       ) : (
@@ -128,24 +128,24 @@ export function CompactActivityCenter({
                 key={event.id}
                 type="button"
                 onClick={() => setExpandedId(expanded ? null : event.id)}
-                className="w-full rounded border border-[#1C1C1C] bg-[#080808] px-3 py-2 text-left transition-colors hover:border-[#4F46E5]/35"
+                className="w-full rounded border border-border bg-background px-3 py-2 text-left transition-colors hover:border-accent/35"
               >
                 <div className="flex items-start gap-2.5">
-                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#4F46E5]" />
+                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
-                      <p className="truncate text-xs font-medium text-[#D4D4D4]">
+                      <p className="truncate text-xs font-medium text-secondary">
                         {event.title}
                       </p>
-                      <p className="shrink-0 font-mono text-[10px] text-[#444]">
+                      <p className="shrink-0 font-mono text-[10px] text-muted">
                         {formatDate(event.createdAt)}
                       </p>
                     </div>
-                    <p className="mt-0.5 font-mono text-[10px] uppercase tracking-widest text-[#444]">
+                    <p className="mt-0.5 font-mono text-[10px] uppercase tracking-widest text-muted">
                       {event.category}
                     </p>
                     {expanded ? (
-                      <p className="mt-2 text-xs leading-5 text-[#888]">
+                      <p className="mt-2 text-xs leading-5 text-secondary">
                         {event.message && event.message !== event.title
                           ? event.message
                           : event.actor

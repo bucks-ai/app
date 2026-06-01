@@ -64,23 +64,23 @@ export function AssetQuickLinks({
         const className = compact
           ? `flex w-full items-center justify-between gap-2 rounded border px-2.5 py-2 text-left transition-colors ${
               available
-                ? "border-[#1C1C1C] bg-[#080808] hover:border-[#4F46E5]/45"
-                : "border-[#1C1C1C] bg-[#080808] opacity-55"
+                ? "border-border bg-background hover:border-accent/45"
+                : "border-border bg-background opacity-55"
             }`
           : `flex min-w-0 flex-col rounded border px-3 py-2.5 transition-colors ${
               available
-                ? "border-[#1C1C1C] bg-[#080808] hover:border-[#4F46E5]/45"
-                : "border-[#1C1C1C] bg-[#080808] opacity-55"
+                ? "border-border bg-background hover:border-accent/45"
+                : "border-border bg-background opacity-55"
             }`;
 
         const content = (
           <>
-            <span className="font-mono text-[10px] uppercase tracking-widest text-[#555]">
+            <span className="font-mono text-[10px] uppercase tracking-widest text-muted">
               {asset.label}
             </span>
             <span
               className={`min-w-0 truncate text-xs ${
-                available ? "text-[#D4D4D4]" : "text-[#555]"
+                available ? "text-secondary" : "text-muted"
               }`}
             >
               {asset.value}

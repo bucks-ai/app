@@ -29,15 +29,17 @@ type WorkspaceTabsProps = {
   activeTab: TabKey;
   onTabChange: (tab: TabKey) => void;
   badgeCounts?: Partial<Record<TabKey, number>>;
+  className?: string;
 };
 
 export function WorkspaceTabs({
   activeTab,
   onTabChange,
   badgeCounts,
+  className = "",
 }: WorkspaceTabsProps) {
   return (
-    <div className="min-w-0 flex-1 bg-[#080808]">
+    <div className={`min-w-0 flex-1 ${className}`}>
       <div className="flex overflow-x-auto px-4 sm:px-6" style={{ scrollbarWidth: "none" }}>
         {TABS.map((tab) => {
           const count = badgeCounts?.[tab.key];
@@ -49,8 +51,8 @@ export function WorkspaceTabs({
               onClick={() => onTabChange(tab.key)}
               className={`relative flex shrink-0 items-center gap-1.5 border-b-2 px-4 py-3 font-mono text-xs uppercase tracking-[0.18em] transition-colors ${
                 isActive
-                  ? "border-[#4F46E5] text-[#A5B4FC]"
-                  : "border-transparent text-[#444] hover:text-[#888]"
+                  ? "border-accent text-accent"
+                  : "border-transparent text-muted hover:text-secondary"
               }`}
             >
               {tab.label}
@@ -58,8 +60,8 @@ export function WorkspaceTabs({
                 <span
                   className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
                     tab.key === "actions"
-                      ? "bg-[#F59E0B]/20 text-[#FCD34D]"
-                      : "bg-[#4F46E5]/20 text-[#A5B4FC]"
+                      ? "bg-warning/20 text-warning"
+                      : "bg-accent/20 text-accent"
                   }`}
                 >
                   {count}

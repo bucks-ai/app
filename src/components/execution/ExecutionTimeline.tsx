@@ -35,7 +35,7 @@ export function ExecutionTimeline({ events }: ExecutionTimelineProps) {
   );
 
   return (
-    <div className="rounded-lg border border-[#1C1C1C] bg-[#080808] p-5">
+    <div className="rounded-lg border border-border bg-background p-5">
       <SectionLabel>Run history</SectionLabel>
       <div className="mt-4 space-y-3">
         {orderedEvents.length > 0 ? (
@@ -45,23 +45,23 @@ export function ExecutionTimeline({ events }: ExecutionTimelineProps) {
             return (
               <div
                 key={event.id}
-                className="rounded-md border border-[#1C1C1C] bg-[#0F0F0F] p-4"
+                className="rounded-md border border-border bg-surface p-4"
               >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
-                    <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#444444]">
+                    <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted">
                       {new Date(event.createdAt).toLocaleString()}
                     </p>
-                    <h3 className="mt-2 text-sm font-semibold text-[#F0F0F0]">
+                    <h3 className="mt-2 text-sm font-semibold text-foreground">
                       {event.title}
                     </h3>
                   </div>
                   <ExecutionStatusPill label={formatCategory(event.category)} />
                 </div>
                 {event.message && event.message !== event.title ? (
-                  <p className="mt-3 text-sm leading-6 text-[#888888]">{event.message}</p>
+                  <p className="mt-3 text-sm leading-6 text-secondary">{event.message}</p>
                 ) : null}
-                <div className="mt-3 flex flex-wrap gap-2 text-xs leading-5 text-[#666666]">
+                <div className="mt-3 flex flex-wrap gap-2 text-xs leading-5 text-muted">
                   {event.actor ? <span>Actor: {event.actor}</span> : null}
                   {event.status ? <span>Status: {event.status}</span> : null}
                   {summary ? <span className="break-words">{summary}</span> : null}
@@ -70,7 +70,7 @@ export function ExecutionTimeline({ events }: ExecutionTimelineProps) {
             );
           })
         ) : (
-          <p className="rounded-md border border-[#1C1C1C] bg-[#0F0F0F] p-4 text-sm leading-6 text-[#888888]">
+          <p className="rounded-md border border-border bg-surface p-4 text-sm leading-6 text-secondary">
             No execution events recorded yet.
           </p>
         )}

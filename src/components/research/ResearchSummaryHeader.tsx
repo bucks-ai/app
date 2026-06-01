@@ -11,29 +11,29 @@ export function ResearchSummaryHeader({ workspace }: ResearchSummaryHeaderProps)
   const nextAction = resolveResearchNextAction(workspace);
 
   return (
-    <div className="rounded-lg border border-[#1C1C1C] bg-[#0F0F0F] p-4 sm:p-5">
+    <div className="rounded-lg border border-border bg-surface p-4 sm:p-5">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#A5B4FC]">
+            <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
               Research mode
             </p>
             <ResearchStatusBadge value={summary.status} />
           </div>
-          <h2 className="mt-3 text-xl font-semibold text-[#F0F0F0]">
+          <h2 className="mt-3 text-xl font-semibold text-foreground">
             Map the opportunity before building
           </h2>
-          <p className="mt-1 max-w-2xl break-words text-sm leading-6 text-[#888]">
+          <p className="mt-1 max-w-2xl break-words text-sm leading-6 text-secondary">
             {nextAction.title}: {nextAction.description}
           </p>
         </div>
-        <div className="shrink-0 rounded border border-[#4F46E5]/30 bg-[#4F46E5]/10 px-3 py-2">
-          <p className="font-mono text-[10px] uppercase tracking-widest text-[#A5B4FC]">
+        <div className="shrink-0 rounded border border-accent/30 bg-accent/10 px-3 py-2">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-accent">
             Score
           </p>
-          <p className="mt-1 text-xl font-semibold text-[#F0F0F0]">
+          <p className="mt-1 text-xl font-semibold text-foreground">
             {summary.opportunityScore ?? "--"}
-            <span className="ml-1 text-xs text-[#666]">/100</span>
+            <span className="ml-1 text-xs text-muted">/100</span>
           </p>
         </div>
       </div>
@@ -48,12 +48,12 @@ export function ResearchSummaryHeader({ workspace }: ResearchSummaryHeaderProps)
         ].map(([label, value]) => (
           <div
             key={label}
-            className="min-w-0 rounded border border-[#1C1C1C] bg-[#080808] px-3 py-2.5"
+            className="min-w-0 rounded border border-border bg-background px-3 py-2.5"
           >
-            <p className="truncate font-mono text-[10px] uppercase tracking-widest text-[#444]">
+            <p className="truncate font-mono text-[10px] uppercase tracking-widest text-muted">
               {label}
             </p>
-            <p className="mt-1 text-lg font-semibold text-[#F0F0F0]">{value}</p>
+            <p className="mt-1 text-lg font-semibold text-foreground">{value}</p>
           </div>
         ))}
       </div>

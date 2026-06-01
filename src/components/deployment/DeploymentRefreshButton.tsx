@@ -16,7 +16,7 @@ export function DeploymentRefreshButton({
       type="button"
       onClick={onRefresh}
       disabled={loading || disabled}
-      className="inline-flex items-center justify-center rounded-md border border-[#4F46E5]/35 bg-[#4F46E5]/10 px-4 py-2.5 text-sm font-semibold text-[#A5B4FC] transition-colors hover:border-[#4F46E5]/65 hover:text-[#E0E7FF] disabled:cursor-not-allowed disabled:opacity-55"
+      className="inline-flex items-center justify-center rounded-md border border-accent/35 bg-accent/10 px-4 py-2.5 text-sm font-semibold text-accent transition-colors hover:border-accent/65 hover:text-accent disabled:cursor-not-allowed disabled:opacity-55"
     >
       {loading ? "Refreshing..." : label}
     </button>

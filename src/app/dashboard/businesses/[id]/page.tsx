@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { BusinessDetail } from "@/components/dashboard/BusinessDetail";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
+import { Navbar } from "@/components/shared/Navbar";
 import type {
   ActivityItem,
   DashboardToolPermission,
@@ -328,19 +329,19 @@ function StatePanel({
       <div className="mx-auto max-w-3xl">
         <Link
           href="/dashboard"
-          className="inline-flex text-sm font-medium text-[#A5B4FC] transition-colors hover:text-[#C7D2FE]"
+          className="inline-flex text-sm font-medium text-accent transition-colors hover:text-accent-hover"
         >
           &lt;- Back to Mission Control
         </Link>
-        <OperatorPanel className="mt-8 p-6 text-center shadow-[0_30px_140px_rgba(0,0,0,0.38)] sm:p-10">
+        <OperatorPanel className="mt-8 p-6 text-center sm:p-10">
           <div className="flex justify-center">
             <StatusPill label={label} variant={tone} />
           </div>
           <SectionLabel className="mt-6">Business detail</SectionLabel>
-          <h1 className="mt-4 text-3xl font-semibold tracking-tight text-[#F0F0F0]">
+          <h1 className="mt-4 text-3xl font-semibold tracking-tight text-foreground">
             {title}
           </h1>
-          <p className="mt-4 text-sm leading-7 text-[#888888]">{description}</p>
+          <p className="mt-4 text-sm leading-7 text-secondary">{description}</p>
           {cta ? <div className="mt-6">{cta}</div> : null}
         </OperatorPanel>
       </div>
@@ -374,7 +375,7 @@ export default async function BusinessDetailPage({
         cta={
           <Link
             href="/login"
-            className="inline-flex rounded-md bg-[#4F46E5] px-4 py-2.5 text-sm font-semibold text-[#F0F0F0] transition-colors hover:bg-[#6366F1]"
+            className="inline-flex rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-accent-contrast transition-colors hover:bg-accent-hover"
           >
             Sign in -&gt;
           </Link>
@@ -424,8 +425,9 @@ export default async function BusinessDetailPage({
   });
 
   return (
-    <DashboardShell>
+    <div className="flex min-h-screen flex-col bg-background">
+      <Navbar />
       <BusinessDetail business={dashboardBusiness} />
-    </DashboardShell>
+    </div>
   );
 }

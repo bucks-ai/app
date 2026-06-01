@@ -12,7 +12,7 @@ export function LiveAppLink({
   if (!href) {
     return (
       <span
-        className={`inline-flex items-center justify-center rounded-md border border-[#1C1C1C] bg-[#080808] px-4 py-2.5 text-sm font-semibold text-[#555] ${className}`}
+        className={`inline-flex items-center justify-center rounded-md border border-border bg-background px-4 py-2.5 text-sm font-semibold text-muted ${className}`}
       >
         Live URL pending
       </span>
@@ -24,7 +24,7 @@ export function LiveAppLink({
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className={`inline-flex items-center justify-center rounded-md border border-[#22C55E]/30 bg-[#22C55E]/12 px-4 py-2.5 text-sm font-semibold text-[#86EFAC] transition-colors hover:border-[#22C55E]/60 hover:text-[#DCFCE7] ${className}`}
+      className={`inline-flex items-center justify-center rounded-md border border-success/30 bg-success/12 px-4 py-2.5 text-sm font-semibold text-success transition-colors hover:border-success/60 hover:text-success ${className}`}
     >
       {label}
     </a>

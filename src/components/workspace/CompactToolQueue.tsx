@@ -48,21 +48,21 @@ function statusLabel(status: string) {
 
 function statusTone(status: string) {
   if (status === "blocked" || status === "rejected") {
-    return "border-[#EF4444]/30 bg-[#EF4444]/10 text-[#FCA5A5]";
+    return "border-error/30 bg-error/10 text-error";
   }
   if (status === "human_required" || status === "approval_requested") {
-    return "border-[#F59E0B]/30 bg-[#F59E0B]/10 text-[#FCD34D]";
+    return "border-warning/30 bg-warning/10 text-warning";
   }
   if (status === "approved" || status === "approved_by_founder" || status === "connected_demo") {
-    return "border-[#22C55E]/25 bg-[#22C55E]/10 text-[#86EFAC]";
+    return "border-success/25 bg-success/10 text-success";
   }
-  return "border-[#1C1C1C] bg-[#141414] text-[#888]";
+  return "border-border bg-elevated text-secondary";
 }
 
 function riskTone(risk: ToolRow["risk"]) {
-  if (risk === "critical") return "border-[#EF4444]/30 bg-[#EF4444]/10 text-[#FCA5A5]";
-  if (risk === "high" || risk === "medium") return "border-[#F59E0B]/25 bg-[#F59E0B]/10 text-[#FCD34D]";
-  return "border-[#22C55E]/25 bg-[#22C55E]/10 text-[#86EFAC]";
+  if (risk === "critical") return "border-error/30 bg-error/10 text-error";
+  if (risk === "high" || risk === "medium") return "border-warning/25 bg-warning/10 text-warning";
+  return "border-success/25 bg-success/10 text-success";
 }
 
 function buildRows(business: DashboardBusiness): ToolRow[] {
@@ -117,15 +117,15 @@ export function CompactToolQueue({
 
   if (rows.length === 0) {
     return (
-      <div className="rounded border border-[#1C1C1C] bg-[#080808] px-3 py-3">
-        <p className="text-xs leading-5 text-[#666]">
+      <div className="rounded border border-border bg-background px-3 py-3">
+        <p className="text-xs leading-5 text-muted">
           No tool approvals have been queued yet.
         </p>
         {onOpenTools ? (
           <button
             type="button"
             onClick={onOpenTools}
-            className="mt-2 font-mono text-[10px] uppercase tracking-widest text-[#A5B4FC]"
+            className="mt-2 font-mono text-[10px] uppercase tracking-widest text-accent"
           >
             Open tools
           </button>
@@ -140,7 +140,7 @@ export function CompactToolQueue({
         const expanded = expandedId === row.id;
 
         return (
-          <div key={row.id} className="rounded border border-[#1C1C1C] bg-[#080808]">
+          <div key={row.id} className="rounded border border-border bg-background">
             <button
               type="button"
               onClick={() => setExpandedId(expanded ? null : row.id)}
@@ -148,7 +148,7 @@ export function CompactToolQueue({
             >
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <p className="truncate text-xs font-semibold text-[#F0F0F0]">
+                  <p className="truncate text-xs font-semibold text-foreground">
                     {row.name}
                   </p>
                   <span
@@ -162,14 +162,14 @@ export function CompactToolQueue({
                     {row.risk}
                   </span>
                 </div>
-                <p className="mt-0.5 truncate text-xs text-[#666]">{row.purpose}</p>
+                <p className="mt-0.5 truncate text-xs text-muted">{row.purpose}</p>
               </div>
-              <span className="shrink-0 rounded border border-[#1C1C1C] bg-[#141414] px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-[#888]">
+              <span className="shrink-0 rounded border border-border bg-elevated px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-secondary">
                 {row.cta}
               </span>
             </button>
             {expanded ? (
-              <div className="border-t border-[#1C1C1C] px-3 py-2 text-xs leading-5 text-[#888]">
+              <div className="border-t border-border px-3 py-2 text-xs leading-5 text-secondary">
                 {row.purpose}
               </div>
             ) : null}
@@ -181,7 +181,7 @@ export function CompactToolQueue({
         <button
           type="button"
           onClick={onOpenTools}
-          className="w-full rounded border border-[#1C1C1C] bg-[#0F0F0F] px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-[#666] transition-colors hover:border-[#4F46E5]/35 hover:text-[#A5B4FC]"
+          className="w-full rounded border border-border bg-surface px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-muted transition-colors hover:border-accent/35 hover:text-accent"
         >
           View {rows.length - visible.length} more tools
         </button>

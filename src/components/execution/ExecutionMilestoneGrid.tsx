@@ -44,19 +44,19 @@ export function ExecutionMilestoneGrid({ milestones }: ExecutionMilestoneGridPro
       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {orderedMilestones.map((milestone) => {
           const body = (
-            <div className="h-full rounded-lg border border-[#1C1C1C] bg-[#080808] p-4 transition-colors hover:border-[#4F46E5]/50">
+            <div className="h-full rounded-lg border border-border bg-background p-4 transition-colors hover:border-accent/50">
               <div className="flex items-start justify-between gap-3">
-                <h3 className="text-sm font-semibold text-[#F0F0F0]">{milestone.label}</h3>
+                <h3 className="text-sm font-semibold text-foreground">{milestone.label}</h3>
                 <ExecutionStatusPill
                   label={statusLabel(milestone.status)}
                   status={milestone.status}
                 />
               </div>
-              <p className="mt-3 min-h-12 text-sm leading-6 text-[#888888]">
+              <p className="mt-3 min-h-12 text-sm leading-6 text-secondary">
                 {milestone.description ?? "Awaiting execution signal from the backend."}
               </p>
               {milestone.completedAt ? (
-                <p className="mt-3 font-mono text-[11px] uppercase tracking-[0.18em] text-[#444444]">
+                <p className="mt-3 font-mono text-[11px] uppercase tracking-[0.18em] text-muted">
                   {new Date(milestone.completedAt).toLocaleString()}
                 </p>
               ) : null}

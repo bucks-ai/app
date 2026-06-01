@@ -27,22 +27,22 @@ export function CommandMenuHint({ onTabChange }: CommandMenuHintProps) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="rounded border border-[#1C1C1C] bg-[#0F0F0F] px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-[#666] transition-colors hover:border-[#4F46E5]/45 hover:text-[#A5B4FC]"
+        className="rounded border border-border bg-surface px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-muted transition-colors hover:border-accent/45 hover:text-accent"
       >
         Search actions / Cmd K coming soon
       </button>
 
       {open ? (
         <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 px-4 pt-24 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-lg border border-[#1C1C1C] bg-[#0A0A0A] p-3 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-[#1C1C1C] px-2 pb-3">
-              <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-[#A5B4FC]">
+          <div className="w-full max-w-md rounded-lg border border-border bg-surface p-3 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-border px-2 pb-3">
+              <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-accent">
                 Workspace shortcuts
               </p>
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="rounded border border-[#1C1C1C] px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-[#666] hover:text-[#F0F0F0]"
+                className="rounded border border-border px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-muted hover:text-foreground"
               >
                 Close
               </button>
@@ -56,10 +56,10 @@ export function CommandMenuHint({ onTabChange }: CommandMenuHintProps) {
                     onTabChange(shortcut.tab);
                     setOpen(false);
                   }}
-                  className="flex w-full items-center justify-between rounded px-3 py-2.5 text-left text-sm text-[#D4D4D4] transition-colors hover:bg-[#141414]"
+                  className="flex w-full items-center justify-between rounded px-3 py-2.5 text-left text-sm text-secondary transition-colors hover:bg-elevated"
                 >
                   {shortcut.label}
-                  <span className="font-mono text-[10px] uppercase tracking-widest text-[#444]">
+                  <span className="font-mono text-[10px] uppercase tracking-widest text-muted">
                     Open
                   </span>
                 </button>

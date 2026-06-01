@@ -11,21 +11,21 @@ export function ActivityLog({ items }: ActivityLogProps) {
       {items.map((item) => (
         <div
           key={`${item.time}-${item.actor}-${item.event}`}
-          className="rounded-md border border-[#1C1C1C] bg-[#080808] p-4"
+          className="rounded-md border border-border bg-background p-4"
         >
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#444444]">
+              <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted">
                 {item.time}
               </p>
-              <p className="mt-2 text-sm font-medium text-[#F0F0F0]">{item.actor}</p>
+              <p className="mt-2 text-sm font-medium text-foreground">{item.actor}</p>
             </div>
             <StatusPill
               label={item.statusLabel ?? item.tone ?? "log"}
               variant={item.tone ?? "neutral"}
             />
           </div>
-          <p className="mt-3 text-sm leading-6 text-[#888888]">{item.event}</p>
+          <p className="mt-3 text-sm leading-6 text-secondary">{item.event}</p>
         </div>
       ))}
     </div>

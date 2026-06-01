@@ -39,44 +39,44 @@ export function SettingsTab({ business }: SettingsTabProps) {
   return (
     <div className="space-y-5">
       {/* Business info */}
-      <div className="rounded-lg border border-[#1C1C1C] bg-[#0F0F0F] p-4">
-        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#A5B4FC]">
+      <div className="rounded-lg border border-border bg-surface p-4">
+        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
           Business
         </p>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           <div>
-            <p className="font-mono text-[10px] uppercase tracking-widest text-[#444]">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-muted">
               Name
             </p>
-            <p className="mt-1 text-sm text-[#D4D4D4]">{business.name}</p>
+            <p className="mt-1 text-sm text-secondary">{business.name}</p>
           </div>
           <div>
-            <p className="font-mono text-[10px] uppercase tracking-widest text-[#444]">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-muted">
               Type
             </p>
-            <p className="mt-1 text-sm text-[#D4D4D4]">{business.businessType}</p>
+            <p className="mt-1 text-sm text-secondary">{business.businessType}</p>
           </div>
           <div>
-            <p className="font-mono text-[10px] uppercase tracking-widest text-[#444]">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-muted">
               Goal
             </p>
-            <p className="mt-1 text-sm text-[#D4D4D4]">{business.goal}</p>
+            <p className="mt-1 text-sm text-secondary">{business.goal}</p>
           </div>
           <div>
-            <p className="font-mono text-[10px] uppercase tracking-widest text-[#444]">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-muted">
               Created
             </p>
-            <p className="mt-1 text-sm text-[#D4D4D4]">{business.created}</p>
+            <p className="mt-1 text-sm text-secondary">{business.created}</p>
           </div>
         </div>
       </div>
 
       {/* Autonomy boundaries */}
-      <div className="rounded-lg border border-[#1C1C1C] bg-[#0F0F0F] p-4">
-        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#A5B4FC]">
+      <div className="rounded-lg border border-border bg-surface p-4">
+        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
           Safety boundaries
         </p>
-        <p className="mt-2 text-xs text-[#555]">
+        <p className="mt-2 text-xs text-muted">
           These constraints are enforced by bucks.ai and cannot be overridden by
           AI execution.
         </p>
@@ -84,14 +84,14 @@ export function SettingsTab({ business }: SettingsTabProps) {
           {AUTONOMY_BOUNDARIES.map((rule) => (
             <div
               key={rule.id}
-              className="flex items-start gap-3 rounded border border-[#1C1C1C] bg-[#080808] px-3 py-3"
+              className="flex items-start gap-3 rounded border border-border bg-background px-3 py-3"
             >
-              <div className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#22C55E]/20">
-                <div className="h-1.5 w-1.5 rounded-full bg-[#22C55E]" />
+              <div className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-success/20">
+                <div className="h-1.5 w-1.5 rounded-full bg-success" />
               </div>
               <div>
-                <p className="text-xs font-medium text-[#D4D4D4]">{rule.label}</p>
-                <p className="mt-0.5 text-xs leading-5 text-[#555]">
+                <p className="text-xs font-medium text-secondary">{rule.label}</p>
+                <p className="mt-0.5 text-xs leading-5 text-muted">
                   {rule.description}
                 </p>
               </div>

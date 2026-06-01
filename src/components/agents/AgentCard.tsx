@@ -15,13 +15,13 @@ export function AgentCard({ entry, latestRun }: AgentCardProps) {
     latestRun?.completed_at ?? latestRun?.started_at ?? latestRun?.created_at ?? null;
 
   return (
-    <article className="min-w-0 rounded-lg border border-[#1C1C1C] bg-[#0F0F0F] p-3">
+    <article className="min-w-0 rounded-lg border border-border bg-surface p-3">
       <div className="flex min-w-0 items-start justify-between gap-2">
         <div className="min-w-0">
-          <h4 className="break-words text-sm font-semibold text-[#F0F0F0]">
+          <h4 className="break-words text-sm font-semibold text-foreground">
             {template.name}
           </h4>
-          <p className="mt-1 break-words text-xs leading-5 text-[#666]">
+          <p className="mt-1 break-words text-xs leading-5 text-muted">
             {template.description}
           </p>
         </div>
@@ -30,7 +30,7 @@ export function AgentCard({ entry, latestRun }: AgentCardProps) {
         </div>
       </div>
 
-      <p className="mt-3 break-words text-xs leading-5 text-[#A3A3A3]">
+      <p className="mt-3 break-words text-xs leading-5 text-secondary">
         {template.purpose}
       </p>
 
@@ -44,7 +44,7 @@ export function AgentCard({ entry, latestRun }: AgentCardProps) {
           {capabilities.map((capability) => (
             <span
               key={capability.id}
-              className="max-w-full rounded border border-[#1C1C1C] bg-[#080808] px-2 py-1 text-[11px] text-[#888]"
+              className="max-w-full rounded border border-border bg-background px-2 py-1 text-[11px] text-secondary"
             >
               <span className="break-words">{capability.label}</span>
             </span>
@@ -52,29 +52,29 @@ export function AgentCard({ entry, latestRun }: AgentCardProps) {
         </div>
       ) : null}
 
-      <div className="mt-3 rounded border border-[#1C1C1C] bg-[#080808] px-3 py-2">
-        <p className="font-mono text-[10px] uppercase tracking-widest text-[#444]">
+      <div className="mt-3 rounded border border-border bg-background px-3 py-2">
+        <p className="font-mono text-[10px] uppercase tracking-widest text-muted">
           Runtime signal
         </p>
-        <p className="mt-1 break-words text-xs leading-5 text-[#888]">
+        <p className="mt-1 break-words text-xs leading-5 text-secondary">
           {businessStatus.statusReason}
         </p>
       </div>
 
       {latestRun ? (
-        <div className="mt-2 rounded border border-[#4F46E5]/20 bg-[#4F46E5]/8 px-3 py-2">
+        <div className="mt-2 rounded border border-accent/20 bg-accent/8 px-3 py-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="min-w-0 break-words text-xs font-semibold text-[#D4D4D4]">
+            <p className="min-w-0 break-words text-xs font-semibold text-secondary">
               {latestRun.title}
             </p>
             <AgentStatusBadge kind="run" value={latestRun.status} />
           </div>
           {latestRun.summary ? (
-            <p className="mt-1 break-words text-xs leading-5 text-[#888]">
+            <p className="mt-1 break-words text-xs leading-5 text-secondary">
               {latestRun.summary}
             </p>
           ) : null}
-          <p className="mt-2 font-mono text-[10px] uppercase tracking-widest text-[#555]">
+          <p className="mt-2 font-mono text-[10px] uppercase tracking-widest text-muted">
             {formatAgentTime(latestRunTime)}
           </p>
         </div>

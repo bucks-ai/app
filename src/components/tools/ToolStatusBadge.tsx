@@ -14,19 +14,19 @@ type ToolStatusBadgeVariant =
   | "danger";
 
 const variantClasses: Record<ToolStatusBadgeVariant, string> = {
-  preferred: "border-[#4F46E5]/35 bg-[#4F46E5]/10 text-[#A5B4FC]",
-  approved: "border-[#1C1C1C] bg-[#141414] text-[#D4D4D4]",
-  external: "border-[#F59E0B]/35 bg-[#F59E0B]/10 text-[#FCD34D]",
-  blocked: "border-[#EF4444]/35 bg-[#EF4444]/10 text-[#FCA5A5]",
-  human: "border-[#F59E0B]/35 bg-[#F59E0B]/10 text-[#FCD34D]",
-  low: "border-[#22C55E]/25 bg-[#22C55E]/10 text-[#86EFAC]",
-  medium: "border-[#F59E0B]/25 bg-[#F59E0B]/10 text-[#FDE68A]",
-  high: "border-[#F59E0B]/35 bg-[#F59E0B]/10 text-[#FCD34D]",
-  critical: "border-[#EF4444]/35 bg-[#EF4444]/10 text-[#FCA5A5]",
-  success: "border-[#22C55E]/25 bg-[#22C55E]/10 text-[#86EFAC]",
-  warning: "border-[#F59E0B]/35 bg-[#F59E0B]/10 text-[#FCD34D]",
-  neutral: "border-[#1C1C1C] bg-[#141414] text-[#888888]",
-  danger: "border-[#EF4444]/35 bg-[#EF4444]/10 text-[#FCA5A5]",
+  preferred: "border-accent/35 bg-accent/10 text-accent",
+  approved: "border-border bg-elevated text-secondary",
+  external: "border-warning/35 bg-warning/10 text-warning",
+  blocked: "border-error/35 bg-error/10 text-error",
+  human: "border-warning/35 bg-warning/10 text-warning",
+  low: "border-success/25 bg-success/10 text-success",
+  medium: "border-warning/25 bg-warning/10 text-warning",
+  high: "border-warning/35 bg-warning/10 text-warning",
+  critical: "border-error/35 bg-error/10 text-error",
+  success: "border-success/25 bg-success/10 text-success",
+  warning: "border-warning/35 bg-warning/10 text-warning",
+  neutral: "border-border bg-elevated text-secondary",
+  danger: "border-error/35 bg-error/10 text-error",
 };
 
 type ToolStatusBadgeProps = {

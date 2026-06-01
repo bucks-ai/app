@@ -71,9 +71,9 @@ function buildUnifiedActions(
 }
 
 const categoryBadge: Record<string, string> = {
-  approval: "border-[#F59E0B]/30 bg-[#F59E0B]/10 text-[#FCD34D]",
-  blocker: "border-[#EF4444]/30 bg-[#EF4444]/10 text-[#FCA5A5]",
-  next_action: "border-[#4F46E5]/30 bg-[#4F46E5]/10 text-[#A5B4FC]",
+  approval: "border-warning/30 bg-warning/10 text-warning",
+  blocker: "border-error/30 bg-error/10 text-error",
+  next_action: "border-accent/30 bg-accent/10 text-accent",
 };
 
 const categoryLabel: Record<string, string> = {
@@ -88,8 +88,8 @@ const ownerLabel: Record<string, string> = {
 };
 
 const ownerStyle: Record<string, string> = {
-  founder: "border-[#F59E0B]/25 bg-[#F59E0B]/10 text-[#FCD34D]",
-  bucks_ai: "border-[#4F46E5]/25 bg-[#4F46E5]/10 text-[#A5B4FC]",
+  founder: "border-warning/25 bg-warning/10 text-warning",
+  bucks_ai: "border-accent/25 bg-accent/10 text-accent",
 };
 
 export function ActionsTab({ business, executionStatus }: ActionsTabProps) {
@@ -97,11 +97,11 @@ export function ActionsTab({ business, executionStatus }: ActionsTabProps) {
 
   if (actions.length === 0) {
     return (
-      <div className="rounded-lg border border-[#1C1C1C] bg-[#0F0F0F] p-8 text-center">
-        <p className="font-mono text-xs uppercase tracking-[0.24em] text-[#444]">
+      <div className="rounded-lg border border-border bg-surface p-8 text-center">
+        <p className="font-mono text-xs uppercase tracking-[0.24em] text-muted">
           No pending actions
         </p>
-        <p className="mt-2 text-sm text-[#666]">
+        <p className="mt-2 text-sm text-muted">
           All current actions are complete or no inputs are needed.
         </p>
       </div>
@@ -113,12 +113,12 @@ export function ActionsTab({ business, executionStatus }: ActionsTabProps) {
       {actions.map((action) => (
         <div
           key={action.id}
-          className={`rounded-lg border bg-[#0F0F0F] p-4 ${
+          className={`rounded-lg border bg-surface p-4 ${
             action.category === "approval"
-              ? "border-[#F59E0B]/20"
+              ? "border-warning/20"
               : action.category === "blocker"
-                ? "border-[#EF4444]/20"
-                : "border-[#1C1C1C]"
+                ? "border-error/20"
+                : "border-border"
           }`}
         >
           <div className="flex flex-wrap items-start justify-between gap-2">
@@ -131,12 +131,12 @@ export function ActionsTab({ business, executionStatus }: ActionsTabProps) {
                 >
                   {categoryLabel[action.category]}
                 </span>
-                <h3 className="text-sm font-medium text-[#F0F0F0]">
+                <h3 className="text-sm font-medium text-foreground">
                   {action.title}
                 </h3>
               </div>
               {action.description ? (
-                <p className="mt-1.5 text-xs leading-5 text-[#888]">
+                <p className="mt-1.5 text-xs leading-5 text-secondary">
                   {action.description}
                 </p>
               ) : null}

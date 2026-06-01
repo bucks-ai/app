@@ -10,16 +10,13 @@ export function DashboardShell({ children }: DashboardShellProps) {
   return (
     <>
       <Navbar />
-      <main className="relative min-h-screen overflow-hidden bg-[#080808] px-5 pb-20 pt-28 sm:px-6">
+      <main className="relative min-h-screen overflow-hidden bg-background px-5 pb-20 pt-28 sm:px-6">
         <div
-          className="pointer-events-none absolute inset-0"
-          style={{
-            backgroundImage:
-              "linear-gradient(rgba(79,70,229,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(79,70,229,0.025) 1px, transparent 1px)",
-            backgroundSize: "64px 64px",
-          }}
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 top-0 h-[420px]"
+          style={{ background: "var(--glow)" }}
         />
-        <div className="relative mx-auto max-w-7xl">{children}</div>
+        <div className="relative mx-auto max-w-6xl">{children}</div>
       </main>
       <Footer />
     </>

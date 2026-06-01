@@ -33,41 +33,41 @@ function StepRow({
 }) {
   return (
     <div
-      className={`rounded-lg border bg-[#0F0F0F] ${
+      className={`rounded-lg border bg-surface ${
         status === "active"
-          ? "border-[#4F46E5]/30"
+          ? "border-accent/30"
           : status === "complete"
-            ? "border-[#22C55E]/20"
-            : "border-[#1C1C1C]"
+            ? "border-success/20"
+            : "border-border"
       }`}
     >
       <div className="flex items-center gap-3 p-4">
         <span
           className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
             status === "complete"
-              ? "bg-[#22C55E] text-[#0A0A0A]"
+              ? "bg-success text-background"
               : status === "active"
-                ? "bg-[#4F46E5] text-[#F0F0F0]"
-                : "bg-[#1C1C1C] text-[#444]"
+                ? "bg-accent text-accent-contrast"
+                : "bg-border text-muted"
           }`}
         >
           {status === "complete" ? "✓" : index}
         </span>
         <p
           className={`text-sm font-medium ${
-            status === "pending" ? "text-[#444]" : "text-[#F0F0F0]"
+            status === "pending" ? "text-muted" : "text-foreground"
           }`}
         >
           {label}
         </p>
         {status === "active" ? (
-          <span className="ml-auto rounded border border-[#4F46E5]/30 bg-[#4F46E5]/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-[#A5B4FC]">
+          <span className="ml-auto rounded border border-accent/30 bg-accent/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-accent">
             Active
           </span>
         ) : null}
       </div>
       {status === "active" && children ? (
-        <div className="border-t border-[#1C1C1C] p-4">{children}</div>
+        <div className="border-t border-border p-4">{children}</div>
       ) : null}
     </div>
   );
@@ -103,8 +103,8 @@ export function BuildTab({ business }: BuildTabProps) {
 
       <StepRow index={3} label="Scaffold prepared" status={step3Status}>
         {hasRepo ? (
-          <div className="rounded border border-[#1C1C1C] bg-[#080808] p-4">
-            <p className="text-sm text-[#888]">
+          <div className="rounded border border-border bg-background p-4">
+            <p className="text-sm text-secondary">
               Repository is ready. Scaffold preparation follows repository creation.
             </p>
             {business.githubRepo ? (
@@ -112,7 +112,7 @@ export function BuildTab({ business }: BuildTabProps) {
                 href={business.githubRepo.repoUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-3 inline-flex items-center gap-1.5 font-mono text-xs uppercase tracking-widest text-[#A5B4FC] transition-colors hover:text-[#C7D2FE]"
+                className="mt-3 inline-flex items-center gap-1.5 font-mono text-xs uppercase tracking-widest text-accent transition-colors hover:text-accent"
               >
                 View repo
               </a>

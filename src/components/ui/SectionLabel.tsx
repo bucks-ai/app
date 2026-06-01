@@ -7,9 +7,9 @@ type SectionLabelProps = {
 };
 
 const toneClasses = {
-  accent: "text-[#A5B4FC]",
-  muted: "text-[#888888]",
-  warning: "text-[#FCD34D]",
+  accent: "text-accent",
+  muted: "text-secondary",
+  warning: "text-warning",
 };
 
 export function SectionLabel({

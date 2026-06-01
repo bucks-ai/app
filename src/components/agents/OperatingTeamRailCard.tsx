@@ -63,13 +63,13 @@ export function OperatingTeamRailCard({
     : null;
 
   return (
-    <div className="rounded-lg border border-[#1C1C1C] bg-[#0F0F0F] p-4">
+    <div className="rounded-lg border border-border bg-surface p-4">
       <div className="flex items-center justify-between gap-2">
-        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#A5B4FC]">
+        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
           Team
         </p>
         {summary ? (
-          <span className="rounded border border-[#1C1C1C] bg-[#080808] px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-[#888]">
+          <span className="rounded border border-border bg-background px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-secondary">
             {summary.totalAgents} agents
           </span>
         ) : null}
@@ -77,13 +77,13 @@ export function OperatingTeamRailCard({
       <button
         type="button"
         onClick={onOpenTeam}
-        className="mt-3 w-full rounded border border-[#1C1C1C] bg-[#080808] px-3 py-2 text-left transition-colors hover:border-[#4F46E5]/45"
+        className="mt-3 w-full rounded border border-border bg-background px-3 py-2 text-left transition-colors hover:border-accent/45"
       >
-        <p className="break-words text-xs font-semibold text-[#D4D4D4]">
+        <p className="break-words text-xs font-semibold text-secondary">
           {action?.title ?? message}
         </p>
         {action ? (
-          <p className="mt-1 break-words text-xs leading-5 text-[#666]">
+          <p className="mt-1 break-words text-xs leading-5 text-muted">
             {summary?.blockedCount || summary?.waitingCount
               ? `${(summary?.blockedCount ?? 0) + (summary?.waitingCount ?? 0)} held, ${summary?.monitoringCount ?? 0} monitoring`
               : action.description}

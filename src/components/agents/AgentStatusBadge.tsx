@@ -12,43 +12,43 @@ type AgentStatusBadgeProps = {
 function badgeStyles(kind: BadgeKind, value: string) {
   if (kind === "risk") {
     if (value === "high" || value === "human_controlled") {
-      return "border-[#EF4444]/30 bg-[#EF4444]/10 text-[#FCA5A5]";
+      return "border-error/30 bg-error/10 text-error";
     }
     if (value === "medium") {
-      return "border-[#F59E0B]/30 bg-[#F59E0B]/10 text-[#FCD34D]";
+      return "border-warning/30 bg-warning/10 text-warning";
     }
-    return "border-[#22C55E]/25 bg-[#22C55E]/8 text-[#86EFAC]";
+    return "border-success/25 bg-success/8 text-success";
   }
 
   if (kind === "autonomy") {
     if (value.includes("execute")) {
-      return "border-[#F59E0B]/30 bg-[#F59E0B]/10 text-[#FCD34D]";
+      return "border-warning/30 bg-warning/10 text-warning";
     }
     if (value === "draft" || value === "suggest") {
-      return "border-[#4F46E5]/30 bg-[#4F46E5]/10 text-[#A5B4FC]";
+      return "border-accent/30 bg-accent/10 text-accent";
     }
-    return "border-[#1C1C1C] bg-[#080808] text-[#888]";
+    return "border-border bg-background text-secondary";
   }
 
   switch (value) {
     case "completed":
-      return "border-[#22C55E]/25 bg-[#22C55E]/8 text-[#86EFAC]";
+      return "border-success/25 bg-success/8 text-success";
     case "active":
     case "running":
-      return "border-[#4F46E5]/35 bg-[#4F46E5]/12 text-[#C7D2FE]";
+      return "border-accent/35 bg-accent/12 text-accent";
     case "ready":
     case "queued":
-      return "border-[#4F46E5]/25 bg-[#4F46E5]/8 text-[#A5B4FC]";
+      return "border-accent/25 bg-accent/8 text-accent";
     case "monitoring":
-      return "border-[#14B8A6]/25 bg-[#14B8A6]/8 text-[#99F6E4]";
+      return "border-success/25 bg-success/8 text-success";
     case "blocked":
     case "failed":
-      return "border-[#EF4444]/30 bg-[#EF4444]/10 text-[#FCA5A5]";
+      return "border-error/30 bg-error/10 text-error";
     case "waiting_for_approval":
     case "skipped":
-      return "border-[#F59E0B]/30 bg-[#F59E0B]/10 text-[#FCD34D]";
+      return "border-warning/30 bg-warning/10 text-warning";
     default:
-      return "border-[#1C1C1C] bg-[#080808] text-[#888]";
+      return "border-border bg-background text-secondary";
   }
 }
 

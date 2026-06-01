@@ -24,11 +24,11 @@ type ValidationStatusBadgeProps = {
 };
 
 const toneClasses: Record<BadgeTone, string> = {
-  accent: "border-[#4F46E5]/35 bg-[#4F46E5]/10 text-[#A5B4FC]",
-  success: "border-[#22C55E]/25 bg-[#22C55E]/10 text-[#86EFAC]",
-  warning: "border-[#F59E0B]/35 bg-[#F59E0B]/10 text-[#FCD34D]",
-  danger: "border-[#EF4444]/35 bg-[#EF4444]/10 text-[#FCA5A5]",
-  neutral: "border-[#1C1C1C] bg-[#141414] text-[#888]",
+  accent: "border-accent/35 bg-accent/10 text-accent",
+  success: "border-success/25 bg-success/10 text-success",
+  warning: "border-warning/35 bg-warning/10 text-warning",
+  danger: "border-error/35 bg-error/10 text-error",
+  neutral: "border-border bg-elevated text-secondary",
 };
 
 const statusTone: Record<string, BadgeTone> = {

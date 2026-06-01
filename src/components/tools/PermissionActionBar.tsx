@@ -16,32 +16,32 @@ const actions: { action: ToolPermissionAction; label: string; tone: string }[] =
   {
     action: "request_approval",
     label: "Request approval",
-    tone: "border-[#4F46E5]/45 text-[#C7D2FE] hover:border-[#6366F1] hover:text-[#F0F0F0]",
+    tone: "border-accent/45 text-accent hover:border-accent-hover hover:text-foreground",
   },
   {
     action: "approve",
     label: "Approve",
-    tone: "border-[#22C55E]/35 text-[#BBF7D0] hover:border-[#22C55E]/70 hover:text-[#F0F0F0]",
+    tone: "border-success/35 text-success hover:border-success/70 hover:text-foreground",
   },
   {
     action: "mark_human_required",
     label: "Mark human-required",
-    tone: "border-[#F59E0B]/45 text-[#FDE68A] hover:border-[#F59E0B]/70 hover:text-[#F0F0F0]",
+    tone: "border-warning/45 text-warning hover:border-warning/70 hover:text-foreground",
   },
   {
     action: "mark_demo_connected",
     label: "Mark demo connected",
-    tone: "border-[#1C1C1C] text-[#D4D4D4] hover:border-[#4F46E5]/60 hover:text-[#F0F0F0]",
+    tone: "border-border text-secondary hover:border-accent/60 hover:text-foreground",
   },
   {
     action: "reject",
     label: "Reject",
-    tone: "border-[#EF4444]/45 text-[#FCA5A5] hover:border-[#EF4444]/70 hover:text-[#F0F0F0]",
+    tone: "border-error/45 text-error hover:border-error/70 hover:text-foreground",
   },
   {
     action: "reset",
     label: "Reset",
-    tone: "border-[#1C1C1C] text-[#888888] hover:border-[#888888]/60 hover:text-[#F0F0F0]",
+    tone: "border-border text-secondary hover:border-secondary/60 hover:text-foreground",
   },
 ];
 
@@ -78,8 +78,8 @@ export function PermissionActionBar({
             type="button"
             disabled={disabled || !!busyAction}
             onClick={() => onAction(action)}
-            className={`min-h-10 rounded-md border bg-[#080808] px-3 py-2 text-left text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${tone} ${
-              active ? "bg-[#141414]" : ""
+            className={`min-h-10 rounded-md border bg-background px-3 py-2 text-left text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${tone} ${
+              active ? "bg-elevated" : ""
             }`}
           >
             {isBusy ? "Updating..." : label}

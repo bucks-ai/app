@@ -51,6 +51,9 @@ function deploymentStatusFromBusiness(
   return "no_project";
 }
 
+const assetLink =
+  "hidden items-center rounded-lg border border-border bg-elevated px-2.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-secondary transition-colors hover:border-accent/40 hover:text-accent md:inline-flex";
+
 export function WorkspaceHeader({
   business,
   executionStatus,
@@ -59,140 +62,91 @@ export function WorkspaceHeader({
   const phase = executionStatus?.currentPhase ?? "blueprint";
   const health = executionStatus?.health ?? "on_track";
   const progress = executionStatus?.progressPercent ?? 0;
-  const blockerCount = executionStatus?.blockers?.length ?? 0;
-  const pendingApprovalCount =
-    business.humanActionItems?.length ?? business.humanActions.length;
-  const latestRun = executionStatus?.timeline?.[0]?.status ?? executionStatus?.timeline?.[0]?.category;
+  const latestRun =
+    executionStatus?.timeline?.[0]?.status ?? executionStatus?.timeline?.[0]?.category;
   const deploymentStatus = deploymentStatusFromBusiness(business, executionStatus);
 
   return (
-    <div className="border-b border-[#1C1C1C] bg-[#0A0A0A] px-4 py-3 sm:px-6">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        {/* Left: back + identity */}
-        <div className="min-w-0 flex-1">
+    <div className="px-4 py-2.5 sm:px-6">
+      <div className="flex items-center justify-between gap-3">
+        {/* Left: identity */}
+        <div className="flex min-w-0 items-center gap-2.5">
           <Link
             href="/dashboard"
-            className="mb-1.5 inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.18em] text-[#444] transition-colors hover:text-[#888]"
+            aria-label="Back to Mission Control"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border text-secondary transition-colors hover:border-accent/40 hover:text-foreground"
           >
-            <span aria-hidden="true">←</span>
-            Mission Control
+            <span aria-hidden="true">&#8592;</span>
           </Link>
-          <div className="flex flex-wrap items-center gap-2.5">
-            <h1 className="truncate text-lg font-semibold tracking-tight text-[#F0F0F0]">
+          <div className="min-w-0">
+            <h1 className="truncate text-sm font-semibold tracking-tight text-foreground sm:text-base">
               {business.name}
             </h1>
-            <StatusPill
-              label={healthLabel(health)}
-              variant={healthVariant(health)}
-            />
-            <StatusPill label={phaseLabel(phase)} variant="neutral" />
+            <p className="mt-0.5 truncate font-mono text-[10px] uppercase tracking-[0.18em] text-muted">
+              {phaseLabel(phase)} &middot; {progress}%
+            </p>
+          </div>
+          <div className="ml-1 hidden items-center gap-1.5 md:flex">
+            <StatusPill label={healthLabel(health)} variant={healthVariant(health)} />
             {latestRun ? (
               <StatusPill label={`Run: ${phaseLabel(latestRun)}`} variant="accent" />
             ) : null}
             <DeploymentStatusBadge status={deploymentStatus} />
           </div>
-          {business.oneLineIdea ? (
-            <p className="mt-0.5 truncate text-[13px] text-[#666]">
-              {business.oneLineIdea}
-            </p>
-          ) : null}
         </div>
 
-        {/* Right: stats + quick assets */}
-        <div className="hidden shrink-0 items-center gap-4 lg:flex">
-          {/* Progress */}
-          <div className="text-right">
-            <p className="font-mono text-[10px] uppercase tracking-widest text-[#444]">
-              Progress
-            </p>
-            <p className="mt-0.5 text-sm font-semibold text-[#F0F0F0]">
-              {progress}%
-            </p>
-          </div>
-
-          {/* Progress bar */}
-          <div className="h-16 w-px bg-[#1C1C1C]" />
-
-          {/* Counters */}
-          <div className="flex items-center gap-3">
-            {pendingApprovalCount > 0 ? (
-              <div className="rounded border border-[#F59E0B]/30 bg-[#F59E0B]/10 px-2 py-1 text-center">
-                <p className="font-mono text-[10px] uppercase tracking-widest text-[#F59E0B]/70">
-                  Approvals
-                </p>
-                <p className="text-sm font-semibold text-[#FCD34D]">
-                  {pendingApprovalCount}
-                </p>
-              </div>
-            ) : null}
-            {blockerCount > 0 ? (
-              <div className="rounded border border-[#EF4444]/30 bg-[#EF4444]/10 px-2 py-1 text-center">
-                <p className="font-mono text-[10px] uppercase tracking-widest text-[#EF4444]/70">
-                  Blockers
-                </p>
-                <p className="text-sm font-semibold text-[#FCA5A5]">
-                  {blockerCount}
-                </p>
-              </div>
-            ) : null}
-          </div>
-
-          <div className="h-16 w-px bg-[#1C1C1C]" />
-
-          {/* Quick asset links */}
-          <div className="flex items-center gap-2">
-            {business.githubRepo ? (
-              <a
-                href={business.githubRepo.repoUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="rounded border border-[#1C1C1C] bg-[#141414] px-2.5 py-1.5 font-mono text-[11px] uppercase tracking-widest text-[#888] transition-colors hover:border-[#4F46E5]/40 hover:text-[#A5B4FC]"
-              >
-                GitHub
-              </a>
-            ) : null}
-            {business.vercelProject?.dashboardUrl ? (
-              <a
-                href={business.vercelProject.dashboardUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="rounded border border-[#1C1C1C] bg-[#141414] px-2.5 py-1.5 font-mono text-[11px] uppercase tracking-widest text-[#888] transition-colors hover:border-[#4F46E5]/40 hover:text-[#A5B4FC]"
-              >
-                Vercel
-              </a>
-            ) : null}
-            {business.vercelProject?.deploymentUrl ? (
-              <a
-                href={business.vercelProject.deploymentUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="rounded border border-[#22C55E]/30 bg-[#22C55E]/10 px-2.5 py-1.5 font-mono text-[11px] uppercase tracking-widest text-[#86EFAC] transition-colors hover:border-[#22C55E]/50"
-              >
-                Live
-              </a>
-            ) : null}
-            {!business.vercelProject?.deploymentUrl ? (
-              <span className="rounded border border-[#1C1C1C] bg-[#141414] px-2.5 py-1.5 font-mono text-[11px] uppercase tracking-widest text-[#666]">
-                {deploymentStatusLabel(deploymentStatus)}
-              </span>
-            ) : null}
-            {onBlueprintOpen ? (
-              <button
-                type="button"
-                onClick={onBlueprintOpen}
-                className="rounded border border-[#1C1C1C] bg-[#141414] px-2.5 py-1.5 font-mono text-[11px] uppercase tracking-widest text-[#888] transition-colors hover:border-[#4F46E5]/40 hover:text-[#A5B4FC]"
-              >
-                Blueprint
-              </button>
-            ) : null}
-          </div>
+        {/* Right: asset shortcuts + blueprint */}
+        <div className="flex shrink-0 items-center gap-1.5">
+          {business.githubRepo ? (
+            <a
+              href={business.githubRepo.repoUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={assetLink}
+            >
+              GitHub
+            </a>
+          ) : null}
+          {business.vercelProject?.dashboardUrl ? (
+            <a
+              href={business.vercelProject.dashboardUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={assetLink}
+            >
+              Vercel
+            </a>
+          ) : null}
+          {business.vercelProject?.deploymentUrl ? (
+            <a
+              href={business.vercelProject.deploymentUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hidden items-center rounded-lg border border-success/30 bg-success/10 px-2.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-success transition-colors hover:border-success/50 sm:inline-flex"
+            >
+              Live
+            </a>
+          ) : (
+            <span className="hidden items-center rounded-lg border border-border bg-elevated px-2.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-muted lg:inline-flex">
+              {deploymentStatusLabel(deploymentStatus)}
+            </span>
+          )}
+          {onBlueprintOpen ? (
+            <button
+              type="button"
+              onClick={onBlueprintOpen}
+              className="inline-flex items-center rounded-lg border border-border bg-elevated px-2.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-secondary transition-colors hover:border-accent/40 hover:text-accent"
+            >
+              Blueprint
+            </button>
+          ) : null}
         </div>
       </div>
 
-      {/* Progress bar strip */}
-      <div className="mt-2.5 h-0.5 w-full overflow-hidden rounded-full bg-[#1C1C1C]">
+      {/* Progress line */}
+      <div className="mt-2.5 h-0.5 w-full overflow-hidden rounded-full bg-border">
         <div
-          className="h-full rounded-full bg-[#4F46E5] transition-all duration-700"
+          className="h-full rounded-full bg-accent transition-all duration-700"
           style={{ width: `${progress}%` }}
         />
       </div>

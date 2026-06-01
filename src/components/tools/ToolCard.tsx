@@ -60,7 +60,7 @@ export function ToolCard({ tool }: { tool: ToolRegistryItem }) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <SectionLabel tone="muted">{tool.category}</SectionLabel>
-          <h3 className="mt-2 text-xl font-semibold text-[#F0F0F0]">{tool.name}</h3>
+          <h3 className="mt-2 text-xl font-semibold text-foreground">{tool.name}</h3>
         </div>
         <ToolStatusBadge
           label={tool.status}
@@ -68,11 +68,11 @@ export function ToolCard({ tool }: { tool: ToolRegistryItem }) {
         />
       </div>
 
-      <p className="mt-4 text-sm leading-6 text-[#D4D4D4]">{tool.purpose}</p>
-      <p className="mt-3 text-sm leading-6 text-[#888888]">{tool.typicalUse}</p>
+      <p className="mt-4 text-sm leading-6 text-secondary">{tool.purpose}</p>
+      <p className="mt-3 text-sm leading-6 text-secondary">{tool.typicalUse}</p>
 
       {tool.requiresPaymentSetup || tool.category === "Payments" ? (
-        <div className="mt-4 rounded-md border border-[#F59E0B]/25 bg-[#F59E0B]/10 px-3 py-2 text-sm leading-6 text-[#FDE68A]">
+        <div className="mt-4 rounded-md border border-warning/25 bg-warning/10 px-3 py-2 text-sm leading-6 text-warning">
           Payment setup and terms remain founder-controlled.
         </div>
       ) : null}
@@ -92,14 +92,14 @@ export function ToolCard({ tool }: { tool: ToolRegistryItem }) {
         />
       </div>
 
-      <div className="mt-6 grid gap-4 border-t border-[#1C1C1C] pt-5">
+      <div className="mt-6 grid gap-4 border-t border-border pt-5">
         <div>
           <SectionLabel tone="muted">Default permissions</SectionLabel>
           <ul className="mt-3 space-y-2">
             {tool.defaultPermissions.map((permission) => (
               <li
                 key={permission}
-                className="rounded-md border border-[#1C1C1C] bg-[#080808] px-3 py-2 text-sm text-[#D4D4D4]"
+                className="rounded-md border border-border bg-background px-3 py-2 text-sm text-secondary"
               >
                 {permission}
               </li>
@@ -131,7 +131,7 @@ export function ToolCard({ tool }: { tool: ToolRegistryItem }) {
               {tool.humanOnlyReasons.map((reason) => (
                 <li
                   key={reason}
-                  className="rounded-md border border-[#F59E0B]/25 bg-[#F59E0B]/10 px-3 py-2 text-sm leading-6 text-[#FDE68A]"
+                  className="rounded-md border border-warning/25 bg-warning/10 px-3 py-2 text-sm leading-6 text-warning"
                 >
                   {reason}
                 </li>

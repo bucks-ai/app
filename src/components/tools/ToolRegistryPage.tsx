@@ -31,14 +31,14 @@ function RuleList({
   return (
     <OperatorPanel className="p-6 shadow-[0_20px_70px_rgba(0,0,0,0.24)]">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-2xl font-semibold text-[#F0F0F0]">{title}</h2>
+        <h2 className="text-2xl font-semibold text-foreground">{title}</h2>
         <ToolStatusBadge label={badge} variant="warning" />
       </div>
       <ul className="mt-5 space-y-3">
         {items.map((item) => (
           <li
             key={item}
-            className="rounded-md border border-[#F59E0B]/20 bg-[#F59E0B]/10 px-4 py-3 text-sm leading-6 text-[#FDE68A]"
+            className="rounded-md border border-warning/20 bg-warning/10 px-4 py-3 text-sm leading-6 text-warning"
           >
             {item}
           </li>
@@ -67,10 +67,10 @@ function PermissionSetupSection({
         <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <SectionLabel>Permission Setup</SectionLabel>
-            <h2 className="mt-3 text-3xl font-semibold tracking-tight text-[#F0F0F0]">
+            <h2 className="mt-3 text-3xl font-semibold tracking-tight text-foreground">
               Generate a blueprint to create a setup queue
             </h2>
-            <p className="mt-3 max-w-3xl text-sm leading-7 text-[#888888]">
+            <p className="mt-3 max-w-3xl text-sm leading-7 text-secondary">
               Tool permissions attach to saved business projects. Create a
               blueprint first, then bucks.ai can show the approvals needed for
               that specific operating plan.
@@ -78,7 +78,7 @@ function PermissionSetupSection({
           </div>
           <Link
             href="/intake"
-            className="rounded-md bg-[#4F46E5] px-4 py-3 text-center text-sm font-semibold text-[#F0F0F0] transition-colors hover:bg-[#6366F1]"
+            className="rounded-md bg-accent px-4 py-3 text-center text-sm font-semibold text-accent-contrast transition-colors hover:bg-accent-hover"
           >
             Generate a blueprint to create a setup queue -&gt;
           </Link>
@@ -95,7 +95,7 @@ function PermissionSetupSection({
             label={authState === "supabase_missing" ? "Supabase setup required" : "Business load failed"}
             variant="warning"
           />
-          <p className="mt-3 text-sm leading-6 text-[#888888]">
+          <p className="mt-3 text-sm leading-6 text-secondary">
             {loadError ??
               "Saved businesses are not available in this environment, so the permission layer is shown as a demo preview."}
           </p>
@@ -122,7 +122,7 @@ export function ToolRegistryPage({
   return (
     <>
       <Navbar />
-      <main className="relative min-h-screen overflow-hidden bg-[#080808] px-5 pb-20 pt-28 sm:px-6">
+      <main className="relative min-h-screen overflow-hidden bg-background px-5 pb-20 pt-28 sm:px-6">
         <div
           className="pointer-events-none absolute inset-0"
           style={{
@@ -138,16 +138,16 @@ export function ToolRegistryPage({
                 <SectionLabel>Permission Layer</SectionLabel>
                 <ToolStatusBadge label="Frontend-only foundation" variant="neutral" />
               </div>
-              <h1 className="mt-5 text-4xl font-semibold tracking-tight text-[#F0F0F0] sm:text-5xl">
+              <h1 className="mt-5 text-4xl font-semibold tracking-tight text-foreground sm:text-5xl">
                 Every tool, the right permission.
               </h1>
-              <p className="mt-5 max-w-3xl text-base leading-8 text-[#888888] sm:text-lg">
+              <p className="mt-5 max-w-3xl text-base leading-8 text-secondary sm:text-lg">
                 bucks.ai prefers a trusted operating stack, but it can request
                 external tools only when needed, and escalates anything
                 involving legal, identity, payments, contracts, or live-client
                 commitments.
               </p>
-              <p className="mt-3 max-w-3xl text-sm leading-7 text-[#666666]">
+              <p className="mt-3 max-w-3xl text-sm leading-7 text-muted">
                 Counts below are registry categories for the prototype, not
                 traction claims.
               </p>
@@ -190,10 +190,10 @@ export function ToolRegistryPage({
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <SectionLabel>Trusted default stack</SectionLabel>
-                <h2 className="mt-2 text-3xl font-semibold tracking-tight text-[#F0F0F0]">
+                <h2 className="mt-2 text-3xl font-semibold tracking-tight text-foreground">
                   Preferred Tools
                 </h2>
-                <p className="mt-3 max-w-3xl text-sm leading-7 text-[#888888] sm:text-base">
+                <p className="mt-3 max-w-3xl text-sm leading-7 text-secondary sm:text-base">
                   The first 15 tools are marked as preferred because they map
                   cleanly to bucks.ai&apos;s default code, deployment, growth,
                   and monitoring workflows.
@@ -213,10 +213,10 @@ export function ToolRegistryPage({
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <SectionLabel>Expanded operating surface</SectionLabel>
-                <h2 className="mt-2 text-3xl font-semibold tracking-tight text-[#F0F0F0]">
+                <h2 className="mt-2 text-3xl font-semibold tracking-tight text-foreground">
                   Extended Tools
                 </h2>
-                <p className="mt-3 max-w-3xl text-sm leading-7 text-[#888888] sm:text-base">
+                <p className="mt-3 max-w-3xl text-sm leading-7 text-secondary sm:text-base">
                   These tools expand the operating surface when the founder
                   needs more options, while still making blocked, approval-only,
                   and human-only paths explicit.
@@ -247,33 +247,33 @@ export function ToolRegistryPage({
                 items={autonomyConstitution.mustEscalateActions}
               />
               <OperatorPanel className="p-6 shadow-[0_20px_70px_rgba(0,0,0,0.24)]">
-                <h2 className="text-2xl font-semibold text-[#F0F0F0]">
+                <h2 className="text-2xl font-semibold text-foreground">
                   Outreach limits
                 </h2>
                 <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                  <div className="rounded-lg border border-[#1C1C1C] bg-[#080808] p-4">
+                  <div className="rounded-lg border border-border bg-background p-4">
                     <SectionLabel tone="muted">Cold emails / day</SectionLabel>
-                    <p className="mt-2 text-3xl font-semibold text-[#F0F0F0]">
+                    <p className="mt-2 text-3xl font-semibold text-foreground">
                       {autonomyConstitution.maxColdEmailsPerDay}
                     </p>
                   </div>
-                  <div className="rounded-lg border border-[#1C1C1C] bg-[#080808] p-4">
+                  <div className="rounded-lg border border-border bg-background p-4">
                     <SectionLabel tone="muted">DMs / day</SectionLabel>
-                    <p className="mt-2 text-3xl font-semibold text-[#F0F0F0]">
+                    <p className="mt-2 text-3xl font-semibold text-foreground">
                       {autonomyConstitution.maxDMsPerDay}
                     </p>
                   </div>
                 </div>
                 <div className="mt-5 space-y-3">
-                  <div className="flex items-center justify-between gap-3 rounded-md border border-[#1C1C1C] bg-[#080808] px-4 py-3">
-                    <span className="text-sm text-[#D4D4D4]">Staging deploys</span>
+                  <div className="flex items-center justify-between gap-3 rounded-md border border-border bg-background px-4 py-3">
+                    <span className="text-sm text-secondary">Staging deploys</span>
                     <ToolStatusBadge
                       label={autonomyConstitution.canDeployStaging ? "Allowed" : "Blocked"}
                       variant={autonomyConstitution.canDeployStaging ? "success" : "danger"}
                     />
                   </div>
-                  <div className="flex items-center justify-between gap-3 rounded-md border border-[#1C1C1C] bg-[#080808] px-4 py-3">
-                    <span className="text-sm text-[#D4D4D4]">
+                  <div className="flex items-center justify-between gap-3 rounded-md border border-border bg-background px-4 py-3">
+                    <span className="text-sm text-secondary">
                       Production deploys when tests pass
                     </span>
                     <ToolStatusBadge

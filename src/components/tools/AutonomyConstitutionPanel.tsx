@@ -47,13 +47,13 @@ export function AutonomyConstitutionPanel({
 
   return (
     <OperatorPanel className="p-6 shadow-[0_30px_120px_rgba(0,0,0,0.35)] sm:p-8">
-      <div className="flex flex-col gap-4 border-b border-[#1C1C1C] pb-6">
+      <div className="flex flex-col gap-4 border-b border-border pb-6">
         <SectionLabel>Default constitution</SectionLabel>
         <div>
-          <h2 className="text-3xl font-semibold tracking-tight text-[#F0F0F0]">
+          <h2 className="text-3xl font-semibold tracking-tight text-foreground">
             Autonomy Constitution
           </h2>
-          <p className="mt-3 max-w-3xl text-sm leading-7 text-[#888888] sm:text-base">
+          <p className="mt-3 max-w-3xl text-sm leading-7 text-secondary sm:text-base">
             bucks.ai can execute aggressively inside clearly defined limits. The
             constitution below keeps spend, outreach, deployments, sales, and
             legal actions inside a founder-approved operating envelope.
@@ -86,10 +86,10 @@ export function AutonomyConstitutionPanel({
         {groupedRules.map(({ category, rules }) => (
           <div
             key={category}
-            className="rounded-lg border border-[#1C1C1C] bg-[#080808] p-5 sm:p-6"
+            className="rounded-lg border border-border bg-background p-5 sm:p-6"
           >
             <div className="flex items-center justify-between gap-3">
-              <h3 className="text-lg font-semibold text-[#F0F0F0]">
+              <h3 className="text-lg font-semibold text-foreground">
                 {getCategoryLabel(category)}
               </h3>
               <ToolStatusBadge label={`${rules.length} rules`} variant="neutral" />
@@ -98,14 +98,14 @@ export function AutonomyConstitutionPanel({
               {rules.map((rule) => (
                 <div
                   key={rule.id}
-                  className="rounded-md border border-[#1C1C1C] bg-[#0F0F0F] p-4"
+                  className="rounded-md border border-border bg-surface p-4"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <p className="text-sm font-semibold text-[#F0F0F0]">
+                      <p className="text-sm font-semibold text-foreground">
                         {rule.title}
                       </p>
-                      <p className="mt-2 text-sm leading-6 text-[#888888]">
+                      <p className="mt-2 text-sm leading-6 text-secondary">
                         {rule.description}
                       </p>
                     </div>

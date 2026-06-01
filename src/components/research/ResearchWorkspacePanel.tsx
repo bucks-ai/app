@@ -79,10 +79,10 @@ export function ResearchWorkspacePanel({ businessId }: ResearchWorkspacePanelPro
   if (loadState === "loading") {
     return (
       <div className="space-y-3">
-        <div className="h-36 animate-pulse rounded-lg border border-[#1C1C1C] bg-[#0F0F0F]" />
+        <div className="h-36 animate-pulse rounded-lg border border-border bg-surface" />
         <div className="grid gap-3 lg:grid-cols-2">
-          <div className="h-52 animate-pulse rounded-lg border border-[#1C1C1C] bg-[#0F0F0F]" />
-          <div className="h-52 animate-pulse rounded-lg border border-[#1C1C1C] bg-[#0F0F0F]" />
+          <div className="h-52 animate-pulse rounded-lg border border-border bg-surface" />
+          <div className="h-52 animate-pulse rounded-lg border border-border bg-surface" />
         </div>
       </div>
     );
@@ -90,17 +90,17 @@ export function ResearchWorkspacePanel({ businessId }: ResearchWorkspacePanelPro
 
   if (loadState === "error") {
     return (
-      <div className="rounded-lg border border-[#EF4444]/25 bg-[#EF4444]/8 p-5">
-        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#FCA5A5]">
+      <div className="rounded-lg border border-error/25 bg-error/8 p-5">
+        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-error">
           Research unavailable
         </p>
-        <p className="mt-3 text-sm leading-6 text-[#FECACA]">
+        <p className="mt-3 text-sm leading-6 text-error">
           {message ?? "Research could not be loaded."}
         </p>
         <button
           type="button"
           onClick={() => void loadWorkspace()}
-          className="mt-4 rounded-md border border-[#EF4444]/35 bg-[#080808] px-3 py-2 text-xs font-semibold text-[#FCA5A5] transition-colors hover:border-[#EF4444]/60"
+          className="mt-4 rounded-md border border-error/35 bg-background px-3 py-2 text-xs font-semibold text-error transition-colors hover:border-error/60"
         >
           Retry
         </button>

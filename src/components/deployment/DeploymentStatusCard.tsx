@@ -146,12 +146,12 @@ export function DeploymentStatusCard({
               <DeploymentStatusBadge status="manual_action_required" />
             ) : null}
           </div>
-          <h2 className="mt-4 text-2xl font-semibold tracking-tight text-[#F0F0F0]">
+          <h2 className="mt-4 text-2xl font-semibold tracking-tight text-foreground">
             {hasProject
               ? view.projectName ?? "Vercel project"
               : "No Vercel project yet"}
           </h2>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-[#888]">
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-secondary">
             {loadState === "loading"
               ? "Checking the latest deployment state."
               : statusCopy(view)}
@@ -166,14 +166,14 @@ export function DeploymentStatusCard({
               href={view.dashboardUrl ?? undefined}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex w-full items-center justify-center rounded-md border border-[#EF4444]/35 bg-[#EF4444]/10 px-4 py-2.5 text-sm font-semibold text-[#FCA5A5] transition-colors hover:border-[#EF4444]/60 hover:text-[#FECACA] sm:w-auto"
+              className="inline-flex w-full items-center justify-center rounded-md border border-error/35 bg-error/10 px-4 py-2.5 text-sm font-semibold text-error transition-colors hover:border-error/60 hover:text-error sm:w-auto"
             >
               Open Vercel
             </a>
           ) : view.status === "no_project" ? (
             <a
               href="#deployment-execution"
-              className="inline-flex w-full items-center justify-center rounded-md border border-[#1C1C1C] bg-[#080808] px-4 py-2.5 text-sm font-semibold text-[#D4D4D4] transition-colors hover:border-[#4F46E5]/50 hover:text-[#F0F0F0] sm:w-auto"
+              className="inline-flex w-full items-center justify-center rounded-md border border-border bg-background px-4 py-2.5 text-sm font-semibold text-secondary transition-colors hover:border-accent/50 hover:text-foreground sm:w-auto"
             >
               Create project
             </a>
@@ -187,16 +187,16 @@ export function DeploymentStatusCard({
       </div>
 
       <div className="mt-5 grid gap-2 md:grid-cols-3">
-        <div className="min-w-0 rounded border border-[#1C1C1C] bg-[#080808] px-3 py-2.5">
-          <p className="font-mono text-[10px] uppercase tracking-widest text-[#444]">
+        <div className="min-w-0 rounded border border-border bg-background px-3 py-2.5">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-muted">
             Status
           </p>
-          <p className="mt-1 truncate text-sm font-semibold text-[#D4D4D4]">
+          <p className="mt-1 truncate text-sm font-semibold text-secondary">
             {deploymentStatusLabel(view.status)}
           </p>
         </div>
-        <div className="min-w-0 rounded border border-[#1C1C1C] bg-[#080808] px-3 py-2.5">
-          <p className="font-mono text-[10px] uppercase tracking-widest text-[#444]">
+        <div className="min-w-0 rounded border border-border bg-background px-3 py-2.5">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-muted">
             Live URL
           </p>
           {view.liveUrl ? (
@@ -204,21 +204,21 @@ export function DeploymentStatusCard({
               href={view.liveUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-1 block truncate text-sm font-semibold text-[#86EFAC] hover:text-[#DCFCE7]"
+              className="mt-1 block truncate text-sm font-semibold text-success hover:text-success"
             >
               {view.liveUrl}
             </a>
           ) : (
-            <p className="mt-1 truncate text-sm font-semibold text-[#555]">
+            <p className="mt-1 truncate text-sm font-semibold text-muted">
               {hasProject ? "Deployment pending" : "Not available"}
             </p>
           )}
         </div>
-        <div className="min-w-0 rounded border border-[#1C1C1C] bg-[#080808] px-3 py-2.5">
-          <p className="font-mono text-[10px] uppercase tracking-widest text-[#444]">
+        <div className="min-w-0 rounded border border-border bg-background px-3 py-2.5">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-muted">
             Latest checked
           </p>
-          <p className="mt-1 truncate text-sm font-semibold text-[#D4D4D4]">
+          <p className="mt-1 truncate text-sm font-semibold text-secondary">
             {formatTimestamp(view.latestCheckedAt)}
           </p>
         </div>
@@ -229,7 +229,7 @@ export function DeploymentStatusCard({
           href={view.dashboardUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="mt-3 inline-flex max-w-full truncate font-mono text-[11px] uppercase tracking-widest text-[#888] transition-colors hover:text-[#A5B4FC]"
+          className="mt-3 inline-flex max-w-full truncate font-mono text-[11px] uppercase tracking-widest text-secondary transition-colors hover:text-accent"
         >
           Vercel dashboard
         </a>
@@ -239,8 +239,8 @@ export function DeploymentStatusCard({
         <div
           className={`mt-4 rounded border px-3 py-2 text-sm leading-6 ${
             loadState === "error"
-              ? "border-[#EF4444]/30 bg-[#EF4444]/10 text-[#FECACA]"
-              : "border-[#F59E0B]/30 bg-[#F59E0B]/10 text-[#FDE68A]"
+              ? "border-error/30 bg-error/10 text-error"
+              : "border-warning/30 bg-warning/10 text-warning"
           }`}
         >
           {message}
@@ -248,11 +248,11 @@ export function DeploymentStatusCard({
       ) : null}
 
       {view.warnings.length > 0 ? (
-        <div className="mt-4 rounded border border-[#F59E0B]/25 bg-[#F59E0B]/8 px-3 py-2">
-          <p className="font-mono text-[10px] uppercase tracking-widest text-[#FCD34D]">
+        <div className="mt-4 rounded border border-warning/25 bg-warning/8 px-3 py-2">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-warning">
             Warnings
           </p>
-          <ul className="mt-2 space-y-1 text-sm leading-6 text-[#FDE68A]">
+          <ul className="mt-2 space-y-1 text-sm leading-6 text-warning">
             {view.warnings.map((warning) => (
               <li key={warning}>{warning}</li>
             ))}

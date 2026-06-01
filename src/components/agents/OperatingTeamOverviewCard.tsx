@@ -63,15 +63,15 @@ export function OperatingTeamOverviewCard({
     : null;
 
   return (
-    <div className="rounded-lg border border-[#1C1C1C] bg-[#0F0F0F] p-4">
+    <div className="rounded-lg border border-border bg-surface p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#A5B4FC]">
+        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
           Operating Team
         </p>
         <button
           type="button"
           onClick={onOpenTeam}
-          className="font-mono text-[10px] uppercase tracking-widest text-[#444] transition-colors hover:text-[#888]"
+          className="font-mono text-[10px] uppercase tracking-widest text-muted transition-colors hover:text-secondary"
         >
           Open
         </button>
@@ -80,39 +80,39 @@ export function OperatingTeamOverviewCard({
       {summary ? (
         <div className="mt-3 space-y-3">
           <div className="grid grid-cols-3 gap-2">
-            <span className="rounded border border-[#1C1C1C] bg-[#080808] px-2.5 py-2">
-              <span className="block font-mono text-[10px] uppercase tracking-widest text-[#444]">
+            <span className="rounded border border-border bg-background px-2.5 py-2">
+              <span className="block font-mono text-[10px] uppercase tracking-widest text-muted">
                 Agents
               </span>
-              <span className="text-sm font-semibold text-[#F0F0F0]">
+              <span className="text-sm font-semibold text-foreground">
                 {summary.totalAgents}
               </span>
             </span>
-            <span className="rounded border border-[#22C55E]/20 bg-[#22C55E]/8 px-2.5 py-2">
-              <span className="block font-mono text-[10px] uppercase tracking-widest text-[#86EFAC]">
+            <span className="rounded border border-success/20 bg-success/8 px-2.5 py-2">
+              <span className="block font-mono text-[10px] uppercase tracking-widest text-success">
                 Done
               </span>
-              <span className="text-sm font-semibold text-[#F0F0F0]">
+              <span className="text-sm font-semibold text-foreground">
                 {summary.completedCount}
               </span>
             </span>
-            <span className="rounded border border-[#EF4444]/20 bg-[#EF4444]/8 px-2.5 py-2">
-              <span className="block font-mono text-[10px] uppercase tracking-widest text-[#FCA5A5]">
+            <span className="rounded border border-error/20 bg-error/8 px-2.5 py-2">
+              <span className="block font-mono text-[10px] uppercase tracking-widest text-error">
                 Held
               </span>
-              <span className="text-sm font-semibold text-[#F0F0F0]">
+              <span className="text-sm font-semibold text-foreground">
                 {summary.blockedCount + summary.waitingCount}
               </span>
             </span>
           </div>
           {action ? (
-            <p className="break-words text-sm leading-6 text-[#D4D4D4]">
-              {action.title}: <span className="text-[#888]">{action.description}</span>
+            <p className="break-words text-sm leading-6 text-secondary">
+              {action.title}: <span className="text-secondary">{action.description}</span>
             </p>
           ) : null}
         </div>
       ) : (
-        <p className="mt-3 break-words text-sm leading-6 text-[#666]">{message}</p>
+        <p className="mt-3 break-words text-sm leading-6 text-muted">{message}</p>
       )}
     </div>
   );
