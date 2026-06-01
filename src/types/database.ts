@@ -79,6 +79,29 @@ export interface ToolPermissionRecord {
   updated_at: string;
 }
 
+// Agent Runs v1 — mirrors public.agent_runs in supabase/agent-runs.sql
+export interface AgentRunDatabaseRecord {
+  id: string;
+  business_id: string;
+  user_id: string;
+  agent_id: string;
+  node_id: string;
+  title: string;
+  summary: string | null;
+  status: string;
+  source: string;
+  trigger: string | null;
+  input: Record<string, unknown>;
+  output: Record<string, unknown>;
+  artifacts: Record<string, unknown>[];
+  error: Record<string, unknown> | null;
+  related_activity_log_ids: string[];
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // ---------------------------------------------------------------------------
 // Insert types — fields required when creating a new row.
 // Defined as flat interfaces (not intersections) so Supabase's generic
@@ -139,6 +162,25 @@ export interface NewToolPermissionInput {
   permissions?: string[];
 }
 
+export interface NewAgentRunInput {
+  business_id: string;
+  user_id: string;
+  agent_id: string;
+  node_id: string;
+  title: string;
+  summary?: string | null;
+  status?: string;
+  source?: string;
+  trigger?: string | null;
+  input?: Record<string, unknown>;
+  output?: Record<string, unknown>;
+  artifacts?: Record<string, unknown>[];
+  error?: Record<string, unknown> | null;
+  related_activity_log_ids?: string[];
+  started_at?: string | null;
+  completed_at?: string | null;
+}
+
 // ---------------------------------------------------------------------------
 // Supabase Database generic type (used by createClient<Database>)
 // ---------------------------------------------------------------------------
@@ -175,6 +217,11 @@ export type Database = {
         Row: ToolPermissionRecord;
         Insert: NewToolPermissionInput;
         Update: Partial<ToolPermissionRecord>;
+      };
+      agent_runs: {
+        Row: AgentRunDatabaseRecord;
+        Insert: NewAgentRunInput;
+        Update: Partial<AgentRunDatabaseRecord>;
       };
     };
     Views: Record<string, never>;

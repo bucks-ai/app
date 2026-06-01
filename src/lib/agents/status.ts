@@ -5,6 +5,12 @@
 //
 // Status inference uses activity logs as the primary signal so this module
 // works even when validation/research schemas have not yet been applied.
+//
+// Agent Runs v1 enhancement:
+// When the agent_runs table is available, the latest run per agent is used to
+// surface the "active" and "waiting_for_approval" statuses that cannot be
+// inferred from activity logs alone. If the table is missing the resolver
+// falls back to the existing activity-log-based logic transparently.
 
 import {
   getBusinessById,
@@ -39,6 +45,7 @@ import type {
 import type { ToolPermissionView } from "@/types/tool-permissions";
 import type { GitHubRepoMetadata } from "@/lib/github/repo-metadata";
 import type { VercelProjectMetadata } from "@/lib/vercel/project-metadata";
+import { getAgentRunsForBusiness } from "@/lib/agents/runs";
 
 // ---------------------------------------------------------------------------
 // Result wrapper
@@ -67,6 +74,9 @@ interface AgentStatusContext {
   humanActions: HumanRequiredActionRecord[];
   githubRepo: GitHubRepoMetadata | null;
   vercelProject: VercelProjectMetadata | null;
+  // Keyed by agent_id — null if no run exists for that agent.
+  // Undefined means agent_runs table was not available; fall back to existing logic.
+  latestRunByAgent?: Record<string, { status: string } | null>;
 }
 
 // ---------------------------------------------------------------------------
@@ -453,6 +463,19 @@ export function resolveAgentStatusForBusiness(
     }
   }
 
+  // Agent Runs v1 enhancement — override status when a run signals active execution
+  // or a pending approval that activity logs cannot capture.
+  const latestRun = ctx.latestRunByAgent?.[agent.id];
+  if (latestRun) {
+    if (latestRun.status === "running") {
+      status = "active";
+      statusReason = "Agent is currently executing.";
+    } else if (latestRun.status === "waiting_for_approval") {
+      status = "waiting_for_approval";
+      statusReason = "Awaiting founder approval to proceed.";
+    }
+  }
+
   return {
     agentId: agent.id,
     status,
@@ -531,6 +554,7 @@ export async function getAgentRegistryForBusiness(
     humanActionsResult,
     githubRepoResult,
     vercelProjectResult,
+    agentRunsResult,
   ] = await Promise.all([
     getLatestBlueprintForBusiness(businessId),
     getToolPermissionsForBusiness(businessId),
@@ -538,6 +562,7 @@ export async function getAgentRegistryForBusiness(
     getHumanRequiredActions(businessId),
     getLatestGitHubRepoForBusiness(businessId),
     getLatestVercelProjectForBusiness(businessId),
+    getAgentRunsForBusiness(businessId),
   ]);
 
   if (toolPermissionsResult.error || !toolPermissionsResult.data) {
@@ -559,6 +584,19 @@ export async function getAgentRegistryForBusiness(
     );
   }
 
+  // Build a per-agent latest-run map when agent_runs is available.
+  // Runs are returned sorted created_at DESC, so the first occurrence per agent_id is latest.
+  // If the table is missing, leave undefined so the resolver falls back gracefully.
+  let latestRunByAgent: Record<string, { status: string } | null> | undefined;
+  if (agentRunsResult.data && agentRunsResult.code !== "agent_runs_schema_missing") {
+    latestRunByAgent = {};
+    for (const run of agentRunsResult.data) {
+      if (!(run.agent_id in latestRunByAgent)) {
+        latestRunByAgent[run.agent_id] = { status: run.status };
+      }
+    }
+  }
+
   const ctx: AgentStatusContext = {
     blueprint: blueprintResult.data ?? null,
     toolPermissions: toolPermissionsResult.data,
@@ -566,6 +604,7 @@ export async function getAgentRegistryForBusiness(
     humanActions: humanActionsResult.data,
     githubRepo: githubRepoResult.data ?? null,
     vercelProject: vercelProjectResult.data ?? null,
+    latestRunByAgent,
   };
 
   const templates = getAllAgentTemplates();

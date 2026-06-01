@@ -40,6 +40,7 @@ export interface ExecutionTimelineEvent {
     | "human"
     | "validation"
     | "research"
+    | "agent"
     | "system"
     | "other";
 }

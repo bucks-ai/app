@@ -67,6 +67,16 @@ export function categorizeActivityLog(
     return "research";
   }
 
+  if (
+    activityType === "agent_run_created" ||
+    activityType === "agent_run_started" ||
+    activityType === "agent_run_completed" ||
+    activityType === "agent_run_failed" ||
+    activityType.startsWith("agent_run_")
+  ) {
+    return "agent";
+  }
+
   if (activityType.startsWith("system_") || activityType === "agent_activity") {
     return "system";
   }
