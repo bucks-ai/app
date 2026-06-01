@@ -44,3 +44,15 @@ next-env.d.ts
 # Local AI/editor/build artifacts
 .claude/
 .next/
+
+# Autonomous Development Runner
+runner/langgraph/.venv/
+runner/langgraph/.env
+runner/langgraph/__pycache__/
+runner/langgraph/**/__pycache__/
+runner/langgraph/logs/*.jsonl
+runner/langgraph/outbox/*
+runner/langgraph/inbox/*
+!runner/langgraph/outbox/.gitkeep
+!runner/langgraph/inbox/.gitkeep
+!runner/langgraph/logs/.gitkeep
