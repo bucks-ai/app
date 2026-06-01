@@ -8,11 +8,13 @@ import type { DeploymentStatus } from "@/types/deployment-ui";
 import { AssetQuickLinks } from "@/components/workspace/AssetQuickLinks";
 import { CompactActivityCenter } from "@/components/workspace/CompactActivityCenter";
 import { CompactToolQueue } from "@/components/workspace/CompactToolQueue";
-import { resolvePrimaryNextAction } from "@/components/workspace/next-action";
+import {
+  resolvePrimaryNextAction,
+  type WorkspaceAgentState,
+} from "@/components/workspace/next-action";
 import { ResearchRailCard } from "@/components/research/ResearchRailCard";
 import { ValidationRailCard } from "@/components/validation/ValidationRailCard";
 import { OperatingTeamRailCard } from "@/components/agents/OperatingTeamRailCard";
-import type { WorkspaceAgentState } from "@/components/workspace/next-action";
 
 type TabKey =
   | "overview"
@@ -56,8 +58,7 @@ export function WorkspaceRightRail({
 }: WorkspaceRightRailProps) {
   const nextActions = executionStatus?.nextActions ?? [];
   const blockers = executionStatus?.blockers ?? [];
-  const pendingApprovals =
-    business.humanActionItems ?? [];
+  const pendingApprovals = business.humanActionItems ?? [];
   const primaryAction = resolvePrimaryNextAction(business, executionStatus, agentState);
   const deploymentStatus = deploymentStatusFromBusiness(business, executionStatus);
 

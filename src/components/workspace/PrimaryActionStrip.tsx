@@ -37,7 +37,7 @@ export function PrimaryActionStrip({
   const action = resolvePrimaryNextAction(business, executionStatus, agentState);
   const blockerCount = executionStatus?.blockers?.length ?? 0;
   const pendingApprovals =
-    (business.humanActionItems?.length ?? business.humanActions.length);
+    business.humanActionItems?.length ?? business.humanActions.length;
   const latestActivity = executionStatus?.timeline?.[0];
 
   return (

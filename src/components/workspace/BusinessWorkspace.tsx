@@ -159,12 +159,12 @@ export function BusinessWorkspace({
 
       <div className="sticky top-0 z-30 bg-[#080808]/95 backdrop-blur">
         {/* Primary action strip */}
-          <PrimaryActionStrip
-            business={business}
-            executionStatus={executionStatus}
-            agentState={agentState}
-            onTabChange={handleTabChange}
-          />
+        <PrimaryActionStrip
+          business={business}
+          executionStatus={executionStatus}
+          agentState={agentState}
+          onTabChange={handleTabChange}
+        />
 
         <div className="flex items-center justify-between gap-3 border-b border-[#1C1C1C] bg-[#080808] pr-4 sm:pr-6">
           {/* Tab bar */}

@@ -181,20 +181,22 @@ export function OverviewTab({
         ) : null}
       </div>
 
-      <ValidationOverviewCard
-        businessId={business.id}
-        onOpenValidation={() => onTabChange("validation")}
-      />
+      <div className="grid gap-4 xl:grid-cols-3">
+        <ValidationOverviewCard
+          businessId={business.id}
+          onOpenValidation={() => onTabChange("validation")}
+        />
 
-      <ResearchOverviewCard
-        businessId={business.id}
-        onOpenResearch={() => onTabChange("research")}
-      />
+        <ResearchOverviewCard
+          businessId={business.id}
+          onOpenResearch={() => onTabChange("research")}
+        />
 
-      <OperatingTeamOverviewCard
-        businessId={business.id}
-        onOpenTeam={() => onTabChange("team")}
-      />
+        <OperatingTeamOverviewCard
+          businessId={business.id}
+          onOpenTeam={() => onTabChange("team")}
+        />
+      </div>
 
       <div className="rounded-lg border border-[#1C1C1C] bg-[#0F0F0F] p-4">
         <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#A5B4FC]">
@@ -233,27 +235,27 @@ export function OverviewTab({
         </div>
 
         <div className="rounded-lg border border-[#1C1C1C] bg-[#0F0F0F] p-4">
-            <div className="flex items-center justify-between">
-              <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#A5B4FC]">
-                Latest activity
-              </p>
-              <button
-                type="button"
-                onClick={() => onTabChange("activity")}
-                className="font-mono text-[10px] uppercase tracking-widest text-[#444] transition-colors hover:text-[#888]"
-              >
-                All
-              </button>
-            </div>
-            <div className="mt-3">
-              <CompactActivityCenter
-                business={business}
-                executionStatus={executionStatus}
-                maxRows={4}
-                compact
-              />
-            </div>
+          <div className="flex items-center justify-between">
+            <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#A5B4FC]">
+              Latest activity
+            </p>
+            <button
+              type="button"
+              onClick={() => onTabChange("activity")}
+              className="font-mono text-[10px] uppercase tracking-widest text-[#444] transition-colors hover:text-[#888]"
+            >
+              All
+            </button>
           </div>
+          <div className="mt-3">
+            <CompactActivityCenter
+              business={business}
+              executionStatus={executionStatus}
+              maxRows={4}
+              compact
+            />
+          </div>
+        </div>
       </div>
     </div>
   );
