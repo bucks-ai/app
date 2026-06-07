@@ -133,7 +133,7 @@ Tasks are stored in `.runtime/tasks.local.json` (gitignored, local only). Add ta
 ]
 ```
 
-Task types: `ui`, `frontend`, `polish` → Codex. Everything else → Claude.
+Task types: `ui`, `frontend`, `polish`, and `design` route to Codex. Everything else routes to Claude.
 
 Codex UI tasks should always use feature branches so UI work can be checked before it reaches `main`.
 
