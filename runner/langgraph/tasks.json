@@ -1,10 +1,12 @@
 [
   {
-    "id": "operating-team-ui",
-    "title": "Build Operating Team UI",
-    "type": "ui",
-    "preferred_worker": "codex",
-    "branch": "feature/operating-team-ui",
-    "status": "queued"
+    "id": "test-runner-docs",
+    "title": "Add runner smoke test note",
+    "type": "docs",
+    "preferred_worker": "claude",
+    "branch": "feature/test-runner-docs",
+    "status": "running",
+    "description": "Add a short note to the LangGraph runner README explaining how to run a safe one-task smoke test. Do not modify app code.",
+    "updated_at": "2026-06-07T19:50:38.327397"
   }
 ]
