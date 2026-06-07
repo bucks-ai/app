@@ -1,12 +1,12 @@
 [
   {
-    "id": "test-runner-docs",
-    "title": "Add runner smoke test note",
+    "id": "runner-fix-branch-safety",
+    "title": "Add branch safety guard to LangGraph runner docs/state handling",
     "type": "docs",
     "preferred_worker": "claude",
-    "branch": "feature/test-runner-docs",
+    "branch": "feature/runner-branch-safety-docs",
     "status": "running",
-    "description": "Add a short note to the LangGraph runner README explaining how to run a safe one-task smoke test. Do not modify app code.",
-    "updated_at": "2026-06-07T19:50:38.327397"
+    "description": "Update runner/langgraph/README.md to explicitly state that generated tasks must never use branch main directly. Add a note that task branches should use feature/<task-id> and AUTO_APPLY_SQL should stay false until SQL parsing is verified. Do not modify app code.",
+    "updated_at": "2026-06-07T20:09:45.289762"
   }
 ]

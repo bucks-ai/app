@@ -1,33 +1,24 @@
 {
   "status": "running",
-  "current_task_id": "test-runner-docs",
+  "current_task_id": "runner-fix-branch-safety",
   "current_worker": "claude",
-  "current_branch": null,
-  "last_completed_step": "run_checks_if_needed",
-  "last_commit": null,
-  "loop_count": 1,
+  "current_branch": "feature/test-runner-docs",
+  "last_completed_step": "generate_worker_prompt",
+  "last_commit": "fb1a04a Complete: Add runner smoke test note",
+  "loop_count": 2,
   "started_at": "2026-06-07T19:47:40.138479",
-  "updated_at": "2026-06-07T19:54:05.593889",
+  "updated_at": "2026-06-07T20:09:45.288774",
   "error": null,
   "current_task": {
-    "id": "test-runner-docs",
-    "title": "Add runner smoke test note",
+    "id": "runner-fix-branch-safety",
+    "title": "Add branch safety guard to LangGraph runner docs/state handling",
     "type": "docs",
     "preferred_worker": "claude",
-    "branch": "feature/test-runner-docs",
+    "branch": "feature/runner-branch-safety-docs",
     "status": "queued",
-    "description": "Add a short note to the LangGraph runner README explaining how to run a safe one-task smoke test. Do not modify app code."
+    "description": "Update runner/langgraph/README.md to explicitly state that generated tasks must never use branch main directly. Add a note that task branches should use feature/<task-id> and AUTO_APPLY_SQL should stay false until SQL parsing is verified. Do not modify app code."
   },
-  "worker_result": {
-    "worker": "claude",
-    "mode": "cli",
-    "success": true,
-    "output": "---\n\n**Summary**\n\n- **Files Created:** (none)\n- **Files Modified:**\n  - `runner/langgraph/README.md` \u2014 added \"Smoke Test\" section with step-by-step checklist, expected outcomes table, and outbox/manual mode note\n- **Check Result:** pass\n- **Commit Result:** `c63c239` (merge commit on main); feature commit `c3fd73b`\n- **Push Result:** done (main pushed to origin)\n- **SQL Required:** no\n- **SQL File Path:** N/A\n- **Known Limitations:**\n  - `deploy` remote is not configured \u2014 Vercel deploy step skipped (not a blocker)\n- **Next Task:** Add a `SMOKE_TEST.md` standalone doc or a CI workflow that automates the smoke test steps; alternatively, add a `python main.py smoke-test` command to `main.py` that runs the checklist programmatically",
-    "error": null,
-    "prompt_written": false,
-    "prompt_path": "/home/arnavt/bucks-ai/runner/langgraph/outbox/test-runner-docs_prompt.txt",
-    "response_path": null
-  },
+  "worker_result": null,
   "worker_summary": {
     "files_created": [],
     "files_modified": [],
@@ -41,7 +32,7 @@
     "next_task_hints": [],
     "raw_length": 739
   },
-  "check_passed": true,
+  "check_passed": null,
   "sql_scan": null,
   "messages": [
     {
@@ -55,6 +46,10 @@
     {
       "role": "assistant",
       "content": "---\n\n**Summary**\n\n- **Files Created:** (none)\n- **Files Modified:**\n  - `runner/langgraph/README.md` \u2014 added \"Smoke Test\" section with step-by-step checklist, expected outcomes table, and outbox/manual mode note\n- **Check Result:** pass\n- **Commit Result:** `c63c239` (merge commit on main); feature commit `c3fd73b`\n- **Push Result:** done (main pushed to origin)\n- **SQL Required:** no\n- **SQL File Path:** N/A\n- **Known Limitations:**\n  - `deploy` remote is not configured \u2014 Vercel deploy step skipped (not a blocker)\n- **Next Task:** Add a `SMOKE_TEST.md` standalone doc or a CI workflow that automates the smoke test steps; alternatively, add a `python main.py smoke-test` command to `main.py` that runs the checklist programmatically"
+    },
+    {
+      "role": "user",
+      "content": "You are working inside the bucks.ai repo at /home/arnavt/bucks-ai.\n\nTask: Add branch safety guard to LangGraph runner docs/state handling\nType: docs\nBranch: feature/runner-branch-safety-docs\n\nComplete this task fully. When done, output a structured summary including:\n- Files Created: (bullet list)\n- Files Modified: (bullet list)\n- Check Result: pass/fail\n- Commit Result: (sha or skipped)\n- Push Result: (done or skipped)\n- SQL Required: yes/no\n- SQL File Path: (if applicable)\n- Known Limitations: (bullet list)\n- Next Task: (suggestions)\n"
     }
   ],
   "stop_reason": "no_more_tasks"
