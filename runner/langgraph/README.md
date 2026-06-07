@@ -32,7 +32,7 @@ LangGraph loop controller
 
 - Task `branch` field must always follow the pattern `feature/<task-id>` (e.g. `feature/operating-team-ui`).
 - The runner creates the branch, commits worker output to it, and merges back to `main` only after `check.sh` passes.
-- **Early guard (load_next_task):** If a task's `branch` field is set to a protected branch name (`main`, `master`, `dev`, `develop`, `production`, `release`), the runner rewrites it to `feature/<task-id>` before any worker prompt is generated. A `branch_rewritten` log event is emitted.
+- **Early guard (load_next_task):** If a task's `branch` field is set to a protected branch name (`main`, `master`, `dev`, `develop`, `production`, `release`), the runner rewrites it to `feature/<task-id>` before any worker prompt is generated. The rewritten branch is immediately persisted back to `tasks.json` so the queue reflects the correct branch name. Two log events are emitted: `branch_rewritten` (before persist) and `branch_rewrite_persisted` (after persist).
 - **Late guard (commit_push_merge_if_needed):** As a backstop, the runner also refuses to commit/push/merge to any protected branch and logs an `error` event. Reaching this guard indicates a misconfiguration — the early guard should have already corrected the branch.
 - `AUTO_APPLY_SQL` should remain `false` until the SQL scanner (`sql_guard.py`) has been validated against your schema — unexpected migrations on `main` are irreversible.
 
@@ -147,7 +147,7 @@ Append-only JSONL flight recorder. Each line is a JSON event:
 {"event_type": "task_loaded", "timestamp": "...", "task_id": "...", "payload": {...}}
 ```
 
-Event types: `task_started`, `task_loaded`, `branch_rewritten`, `prompt_generated`, `planner_started`, `planner_finished`, `worker_started`, `worker_finished`, `summary_captured`, `check_started`, `check_passed`, `check_failed`, `branch_created`, `commit_created`, `push_completed`, `merge_started`, `merge_completed`, `deploy_started`, `deploy_completed`, `sql_detected`, `sql_scan_passed`, `sql_scan_blocked`, `sql_applied`, `next_task_requested`, `loop_stopped`, `error`
+Event types: `task_started`, `task_loaded`, `branch_rewritten`, `branch_rewrite_persisted`, `prompt_generated`, `planner_started`, `planner_finished`, `worker_started`, `worker_finished`, `summary_captured`, `check_started`, `check_passed`, `check_failed`, `branch_created`, `commit_created`, `push_completed`, `merge_started`, `merge_completed`, `deploy_started`, `deploy_completed`, `sql_detected`, `sql_scan_passed`, `sql_scan_blocked`, `sql_applied`, `next_task_requested`, `loop_stopped`, `error`
 
 ---
 
@@ -225,7 +225,7 @@ Allowed with warnings: `DROP TABLE IF EXISTS`, `DROP POLICY IF EXISTS`, `DROP TR
 
 ## LangGraph Nodes
 
-1. `load_next_task` — fetch next queued task from tasks.json; rewrites protected branch names to `feature/<task-id>` before dispatch
+1. `load_next_task` — fetch next queued task from tasks.json; rewrites protected branch names to `feature/<task-id>` and persists the rewritten branch back to tasks.json before dispatch
 2. `ask_chatgpt_for_task_if_needed` — ask ChatGPT for next task if queue empty
 3. `choose_worker` — route to Claude or Codex based on task type
 4. `generate_worker_prompt` — build structured prompt for worker

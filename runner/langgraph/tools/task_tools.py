@@ -70,6 +70,16 @@ def mark_task_failed(task_id: str, error: str):
     save_tasks(tasks)
 
 
+def update_task_branch(task_id: str, branch: str):
+    """Persist a rewritten branch name back to tasks.json for the given task."""
+    tasks = load_tasks()
+    for task in tasks:
+        if task["id"] == task_id:
+            task["branch"] = branch
+            task["updated_at"] = datetime.utcnow().isoformat()
+    save_tasks(tasks)
+
+
 def add_task(task: dict):
     tasks = load_tasks()
     if "id" not in task:

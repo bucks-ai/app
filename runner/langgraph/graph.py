@@ -15,6 +15,7 @@ from tools.task_tools import (
     mark_task_complete,
     mark_task_failed,
     add_task,
+    update_task_branch,
 )
 from tools.summary_tools import parse_worker_summary
 from tools.git_tools import (
@@ -87,6 +88,11 @@ def load_next_task(state: RunnerState) -> RunnerState:
             }, task_id=task["id"])
             task = dict(task)
             task["branch"] = safe_branch
+            update_task_branch(task["id"], safe_branch)
+            log_event("branch_rewrite_persisted", {
+                "task_id": task["id"],
+                "branch": safe_branch,
+            }, task_id=task["id"])
         state.current_task = task
         state.current_task_id = task["id"]
         log_event("task_loaded", {"task": task}, task_id=task["id"])
