@@ -33,6 +33,8 @@ def cmd_setup(args):
         p.mkdir(exist_ok=True)
         (p / ".gitkeep").touch()
 
+    (Path(__file__).parent / ".runtime").mkdir(exist_ok=True)
+
     print("=== bucks.ai Autonomous Development Runner — Setup ===")
     report = cfg.report()
     for key, val in report.items():

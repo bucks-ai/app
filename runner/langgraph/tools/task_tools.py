@@ -5,7 +5,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-_tasks_path = Path(__file__).parent.parent / "tasks.json"
+_tasks_path = Path(__file__).parent.parent / ".runtime" / "tasks.local.json"
+_tasks_path_legacy = Path(__file__).parent.parent / "tasks.json"
 
 _DEFAULT_TASKS = [
     {
@@ -20,8 +21,14 @@ _DEFAULT_TASKS = [
 
 
 def _ensure_tasks_file():
+    _tasks_path.parent.mkdir(parents=True, exist_ok=True)
     if not _tasks_path.exists():
-        _tasks_path.write_text(json.dumps(_DEFAULT_TASKS, indent=2))
+        # Migrate legacy tasks.json → .runtime/tasks.local.json on first run
+        if _tasks_path_legacy.exists():
+            import shutil
+            shutil.copy2(_tasks_path_legacy, _tasks_path)
+        else:
+            _tasks_path.write_text(json.dumps(_DEFAULT_TASKS, indent=2))
 
 
 def load_tasks() -> list[dict]:

@@ -6,12 +6,17 @@ from pathlib import Path
 
 _runner_dir = Path(__file__).parent.parent
 _logs_path = _runner_dir / "logs" / "runs.jsonl"
-_state_path = _runner_dir / "state.json"
+_state_path = _runner_dir / ".runtime" / "state.local.json"
+_state_path_legacy = _runner_dir / "state.json"
 
 
 def _ensure_dirs():
     _logs_path.parent.mkdir(parents=True, exist_ok=True)
     _state_path.parent.mkdir(parents=True, exist_ok=True)
+    # Migrate legacy state.json → .runtime/state.local.json on first run
+    if not _state_path.exists() and _state_path_legacy.exists():
+        import shutil
+        shutil.copy2(_state_path_legacy, _state_path)
 
 
 def new_event(event_type: str, payload: dict, task_id: str = None) -> dict:

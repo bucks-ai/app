@@ -56,3 +56,7 @@ runner/langgraph/inbox/*
 !runner/langgraph/outbox/.gitkeep
 !runner/langgraph/inbox/.gitkeep
 !runner/langgraph/logs/.gitkeep
+# Runtime state (local only, not committed)
+runner/langgraph/.runtime/
+runner/langgraph/state.json
+runner/langgraph/tasks.json

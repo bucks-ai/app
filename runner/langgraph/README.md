@@ -21,8 +21,8 @@ LangGraph loop controller
 ```
 
 **Flight recorder:** `logs/runs.jsonl`
-**Loop state:** `state.json`
-**Task queue:** `tasks.json`
+**Loop state:** `.runtime/state.local.json` (local only, gitignored)
+**Task queue:** `.runtime/tasks.local.json` (local only, gitignored)
 
 ---
 
@@ -32,7 +32,7 @@ LangGraph loop controller
 
 - Task `branch` field must always follow the pattern `feature/<task-id>` (e.g. `feature/operating-team-ui`).
 - The runner creates the branch, commits worker output to it, and merges back to `main` only after `check.sh` passes.
-- **Early guard (load_next_task):** If a task's `branch` field is set to a protected branch name (`main`, `master`, `dev`, `develop`, `production`, `release`), the runner rewrites it to `feature/<task-id>` before any worker prompt is generated. The rewritten branch is immediately persisted back to `tasks.json` so the queue reflects the correct branch name. Two log events are emitted: `branch_rewritten` (before persist) and `branch_rewrite_persisted` (after persist).
+- **Early guard (load_next_task):** If a task's `branch` field is set to a protected branch name (`main`, `master`, `dev`, `develop`, `production`, `release`), the runner rewrites it to `feature/<task-id>` before any worker prompt is generated. The rewritten branch is immediately persisted back to `.runtime/tasks.local.json` so the queue reflects the correct branch name. Two log events are emitted: `branch_rewritten` (before persist) and `branch_rewrite_persisted` (after persist).
 - **Late guard (commit_push_merge_if_needed):** As a backstop, the runner also refuses to commit/push/merge to any protected branch and logs an `error` event. Reaching this guard indicates a misconfiguration — the early guard should have already corrected the branch.
 - `AUTO_APPLY_SQL` should remain `false` until the SQL scanner (`sql_guard.py`) has been validated against your schema — unexpected migrations on `main` are irreversible.
 
@@ -95,7 +95,7 @@ Copy `.env.example` to `.env` and fill in:
 
 ```bash
 python main.py setup           # Validate config, create folders/files
-python main.py status          # Print current state.json
+python main.py status          # Print current .runtime/state.local.json
 python main.py next-task       # Print next queued task
 python main.py run-once        # Run one full LangGraph cycle
 python main.py run-loop        # Run continuous autonomous loop
@@ -116,9 +116,9 @@ python main.py run-loop
 
 ---
 
-## tasks.json Queue
+## Task Queue
 
-Add tasks manually or let ChatGPT generate them:
+Tasks are stored in `.runtime/tasks.local.json` (gitignored, local only). Add tasks manually or let ChatGPT generate them:
 
 ```json
 [
@@ -139,6 +139,8 @@ Codex UI tasks should always use feature branches so UI work can be checked befo
 
 > **Branch safety rule:** Tasks must **never** set `"branch": "main"`. Every task must use a feature branch in the form `feature/<task-id>`. The runner will create, push, and merge this branch automatically — writing to `main` directly bypasses all safety checks and will corrupt the loop state.
 
+On first run, the runner migrates any existing `tasks.json` to `.runtime/tasks.local.json` automatically.
+
 ---
 
 ## logs/runs.jsonl
@@ -153,9 +155,9 @@ Event types: `task_started`, `task_loaded`, `branch_rewritten`, `branch_rewrite_
 
 ---
 
-## state.json
+## .runtime/state.local.json
 
-Current loop state, updated after every node. Safe to inspect mid-run:
+Current loop state, updated after every node. Stored in `.runtime/state.local.json` (gitignored). Safe to inspect mid-run:
 
 ```json
 {
@@ -166,6 +168,8 @@ Current loop state, updated after every node. Safe to inspect mid-run:
   ...
 }
 ```
+
+On first run, the runner migrates any existing `state.json` to `.runtime/state.local.json` automatically.
 
 ---
 
@@ -227,7 +231,7 @@ Allowed with warnings: `DROP TABLE IF EXISTS`, `DROP POLICY IF EXISTS`, `DROP TR
 
 ## LangGraph Nodes
 
-1. `load_next_task` — fetch next queued task from tasks.json; rewrites protected branch names to `feature/<task-id>` and persists the rewritten branch back to tasks.json before dispatch
+1. `load_next_task` — fetch next queued task from `.runtime/tasks.local.json`; rewrites protected branch names to `feature/<task-id>` and persists the rewritten branch back to the task queue before dispatch
 2. `ask_chatgpt_for_task_if_needed` — ask ChatGPT for next task if queue empty
 3. `choose_worker` — route to Claude or Codex based on task type
 4. `generate_worker_prompt` — build structured prompt for worker
@@ -255,7 +259,7 @@ source .venv/bin/activate
 # 1. Validate config and create required files/folders
 python main.py setup
 
-# 2. Confirm state.json is readable
+# 2. Confirm .runtime/state.local.json is readable
 python main.py status
 
 # 3. Add a test task to tasks.json and confirm it appears
