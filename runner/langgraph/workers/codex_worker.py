@@ -24,8 +24,11 @@ class CodexWorker(BaseWorker):
 
     def _run_cli(self, prompt: str, task_id: str) -> WorkerResult:
         path = self._write_outbox(task_id, prompt)
-        cmd = ["codex", "--approval-mode", "full-auto", "--quiet", prompt]
-        r = run_command(cmd, timeout=600)
+        # Use `codex exec` subcommand for non-interactive execution.
+        # Pass prompt via stdin ("-") to avoid ARG_MAX limits and escaping issues.
+        # --dangerously-bypass-approvals-and-sandbox replaces the old --approval-mode full-auto.
+        cmd = ["codex", "exec", "--dangerously-bypass-approvals-and-sandbox", "-"]
+        r = run_command(cmd, stdin_data=prompt, timeout=600)
         return WorkerResult(
             worker="codex",
             mode="cli",
