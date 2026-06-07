@@ -1,12 +1,12 @@
 [
   {
-    "id": "runner-fix-codex-cli-invocation",
-    "title": "Fix Codex CLI invocation compatibility",
-    "type": "backend",
-    "preferred_worker": "claude",
-    "branch": "feature/runner-fix-codex-cli-invocation",
+    "id": "codex-smoke-ui-doc",
+    "title": "Codex smoke test UI documentation",
+    "type": "ui",
+    "preferred_worker": "codex",
+    "branch": "feature/codex-smoke-ui-doc",
     "status": "running",
-    "description": "Update the LangGraph runner's Codex worker invocation so it matches the installed Codex CLI syntax. The current call fails with: unexpected argument '--approval-mode' found. Inspect codex --help and codex exec --help if available, remove or replace unsupported flags, and make the runner fall back to outbox mode with a clear error if Codex invocation fails. Add README notes. Do not modify app UI.",
-    "updated_at": "2026-06-07T21:08:36.127473"
+    "description": "Make a tiny documentation-only change in runner/langgraph/README.md adding one sentence that Codex UI tasks should use feature branches. Do not modify app UI or backend code.",
+    "updated_at": "2026-06-07T21:26:56.394896"
   }
 ]
