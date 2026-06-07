@@ -135,6 +135,8 @@ Add tasks manually or let ChatGPT generate them:
 
 Task types: `ui`, `frontend`, `polish` → Codex. Everything else → Claude.
 
+Codex UI tasks should always use feature branches so UI work can be checked before it reaches `main`.
+
 > **Branch safety rule:** Tasks must **never** set `"branch": "main"`. Every task must use a feature branch in the form `feature/<task-id>`. The runner will create, push, and merge this branch automatically — writing to `main` directly bypasses all safety checks and will corrupt the loop state.
 
 ---
