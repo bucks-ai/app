@@ -37,6 +37,10 @@ from workers.codex_worker import CodexWorker
 
 cfg = get_config()
 
+_PROTECTED_BRANCHES = frozenset({
+    "main", "master", "dev", "develop", "production", "release",
+})
+
 _TASK_PROMPT_TEMPLATE = """You are working inside the bucks.ai repo at {repo_path}.
 
 Task: {title}
@@ -72,6 +76,17 @@ def _persist(state: RunnerState, step: str) -> RunnerState:
 def load_next_task(state: RunnerState) -> RunnerState:
     task = get_next_queued_task()
     if task:
+        branch = task.get("branch") or f"feature/{task['id']}"
+        if branch.lower() in _PROTECTED_BRANCHES:
+            safe_branch = f"feature/{task['id']}"
+            log_event("branch_rewritten", {
+                "task_id": task["id"],
+                "original_branch": branch,
+                "rewritten_branch": safe_branch,
+                "reason": f"'{branch}' is a protected branch; rewritten to '{safe_branch}'",
+            }, task_id=task["id"])
+            task = dict(task)
+            task["branch"] = safe_branch
         state.current_task = task
         state.current_task_id = task["id"]
         log_event("task_loaded", {"task": task}, task_id=task["id"])
@@ -179,8 +194,10 @@ def commit_push_merge_if_needed(state: RunnerState) -> RunnerState:
 
     branch = task.get("branch", f"feature/{task.get('id', 'task')}")
 
-    # Branch safety guard: never commit/push/merge directly to main or master
-    if branch.lower() in ("main", "master"):
+    # Late branch safety guard: block commit/push/merge to any protected branch.
+    # The early guard in load_next_task should have already rewritten protected
+    # branches, so reaching here with one indicates a misconfiguration.
+    if branch.lower() in _PROTECTED_BRANCHES:
         log_event("error", {
             "task_id": state.current_task_id,
             "error": f"Branch safety guard: task branch '{branch}' is not allowed. Tasks must use a feature branch (e.g. feature/<task-id>).",
