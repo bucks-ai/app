@@ -1,12 +1,12 @@
 [
   {
-    "id": "runner-fix-branch-safety",
-    "title": "Add branch safety guard to LangGraph runner docs/state handling",
-    "type": "docs",
+    "id": "runner-persist-rewritten-branch",
+    "title": "Persist rewritten branch back to tasks.json",
+    "type": "backend",
     "preferred_worker": "claude",
-    "branch": "feature/runner-branch-safety-docs",
+    "branch": "feature/runner-persist-rewritten-branch",
     "status": "running",
-    "description": "Update runner/langgraph/README.md to explicitly state that generated tasks must never use branch main directly. Add a note that task branches should use feature/<task-id> and AUTO_APPLY_SQL should stay false until SQL parsing is verified. Do not modify app code.",
-    "updated_at": "2026-06-07T20:09:45.289762"
+    "description": "Update the LangGraph runner so when the early branch guard rewrites a protected branch such as main, master, dev, develop, production, or release to feature/<task-id>, the rewritten branch is persisted back to tasks.json before worker dispatch. Add a log event or clear message showing the branch rewrite was persisted. Update README docs. Do not modify app UI.",
+    "updated_at": "2026-06-07T20:46:18.212039"
   }
 ]
