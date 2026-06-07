@@ -26,6 +26,17 @@ LangGraph loop controller
 
 ---
 
+## Branch Safety
+
+> **All generated tasks must operate on a feature branch — never on `main`.**
+
+- Task `branch` field must always follow the pattern `feature/<task-id>` (e.g. `feature/operating-team-ui`).
+- The runner creates the branch, commits worker output to it, and merges back to `main` only after `check.sh` passes.
+- Setting `"branch": "main"` in a task skips the branch/merge safety layer and is **not supported**.
+- `AUTO_APPLY_SQL` should remain `false` until the SQL scanner (`sql_guard.py`) has been validated against your schema — unexpected migrations on `main` are irreversible.
+
+---
+
 ## Roles
 
 | Component | Role |
@@ -75,7 +86,7 @@ Copy `.env.example` to `.env` and fill in:
 | `MAX_RUNTIME_MINUTES` | Max runtime (default: 480) |
 | `AUTO_MERGE` | Auto-merge on check pass (default: true) |
 | `AUTO_DEPLOY` | Auto-trigger Vercel (default: true) |
-| `AUTO_APPLY_SQL` | Auto-apply scanned SQL (default: true) |
+| `AUTO_APPLY_SQL` | Auto-apply scanned SQL (default: true) — **keep false until SQL parsing is verified** |
 
 ---
 
@@ -122,6 +133,8 @@ Add tasks manually or let ChatGPT generate them:
 ```
 
 Task types: `ui`, `frontend`, `polish` → Codex. Everything else → Claude.
+
+> **Branch safety rule:** Tasks must **never** set `"branch": "main"`. Every task must use a feature branch in the form `feature/<task-id>`. The runner will create, push, and merge this branch automatically — writing to `main` directly bypasses all safety checks and will corrupt the loop state.
 
 ---
 
