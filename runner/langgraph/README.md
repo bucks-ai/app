@@ -228,6 +228,44 @@ Allowed with warnings: `DROP TABLE IF EXISTS`, `DROP POLICY IF EXISTS`, `DROP TR
 
 ---
 
+## Smoke Test
+
+After initial setup, run through this checklist to verify the runner is working end-to-end:
+
+```bash
+cd runner/langgraph
+source .venv/bin/activate
+
+# 1. Validate config and create required files/folders
+python main.py setup
+
+# 2. Confirm state.json is readable
+python main.py status
+
+# 3. Add a test task to tasks.json and confirm it appears
+python main.py next-task
+
+# 4. Run a single cycle (uses outbox mode if claude/codex are not on PATH)
+python main.py run-once
+
+# 5. Check logs to confirm an event was recorded
+python main.py logs --tail 10
+```
+
+**Expected outcomes:**
+
+| Step | Pass condition |
+|------|---------------|
+| `setup` | Prints "Setup complete", no errors |
+| `status` | Prints valid JSON with a `status` field |
+| `next-task` | Prints queued task or "No tasks queued" |
+| `run-once` | Completes without Python traceback; logs a `task_started` event |
+| `logs` | Shows at least one JSONL event line |
+
+**Outbox / manual mode note:** If `claude` and `codex` are not on PATH, `run-once` will write a prompt to `outbox/<task_id>_prompt.txt` and wait. Place a response in `inbox/<task_id>_response.txt` to let the cycle finish. This is expected behavior — not a failure.
+
+---
+
 ## Known Limitations
 
 - Claude CLI (`claude`) must be on PATH for automatic Claude execution. Otherwise outbox/manual mode.
