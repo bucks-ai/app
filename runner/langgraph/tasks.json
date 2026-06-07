@@ -1,12 +1,12 @@
 [
   {
-    "id": "runner-fix-branch-safety",
-    "title": "Add branch safety guard to LangGraph runner docs/state handling",
-    "type": "docs",
+    "id": "runner-runtime-safety-guards",
+    "title": "Add runtime branch and SQL summary safety guards",
+    "type": "backend",
     "preferred_worker": "claude",
-    "branch": "feature/runner-branch-safety-docs",
+    "branch": "feature/runner-runtime-safety-guards",
     "status": "running",
-    "description": "Update runner/langgraph/README.md to explicitly state that generated tasks must never use branch main directly. Add a note that task branches should use feature/<task-id> and AUTO_APPLY_SQL should stay false until SQL parsing is verified. Do not modify app code.",
-    "updated_at": "2026-06-07T20:09:45.289762"
+    "description": "Update the LangGraph runner so tasks with branch main are blocked or rewritten to feature/<task-id>, and fix summary parsing so SQL Required: no is parsed as false. Add tests or simple validation where appropriate. Do not modify app UI.",
+    "updated_at": "2026-06-07T20:20:18.856604"
   }
 ]

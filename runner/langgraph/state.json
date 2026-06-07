@@ -1,22 +1,22 @@
 {
   "status": "running",
-  "current_task_id": "runner-fix-branch-safety",
+  "current_task_id": "runner-runtime-safety-guards",
   "current_worker": "claude",
   "current_branch": "feature/test-runner-docs",
   "last_completed_step": "generate_worker_prompt",
   "last_commit": "fb1a04a Complete: Add runner smoke test note",
   "loop_count": 2,
   "started_at": "2026-06-07T19:47:40.138479",
-  "updated_at": "2026-06-07T20:09:45.288774",
+  "updated_at": "2026-06-07T20:20:18.855785",
   "error": null,
   "current_task": {
-    "id": "runner-fix-branch-safety",
-    "title": "Add branch safety guard to LangGraph runner docs/state handling",
-    "type": "docs",
+    "id": "runner-runtime-safety-guards",
+    "title": "Add runtime branch and SQL summary safety guards",
+    "type": "backend",
     "preferred_worker": "claude",
-    "branch": "feature/runner-branch-safety-docs",
+    "branch": "feature/runner-runtime-safety-guards",
     "status": "queued",
-    "description": "Update runner/langgraph/README.md to explicitly state that generated tasks must never use branch main directly. Add a note that task branches should use feature/<task-id> and AUTO_APPLY_SQL should stay false until SQL parsing is verified. Do not modify app code."
+    "description": "Update the LangGraph runner so tasks with branch main are blocked or rewritten to feature/<task-id>, and fix summary parsing so SQL Required: no is parsed as false. Add tests or simple validation where appropriate. Do not modify app UI."
   },
   "worker_result": null,
   "worker_summary": {
@@ -50,6 +50,10 @@
     {
       "role": "user",
       "content": "You are working inside the bucks.ai repo at /home/arnavt/bucks-ai.\n\nTask: Add branch safety guard to LangGraph runner docs/state handling\nType: docs\nBranch: feature/runner-branch-safety-docs\n\nComplete this task fully. When done, output a structured summary including:\n- Files Created: (bullet list)\n- Files Modified: (bullet list)\n- Check Result: pass/fail\n- Commit Result: (sha or skipped)\n- Push Result: (done or skipped)\n- SQL Required: yes/no\n- SQL File Path: (if applicable)\n- Known Limitations: (bullet list)\n- Next Task: (suggestions)\n"
+    },
+    {
+      "role": "user",
+      "content": "You are working inside the bucks.ai repo at /home/arnavt/bucks-ai.\n\nTask: Add runtime branch and SQL summary safety guards\nType: backend\nBranch: feature/runner-runtime-safety-guards\n\nComplete this task fully. When done, output a structured summary including:\n- Files Created: (bullet list)\n- Files Modified: (bullet list)\n- Check Result: pass/fail\n- Commit Result: (sha or skipped)\n- Push Result: (done or skipped)\n- SQL Required: yes/no\n- SQL File Path: (if applicable)\n- Known Limitations: (bullet list)\n- Next Task: (suggestions)\n"
     }
   ],
   "stop_reason": "no_more_tasks"

@@ -179,6 +179,15 @@ def commit_push_merge_if_needed(state: RunnerState) -> RunnerState:
 
     branch = task.get("branch", f"feature/{task.get('id', 'task')}")
 
+    # Branch safety guard: never commit/push/merge directly to main or master
+    if branch.lower() in ("main", "master"):
+        log_event("error", {
+            "task_id": state.current_task_id,
+            "error": f"Branch safety guard: task branch '{branch}' is not allowed. Tasks must use a feature branch (e.g. feature/<task-id>).",
+        })
+        state.error = f"branch_guard: '{branch}' is not a valid task branch"
+        return _persist(state, "commit_push_merge_if_needed")
+
     br = create_branch(cfg.repo_path, branch)
     if not br["success"]:
         return state
@@ -207,10 +216,15 @@ def apply_sql_if_needed(state: RunnerState) -> RunnerState:
 
     result = apply_sql_file(sql_file)
     state.sql_scan = result.get("scan")
-    log_event(
-        "sql_applied" if result.get("success") else "sql_scan_blocked",
-        {"result": result, "task_id": state.current_task_id},
-    )
+
+    # SQL summary safety guard: only log sql_scan_blocked when the scanner blocked the SQL;
+    # use a distinct event for other failure reasons (e.g. no Supabase config, auto_apply off).
+    if result.get("success"):
+        log_event("sql_applied", {"result": result, "task_id": state.current_task_id})
+    elif result.get("reason") == "sql_scan_blocked":
+        log_event("sql_scan_blocked", {"scan": result.get("scan"), "task_id": state.current_task_id})
+    else:
+        log_event("sql_scan_passed", {"result": result, "task_id": state.current_task_id})
     return _persist(state, "apply_sql_if_needed")
 
 
