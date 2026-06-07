@@ -1,12 +1,12 @@
 [
   {
-    "id": "runner-fix-branch-safety",
-    "title": "Add branch safety guard to LangGraph runner docs/state handling",
-    "type": "docs",
+    "id": "runner-early-branch-guard",
+    "title": "Implement early branch guard in task pipeline",
+    "type": "backend",
     "preferred_worker": "claude",
-    "branch": "feature/runner-branch-safety-docs",
+    "branch": "feature/runner-early-branch-guard",
     "status": "running",
-    "description": "Update runner/langgraph/README.md to explicitly state that generated tasks must never use branch main directly. Add a note that task branches should use feature/<task-id> and AUTO_APPLY_SQL should stay false until SQL parsing is verified. Do not modify app code.",
-    "updated_at": "2026-06-07T20:09:45.289762"
+    "description": "Update the LangGraph runner so invalid task branches such as main, master, dev, develop, production, release, or protected branches are blocked or rewritten before worker dispatch. The guard should run in load_next_task or choose_worker before any worker prompt is generated. If rewritten, use feature/<task-id>. Add log events and update README docs. Do not modify app UI.",
+    "updated_at": "2026-06-07T20:33:41.891498"
   }
 ]
