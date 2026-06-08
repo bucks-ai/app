@@ -5,8 +5,12 @@ from typing import Optional
 
 def _extract_section(text: str, *keywords: str) -> Optional[str]:
     for kw in keywords:
-        pattern = rf"(?i){re.escape(kw)}\s*[:\-]?\s*(.+?)(?=\n[A-Z]|\Z)"
-        m = re.search(pattern, text, re.DOTALL)
+        # Anchor to line start (after optional bullet/dash) and capture to
+        # end of that line only.  The old DOTALL approach consumed multiple
+        # sections when section headers start with "- " rather than a capital
+        # letter, causing false-positive values to bleed across fields.
+        pattern = rf"(?im)^[- ]*{re.escape(kw)}\s*[:\-]\s*(.+?)\s*$"
+        m = re.search(pattern, text)
         if m:
             return m.group(1).strip()
     return None
@@ -38,12 +42,12 @@ def parse_worker_summary(text: str) -> dict:
     return {
         "files_created": _extract_list(text, "files created", "created files", "new files"),
         "files_modified": _extract_list(text, "files modified", "modified files", "changed files"),
-        "check_result": _bool_from_text(_extract_section(text, "check result", "check", "tests")),
-        "commit_result": _extract_section(text, "commit", "committed"),
-        "push_result": _extract_section(text, "push", "pushed"),
-        "merge_result": _extract_section(text, "merge", "merged"),
-        "sql_required": _bool_from_text(_extract_section(text, "sql required", "sql needed", "sql")),
-        "sql_file_path": _extract_section(text, "sql file", "sql path", "migration file"),
+        "check_result": _bool_from_text(_extract_section(text, "check result")),
+        "commit_result": _extract_section(text, "commit result", "commit"),
+        "push_result": _extract_section(text, "push result", "push"),
+        "merge_result": _extract_section(text, "merge result", "merge"),
+        "sql_required": _bool_from_text(_extract_section(text, "sql required", "sql needed")),
+        "sql_file_path": _extract_section(text, "sql file path", "sql file", "sql path", "migration file"),
         "known_limitations": _extract_list(text, "known limitations", "limitations", "caveats"),
         "next_task_hints": _extract_list(text, "next task", "next steps", "follow-up"),
         "raw_length": len(text),
