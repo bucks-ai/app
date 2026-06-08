@@ -41,6 +41,9 @@ class RunnerConfig:
     auto_apply_sql: bool = field(
         default_factory=lambda: os.getenv("AUTO_APPLY_SQL", "true").lower() == "true"
     )
+    require_sql_approval: bool = field(
+        default_factory=lambda: os.getenv("REQUIRE_SQL_APPROVAL", "false").lower() == "true"
+    )
 
     @property
     def has_openai(self) -> bool:
@@ -76,6 +79,7 @@ class RunnerConfig:
             "auto_merge": self.auto_merge,
             "auto_deploy": self.auto_deploy,
             "auto_apply_sql": self.auto_apply_sql,
+            "require_sql_approval": self.require_sql_approval,
         }
 
 

@@ -1,6 +1,7 @@
 """LangGraph StateGraph for the bucks.ai Autonomous Development Runner."""
 import sys
 from datetime import datetime
+from pathlib import Path
 from typing import Annotated
 
 from langgraph.graph import StateGraph, END
@@ -229,6 +230,9 @@ def commit_push_merge_if_needed(state: RunnerState) -> RunnerState:
     return _persist(state, "commit_push_merge_if_needed")
 
 
+_RUNNER_DIR = Path(__file__).parent
+
+
 def apply_sql_if_needed(state: RunnerState) -> RunnerState:
     summary = state.worker_summary or {}
     sql_required = summary.get("sql_required")
@@ -236,6 +240,46 @@ def apply_sql_if_needed(state: RunnerState) -> RunnerState:
 
     if not sql_required or not sql_file:
         return state
+
+    # SQL approval gate: when REQUIRE_SQL_APPROVAL=true, write SQL to outbox for
+    # human review and only proceed once the human writes an approval file to inbox.
+    if cfg.require_sql_approval:
+        task_id = state.current_task_id or "unknown"
+        outbox_sql = _RUNNER_DIR / "outbox" / f"{task_id}_sql_approval.sql"
+        inbox_approved = _RUNNER_DIR / "inbox" / f"{task_id}_sql_approved.txt"
+
+        # Write SQL to outbox for review (idempotent — only on first encounter).
+        if not outbox_sql.exists():
+            try:
+                outbox_sql.write_text(Path(sql_file).read_text())
+                log_event("sql_approval_pending", {
+                    "task_id": task_id,
+                    "sql_file": sql_file,
+                    "review_path": str(outbox_sql),
+                    "approve_by": str(inbox_approved),
+                    "message": f"Review {outbox_sql.name}, then create {inbox_approved.name} to approve.",
+                }, task_id=task_id)
+            except FileNotFoundError:
+                log_event("error", {"task_id": task_id, "error": f"SQL file not found: {sql_file}"})
+                return _persist(state, "apply_sql_if_needed")
+
+        # Check for human approval.
+        if not inbox_approved.exists():
+            state.sql_approval_status = "pending"
+            log_event("sql_approval_waiting", {
+                "task_id": task_id,
+                "message": f"Waiting for approval file: {inbox_approved}",
+            }, task_id=task_id)
+            return _persist(state, "apply_sql_if_needed")
+
+        approval_text = inbox_approved.read_text().strip().lower()
+        if approval_text in ("rejected", "reject", "no"):
+            state.sql_approval_status = "rejected"
+            log_event("sql_approval_rejected", {"task_id": task_id}, task_id=task_id)
+            return _persist(state, "apply_sql_if_needed")
+
+        state.sql_approval_status = "approved"
+        log_event("sql_approval_granted", {"task_id": task_id}, task_id=task_id)
 
     result = apply_sql_file(sql_file)
     state.sql_scan = result.get("scan")

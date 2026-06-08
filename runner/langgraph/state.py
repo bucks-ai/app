@@ -67,5 +67,6 @@ class RunnerState(BaseModel):
     worker_summary: Optional[dict] = None
     check_passed: Optional[bool] = None
     sql_scan: Optional[dict] = None
+    sql_approval_status: Optional[str] = None  # pending | approved | rejected | None
     messages: list[dict] = Field(default_factory=list)
     stop_reason: Optional[str] = None
