@@ -298,6 +298,54 @@ def apply_sql_if_needed(state: RunnerState) -> RunnerState:
     return _persist(state, "apply_sql_if_needed")
 
 
+def deploy_if_needed(state: RunnerState) -> RunnerState:
+    """Trigger a Vercel deploy and poll it to a terminal state.
+
+    Runs after the worker's changes have been committed (and SQL applied) so the
+    runner reports a real deploy verdict — READY vs failed/timed-out — instead of
+    leaving ``trigger_deploy`` unused. Skips cleanly when nothing landed, when
+    ``AUTO_DEPLOY`` is off, or when no ``VERCEL_TOKEN`` is configured.
+    """
+    result = state.worker_result or {}
+
+    # Only deploy when the worker succeeded, checks passed, and a commit landed.
+    if not result.get("success") or not state.check_passed or not state.last_commit:
+        log_event("deploy_skipped", {
+            "task_id": state.current_task_id,
+            "reason": "no committed changes to deploy",
+        }, task_id=state.current_task_id)
+        return state
+
+    if not cfg.auto_deploy:
+        log_event("deploy_skipped", {
+            "task_id": state.current_task_id,
+            "reason": "AUTO_DEPLOY=false",
+        }, task_id=state.current_task_id)
+        return _persist(state, "deploy_if_needed")
+
+    if not cfg.has_vercel:
+        log_event("deploy_skipped", {
+            "task_id": state.current_task_id,
+            "reason": "no VERCEL_TOKEN",
+        }, task_id=state.current_task_id)
+        return _persist(state, "deploy_if_needed")
+
+    deploy = trigger_deploy(project_id=cfg.vercel_project_id)
+    state.deploy_result = deploy
+    state.deploy_ready = bool(deploy.get("success"))
+    poll = deploy.get("poll") or {}
+    log_event("deploy_result", {
+        "task_id": state.current_task_id,
+        "success": deploy.get("success"),
+        "ready": poll.get("ready"),
+        "state": poll.get("state"),
+        "timed_out": poll.get("timed_out"),
+        "polls": poll.get("polls"),
+        "elapsed": poll.get("elapsed"),
+    }, task_id=state.current_task_id)
+    return _persist(state, "deploy_if_needed")
+
+
 def update_github_if_needed(state: RunnerState) -> RunnerState:
     if not cfg.has_github:
         return state
@@ -307,7 +355,12 @@ def update_github_if_needed(state: RunnerState) -> RunnerState:
     if issue_number:
         from tools.github_tools import comment_issue
         repo = f"arnavt687/bucks-ai"
-        comment_issue(repo, issue_number, f"Runner completed task: {task.get('title')}\n\nSummary: {str(summary)[:500]}")
+        body = f"Runner completed task: {task.get('title')}\n\nSummary: {str(summary)[:500]}"
+        if state.deploy_result is not None:
+            poll = (state.deploy_result or {}).get("poll") or {}
+            verdict = "ready" if state.deploy_ready else (poll.get("state") or "not ready")
+            body += f"\n\nDeploy: {verdict}"
+        comment_issue(repo, issue_number, body)
     return _persist(state, "update_github_if_needed")
 
 
@@ -328,6 +381,8 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
     state.current_task = None
     state.worker_result = None
     state.check_passed = None
+    state.deploy_result = None
+    state.deploy_ready = None
     return _persist(state, "update_logs_and_state")
 
 
@@ -409,6 +464,7 @@ def build_graph():
     builder.add_node("run_checks_if_needed", run_checks_if_needed)
     builder.add_node("commit_push_merge_if_needed", commit_push_merge_if_needed)
     builder.add_node("apply_sql_if_needed", apply_sql_if_needed)
+    builder.add_node("deploy_if_needed", deploy_if_needed)
     builder.add_node("update_github_if_needed", update_github_if_needed)
     builder.add_node("update_logs_and_state", update_logs_and_state)
     builder.add_node("ask_chatgpt_next_task", ask_chatgpt_next_task)
@@ -432,7 +488,8 @@ def build_graph():
     builder.add_edge("parse_worker_summary", "run_checks_if_needed")
     builder.add_edge("run_checks_if_needed", "commit_push_merge_if_needed")
     builder.add_edge("commit_push_merge_if_needed", "apply_sql_if_needed")
-    builder.add_edge("apply_sql_if_needed", "update_github_if_needed")
+    builder.add_edge("apply_sql_if_needed", "deploy_if_needed")
+    builder.add_edge("deploy_if_needed", "update_github_if_needed")
     builder.add_edge("update_github_if_needed", "update_logs_and_state")
     builder.add_edge("update_logs_and_state", "ask_chatgpt_next_task")
     builder.add_edge("ask_chatgpt_next_task", "decide_continue_or_stop")

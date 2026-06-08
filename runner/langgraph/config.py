@@ -20,6 +20,9 @@ class RunnerConfig:
         default_factory=lambda: os.getenv("SUPABASE_SERVICE_ROLE_KEY")
     )
     vercel_token: Optional[str] = field(default_factory=lambda: os.getenv("VERCEL_TOKEN"))
+    vercel_project_id: Optional[str] = field(
+        default_factory=lambda: os.getenv("VERCEL_PROJECT_ID")
+    )
     repo_path: str = field(
         default_factory=lambda: os.getenv("BUCKS_AI_REPO_PATH", "/home/arnavt/bucks-ai")
     )
@@ -81,6 +84,7 @@ class RunnerConfig:
             "github": self.has_github,
             "supabase": self.has_supabase,
             "vercel": self.has_vercel,
+            "vercel_project_id": self.vercel_project_id,
             "repo_path": self.repo_path,
             "runner_mode": self.runner_mode,
             "max_loop_tasks": self.max_loop_tasks,

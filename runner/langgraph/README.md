@@ -81,6 +81,7 @@ Copy `.env.example` to `.env` and fill in:
 | `SUPABASE_URL` | Supabase SQL execution |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase SQL execution |
 | `VERCEL_TOKEN` | Deploy status / trigger |
+| `VERCEL_PROJECT_ID` | Scope deploy polling to one Vercel project (optional) |
 | `BUCKS_AI_REPO_PATH` | Path to repo (default: `/home/arnavt/bucks-ai`) |
 | `RUNNER_MODE` | `browser_or_cli` (default) |
 | `MAX_LOOP_TASKS` | Max tasks per run (default: 10) |
@@ -154,7 +155,7 @@ Append-only JSONL flight recorder. Each line is a JSON event:
 {"event_type": "task_loaded", "timestamp": "...", "task_id": "...", "payload": {...}}
 ```
 
-Event types: `task_started`, `task_loaded`, `branch_rewritten`, `branch_rewrite_persisted`, `prompt_generated`, `planner_started`, `planner_finished`, `worker_started`, `worker_finished`, `summary_captured`, `check_started`, `check_passed`, `check_failed`, `branch_created`, `commit_created`, `push_completed`, `merge_started`, `merge_completed`, `deploy_started`, `deploy_completed`, `deploy_poll_started`, `deploy_poll_tick`, `deploy_poll_ready`, `deploy_poll_failed`, `deploy_poll_timeout`, `deploy_poll_unavailable`, `sql_detected`, `sql_scan_passed`, `sql_scan_blocked`, `sql_applied`, `next_task_requested`, `loop_stopped`, `error`
+Event types: `task_started`, `task_loaded`, `branch_rewritten`, `branch_rewrite_persisted`, `prompt_generated`, `planner_started`, `planner_finished`, `worker_started`, `worker_finished`, `summary_captured`, `check_started`, `check_passed`, `check_failed`, `branch_created`, `commit_created`, `push_completed`, `merge_started`, `merge_completed`, `deploy_skipped`, `deploy_started`, `deploy_completed`, `deploy_result`, `deploy_poll_started`, `deploy_poll_tick`, `deploy_poll_ready`, `deploy_poll_failed`, `deploy_poll_timeout`, `deploy_poll_unavailable`, `sql_detected`, `sql_scan_passed`, `sql_scan_blocked`, `sql_applied`, `next_task_requested`, `loop_stopped`, `error`
 
 ---
 
@@ -212,18 +213,27 @@ Before any SQL execution:
 
 ## Vercel Behavior
 
-When `VERCEL_TOKEN` is set:
-- Deployment status is fetched after each merge.
-- `AUTO_DEPLOY=true` triggers a deploy.
+The `deploy_if_needed` graph node runs after the worker's changes are committed
+and any SQL is applied. It deploys **only** when the worker succeeded, checks
+passed, and a commit landed — otherwise it logs `deploy_skipped` and moves on.
+
+When `VERCEL_TOKEN` is set and a deploy runs:
+- Deployment status is fetched after the merge.
+- `AUTO_DEPLOY=true` triggers a deploy (scoped to `VERCEL_PROJECT_ID` when set).
 - `AUTO_DEPLOY_POLL=true` (default) then **polls** the triggered deployment every
   `VERCEL_POLL_INTERVAL` seconds until it reaches a terminal state
   (`READY` / `ERROR` / `CANCELED`) or `VERCEL_POLL_TIMEOUT` seconds elapse. The
   poll verdict is returned on `trigger_deploy(...)["poll"]`, and `success` reflects
   whether the deployment actually became ready — not just whether the trigger fired.
 
+The node records the verdict on `state.deploy_result` / `state.deploy_ready`,
+emits a `deploy_result` event, and (when a GitHub issue is linked) appends the
+deploy verdict to the issue comment.
+
 `poll_deployment_until_terminal(...)` is read-only and takes injectable
 `fetch`/`sleep`/`now` callables so the loop is unit-testable without the network
-(see `tests/test_vercel_polling.py`).
+(see `tests/test_vercel_polling.py`; the node itself is covered by
+`tests/test_deploy_node.py`).
 
 Without token, Vercel steps are skipped with a logged note.
 
@@ -253,10 +263,11 @@ Allowed with warnings: `DROP TABLE IF EXISTS`, `DROP POLICY IF EXISTS`, `DROP TR
 8. `run_checks_if_needed` — run `./scripts/check.sh`
 9. `commit_push_merge_if_needed` — git commit/push/merge flow; late guard blocks any remaining protected-branch attempts
 10. `apply_sql_if_needed` — scan and apply SQL migrations
-11. `update_github_if_needed` — comment/close GitHub issues
-12. `update_logs_and_state` — mark task complete/failed, log
-13. `ask_chatgpt_next_task` — send summary back to ChatGPT
-14. `decide_continue_or_stop` — check loop limits, decide to continue or stop
+11. `deploy_if_needed` — trigger a Vercel deploy and poll it to a terminal state (only when a commit landed; see **Vercel Behavior**)
+12. `update_github_if_needed` — comment/close GitHub issues
+13. `update_logs_and_state` — mark task complete/failed, log
+14. `ask_chatgpt_next_task` — send summary back to ChatGPT
+15. `decide_continue_or_stop` — check loop limits, decide to continue or stop
 
 ---
 
