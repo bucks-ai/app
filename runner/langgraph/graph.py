@@ -33,6 +33,7 @@ from tools.sql_guard import scan_sql_text
 from tools.supabase_tools import apply_sql_file
 from tools.vercel_tools import trigger_deploy
 from tools.github_tools import create_or_update_task_from_issue
+from tools.task_quality_guard import guard_planner_task
 from workers.chatgpt_worker import ChatGPTWorker
 from workers.claude_worker import ClaudeWorker
 from workers.codex_worker import CodexWorker
@@ -111,6 +112,8 @@ def ask_chatgpt_for_task_if_needed(state: RunnerState) -> RunnerState:
     log_event("next_task_requested", {"summary_preview": summary_text[:200]})
     planner = ChatGPTWorker()
     new_task = planner.ask_for_next_task(summary_text)
+    if new_task:
+        new_task = guard_planner_task(new_task, context="ask_chatgpt_for_task_if_needed")
     if new_task:
         add_task(new_task)
         task = get_next_queued_task()
@@ -332,6 +335,8 @@ def ask_chatgpt_next_task(state: RunnerState) -> RunnerState:
     summary_text = str(state.worker_summary or {})
     planner = ChatGPTWorker()
     new_task = planner.ask_for_next_task(summary_text)
+    if new_task:
+        new_task = guard_planner_task(new_task, context="ask_chatgpt_next_task")
     if new_task:
         add_task(new_task)
         log_event("next_task_requested", {"new_task": new_task})
