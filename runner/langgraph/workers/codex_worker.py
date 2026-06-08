@@ -27,7 +27,7 @@ class CodexWorker(BaseWorker):
         # Use `codex exec` subcommand for non-interactive execution.
         # Pass prompt via stdin ("-") to avoid ARG_MAX limits and escaping issues.
         # --dangerously-bypass-approvals-and-sandbox replaces the old --approval-mode full-auto.
-        cmd = ["codex", "exec", "--dangerously-bypass-approvals-and-sandbox", "-"]
+        cmd = ["codex", "exec", "--dangerously-bypass-approvals-and-sandbox","--cd", get_config().repo_path, "-"]
         r = run_command(cmd, stdin_data=prompt, timeout=600)
         return WorkerResult(
             worker="codex",
