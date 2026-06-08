@@ -26,6 +26,11 @@ npm run lint
 npm run build
 
 git push origin main
-git push deploy main
+
+if git remote get-url deploy &>/dev/null; then
+  git push deploy main || echo "Warning: deploy remote push failed (non-blocking)"
+else
+  echo "Note: no deploy remote configured, skipping deploy push"
+fi
 
 echo "Feature branch merged into main and pushed successfully."
