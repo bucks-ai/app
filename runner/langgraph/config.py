@@ -38,6 +38,15 @@ class RunnerConfig:
     auto_deploy: bool = field(
         default_factory=lambda: os.getenv("AUTO_DEPLOY", "true").lower() == "true"
     )
+    auto_deploy_poll: bool = field(
+        default_factory=lambda: os.getenv("AUTO_DEPLOY_POLL", "true").lower() == "true"
+    )
+    vercel_poll_timeout: int = field(
+        default_factory=lambda: int(os.getenv("VERCEL_POLL_TIMEOUT", "180"))
+    )
+    vercel_poll_interval: int = field(
+        default_factory=lambda: int(os.getenv("VERCEL_POLL_INTERVAL", "5"))
+    )
     auto_apply_sql: bool = field(
         default_factory=lambda: os.getenv("AUTO_APPLY_SQL", "true").lower() == "true"
     )
@@ -78,6 +87,9 @@ class RunnerConfig:
             "max_runtime_minutes": self.max_runtime_minutes,
             "auto_merge": self.auto_merge,
             "auto_deploy": self.auto_deploy,
+            "auto_deploy_poll": self.auto_deploy_poll,
+            "vercel_poll_timeout": self.vercel_poll_timeout,
+            "vercel_poll_interval": self.vercel_poll_interval,
             "auto_apply_sql": self.auto_apply_sql,
             "require_sql_approval": self.require_sql_approval,
         }
