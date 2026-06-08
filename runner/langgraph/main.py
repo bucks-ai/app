@@ -8,6 +8,7 @@ Usage:
   python main.py run-loop
   python main.py scan-sql path/to/file.sql
   python main.py logs [--tail N]
+  python main.py reset-state [--hard]
 """
 import sys
 import json
@@ -145,6 +146,40 @@ def cmd_run_loop(args):
         print("\nLoop interrupted by user.")
 
 
+def cmd_reset_state(args):
+    from tools.log_tools import update_state, log_event, _logs_path
+
+    fresh = {
+        "status": "idle",
+        "current_task_id": None,
+        "current_worker": None,
+        "current_branch": None,
+        "last_completed_step": None,
+        "last_commit": None,
+        "loop_count": 0,
+        "started_at": None,
+        "error": None,
+        "current_task": None,
+        "worker_result": None,
+        "worker_summary": None,
+        "check_passed": None,
+        "sql_scan": None,
+        "sql_approval_status": None,
+        "messages": [],
+        "stop_reason": None,
+    }
+    update_state(fresh)
+    log_event("state_reset", {"hard": getattr(args, "hard", False)})
+    print("State reset to idle.")
+
+    if getattr(args, "hard", False):
+        if _logs_path.exists():
+            _logs_path.write_text("")
+            print("Log file cleared.")
+        else:
+            print("No log file to clear.")
+
+
 def cmd_scan_sql(args):
     from tools.sql_guard import scan_sql_file
     path = args.path
@@ -191,6 +226,13 @@ def main():
     p_logs = sub.add_parser("logs", help="Print recent log events")
     p_logs.add_argument("--tail", type=int, default=50, help="Number of events to show")
 
+    p_reset = sub.add_parser("reset-state", help="Reset runner state to idle defaults")
+    p_reset.add_argument(
+        "--hard",
+        action="store_true",
+        help="Also truncate the log file (runs.jsonl)",
+    )
+
     args = parser.parse_args()
 
     dispatch = {
@@ -201,6 +243,7 @@ def main():
         "run-loop": cmd_run_loop,
         "scan-sql": cmd_scan_sql,
         "logs": cmd_logs,
+        "reset-state": cmd_reset_state,
     }
 
     fn = dispatch.get(args.command)
