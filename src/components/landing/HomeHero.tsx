@@ -73,6 +73,11 @@ function HeroPreview() {
     { label: "Research", detail: "Market + competitor scan", status: "Done" },
     { label: "Blueprint", detail: "Strategy & MVP scope", status: "Done" },
     { label: "Deploy", detail: "GitHub + Vercel starter", status: "Running" },
+    {
+      label: "Auto-merge smoke",
+      detail: "Codex branch note ready for merge checks",
+      status: "Live",
+    },
     { label: "Validate", detail: "Persona interviews", status: "Queued" },
   ];
 
