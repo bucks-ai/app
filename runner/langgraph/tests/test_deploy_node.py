@@ -88,6 +88,91 @@ def test_deploy_failure_marks_not_ready():
 
 
 # ---------------------------------------------------------------------------
+# Loop-blocking — a failed or timed-out deploy halts the loop
+# ---------------------------------------------------------------------------
+
+def test_blocks_loop_on_deploy_failure():
+    verdict = {"success": False, "poll": {"ready": False, "terminal": True, "timed_out": False, "state": "ERROR"}}
+    graph.trigger_deploy = _stub_trigger(verdict, [])
+    graph.cfg.auto_deploy = True
+    graph.cfg.vercel_token = "test-token"
+    graph.cfg.block_on_deploy_failure = True
+
+    state = graph.deploy_if_needed(_landed_state())
+
+    assert state.deploy_ready is False
+    assert state.stop_reason == "deploy_failed", state.stop_reason
+
+
+def test_blocks_loop_on_deploy_timeout():
+    verdict = {"success": False, "poll": {"ready": False, "terminal": False, "timed_out": True, "state": "BUILDING"}}
+    graph.trigger_deploy = _stub_trigger(verdict, [])
+    graph.cfg.auto_deploy = True
+    graph.cfg.vercel_token = "test-token"
+    graph.cfg.block_on_deploy_failure = True
+
+    state = graph.deploy_if_needed(_landed_state())
+
+    assert state.stop_reason == "deploy_timed_out", state.stop_reason
+
+
+def test_does_not_block_when_deploy_ready():
+    verdict = {"success": True, "poll": {"ready": True, "terminal": True, "timed_out": False, "state": "READY"}}
+    graph.trigger_deploy = _stub_trigger(verdict, [])
+    graph.cfg.auto_deploy = True
+    graph.cfg.vercel_token = "test-token"
+    graph.cfg.block_on_deploy_failure = True
+
+    state = graph.deploy_if_needed(_landed_state())
+
+    assert state.deploy_ready is True
+    assert state.stop_reason is None, state.stop_reason
+
+
+def test_does_not_block_when_flag_disabled():
+    verdict = {"success": False, "poll": {"ready": False, "terminal": True, "timed_out": False, "state": "ERROR"}}
+    graph.trigger_deploy = _stub_trigger(verdict, [])
+    graph.cfg.auto_deploy = True
+    graph.cfg.vercel_token = "test-token"
+    graph.cfg.block_on_deploy_failure = False
+
+    state = graph.deploy_if_needed(_landed_state())
+
+    assert state.stop_reason is None, state.stop_reason
+    graph.cfg.block_on_deploy_failure = True  # restore for other tests
+
+
+def test_does_not_block_on_unavailable_deploy():
+    # Vercel unreachable / polling disabled: success False but no terminal/timeout
+    # signal. This is a degraded condition, not a deploy failure — keep looping.
+    verdict = {"success": False, "poll": {}}
+    graph.trigger_deploy = _stub_trigger(verdict, [])
+    graph.cfg.auto_deploy = True
+    graph.cfg.vercel_token = "test-token"
+    graph.cfg.block_on_deploy_failure = True
+
+    state = graph.deploy_if_needed(_landed_state())
+
+    assert state.stop_reason is None, state.stop_reason
+
+
+def test_ask_chatgpt_next_task_skips_when_stopping():
+    class _Boom:
+        def __init__(self):
+            raise AssertionError("planner must not be called when stop_reason is set")
+
+    original = graph.ChatGPTWorker
+    graph.ChatGPTWorker = _Boom
+    try:
+        state = _landed_state()
+        state.stop_reason = "deploy_failed"
+        out = graph.ask_chatgpt_next_task(state)
+        assert out.stop_reason == "deploy_failed"
+    finally:
+        graph.ChatGPTWorker = original
+
+
+# ---------------------------------------------------------------------------
 # Skip paths — trigger_deploy must NOT be called
 # ---------------------------------------------------------------------------
 
@@ -171,6 +256,12 @@ if __name__ == "__main__":
         test_deploy_runs_when_changes_landed,
         test_deploy_passes_configured_project_id,
         test_deploy_failure_marks_not_ready,
+        test_blocks_loop_on_deploy_failure,
+        test_blocks_loop_on_deploy_timeout,
+        test_does_not_block_when_deploy_ready,
+        test_does_not_block_when_flag_disabled,
+        test_does_not_block_on_unavailable_deploy,
+        test_ask_chatgpt_next_task_skips_when_stopping,
         test_skips_when_no_commit,
         test_skips_when_check_failed,
         test_skips_when_worker_failed,

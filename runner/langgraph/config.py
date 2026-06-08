@@ -44,6 +44,9 @@ class RunnerConfig:
     auto_deploy_poll: bool = field(
         default_factory=lambda: os.getenv("AUTO_DEPLOY_POLL", "true").lower() == "true"
     )
+    block_on_deploy_failure: bool = field(
+        default_factory=lambda: os.getenv("BLOCK_ON_DEPLOY_FAILURE", "true").lower() == "true"
+    )
     vercel_poll_timeout: int = field(
         default_factory=lambda: int(os.getenv("VERCEL_POLL_TIMEOUT", "180"))
     )
@@ -92,6 +95,7 @@ class RunnerConfig:
             "auto_merge": self.auto_merge,
             "auto_deploy": self.auto_deploy,
             "auto_deploy_poll": self.auto_deploy_poll,
+            "block_on_deploy_failure": self.block_on_deploy_failure,
             "vercel_poll_timeout": self.vercel_poll_timeout,
             "vercel_poll_interval": self.vercel_poll_interval,
             "auto_apply_sql": self.auto_apply_sql,

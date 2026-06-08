@@ -343,6 +343,27 @@ def deploy_if_needed(state: RunnerState) -> RunnerState:
         "polls": poll.get("polls"),
         "elapsed": poll.get("elapsed"),
     }, task_id=state.current_task_id)
+
+    # Block the loop on a deploy that reached Vercel but failed or timed out.
+    # Only a polled terminal failure (ERROR / CANCELED / ...) or a poll timeout
+    # halts the loop — a degraded/unavailable deploy (no token, API unreachable,
+    # or polling disabled) is not a deploy failure and lets the loop continue.
+    # Setting stop_reason here lets decide_continue_or_stop end the run cleanly,
+    # so the runner doesn't pile new tasks on top of a broken deployment.
+    if cfg.block_on_deploy_failure and not state.deploy_ready:
+        timed_out = bool(poll.get("timed_out"))
+        failed = bool(poll.get("terminal")) and not poll.get("ready")
+        if timed_out or failed:
+            reason = "deploy_timed_out" if timed_out else "deploy_failed"
+            state.stop_reason = reason
+            log_event("loop_blocked_on_deploy", {
+                "task_id": state.current_task_id,
+                "reason": reason,
+                "state": poll.get("state"),
+                "polls": poll.get("polls"),
+                "elapsed": poll.get("elapsed"),
+            }, task_id=state.current_task_id)
+
     return _persist(state, "deploy_if_needed")
 
 
@@ -387,6 +408,10 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
 
 
 def ask_chatgpt_next_task(state: RunnerState) -> RunnerState:
+    # If the loop is already flagged to stop (e.g. a deploy failed or timed out),
+    # don't ask the planner for — or queue — another task that would never run.
+    if state.stop_reason:
+        return state
     summary_text = str(state.worker_summary or {})
     planner = ChatGPTWorker()
     new_task = planner.ask_for_next_task(summary_text)
