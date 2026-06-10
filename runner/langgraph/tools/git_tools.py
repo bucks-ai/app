@@ -51,9 +51,28 @@ def run_check(repo_path: str) -> dict:
 def commit_all(repo_path: str, message: str) -> dict:
     add = _git(["add", "-A"], repo_path)
     commit = _git(["commit", "-m", message], repo_path)
-    sha = latest_commit(repo_path) if commit.success else ""
-    log_event("commit_created", {"message": message, "sha": sha, "success": commit.success})
-    return {"success": commit.success, "sha": sha, "output": commit.output}
+    # `git commit` exits non-zero when the tree is already clean. That happens when
+    # the worker committed its own changes (the task prompt asks workers to commit) —
+    # not a failure, and the existing HEAD is still deployable. Treat that case as a
+    # landed commit so push/merge/deploy proceed instead of being skipped.
+    nothing_to_commit = (
+        not commit.success and "nothing to commit" in (commit.output or "").lower()
+    )
+    committed = commit.success or nothing_to_commit
+    sha = latest_commit(repo_path) if committed else ""
+    log_event("commit_created", {
+        "message": message,
+        "sha": sha,
+        "success": commit.success,
+        "nothing_to_commit": nothing_to_commit,
+    })
+    return {
+        "success": commit.success,
+        "committed": committed,
+        "nothing_to_commit": nothing_to_commit,
+        "sha": sha,
+        "output": commit.output,
+    }
 
 
 def push_branch(repo_path: str, branch: str) -> dict:

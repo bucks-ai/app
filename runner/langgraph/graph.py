@@ -222,7 +222,11 @@ def commit_push_merge_if_needed(state: RunnerState) -> RunnerState:
     state.current_branch = branch
     task_title = task.get("title", "runner task")
     commit = commit_all(cfg.repo_path, f"Complete: {task_title}")
-    if commit["success"]:
+    # A commit "landed" either when the runner created one, or when the worker had
+    # already committed its own changes (clean tree -> "nothing to commit"). In both
+    # cases HEAD is deployable, so record it and run push/merge — otherwise
+    # deploy_if_needed wrongly skips with "no committed changes to deploy".
+    if commit.get("committed"):
         state.last_commit = commit["sha"]
         push_branch(cfg.repo_path, branch)
 
