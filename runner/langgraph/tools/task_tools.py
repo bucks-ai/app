@@ -77,6 +77,21 @@ def mark_task_failed(task_id: str, error: str):
     save_tasks(tasks)
 
 
+def mark_task_blocked(task_id: str, reason: str):
+    """Mark a task as blocked on a human action (e.g. awaiting resources).
+
+    Distinct from ``failed`` so the task isn't lost as a failure: a human can
+    provision what's needed and flip it back to ``queued`` to retry.
+    """
+    tasks = load_tasks()
+    for task in tasks:
+        if task["id"] == task_id:
+            task["status"] = "blocked"
+            task["error"] = reason
+            task["updated_at"] = datetime.utcnow().isoformat()
+    save_tasks(tasks)
+
+
 def update_task_branch(task_id: str, branch: str):
     """Persist a rewritten branch name back to tasks.json for the given task."""
     tasks = load_tasks()

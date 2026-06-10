@@ -96,6 +96,7 @@ Copy `.env.example` to `.env` and fill in:
 | `VERCEL_POLL_TIMEOUT` | Max seconds to poll a deployment before giving up (default: 180) |
 | `VERCEL_POLL_INTERVAL` | Seconds between deployment status reads (default: 5) |
 | `AUTO_APPLY_SQL` | Auto-apply scanned SQL (default: true) — **keep false until SQL parsing is verified** |
+| `RESOURCE_GATE` | Pause the loop when a worker reports it needs a missing credential/resource (default: true) |
 
 ---
 
@@ -159,7 +160,7 @@ Append-only JSONL flight recorder. Each line is a JSON event:
 {"event_type": "task_loaded", "timestamp": "...", "task_id": "...", "payload": {...}}
 ```
 
-Event types: `task_started`, `task_loaded`, `branch_rewritten`, `branch_rewrite_persisted`, `prompt_generated`, `planner_started`, `planner_finished`, `worker_started`, `worker_finished`, `summary_captured`, `check_started`, `check_passed`, `check_failed`, `branch_created`, `commit_created`, `push_completed`, `merge_started`, `merge_completed`, `deploy_skipped`, `deploy_started`, `deploy_completed`, `deploy_result`, `deploy_poll_started`, `deploy_poll_tick`, `deploy_poll_ready`, `deploy_poll_failed`, `deploy_poll_timeout`, `deploy_poll_unavailable`, `loop_blocked_on_deploy`, `sql_detected`, `sql_scan_passed`, `sql_scan_blocked`, `sql_applied`, `next_task_requested`, `loop_stopped`, `slack_degraded`, `error`
+Event types: `task_started`, `task_loaded`, `branch_rewritten`, `branch_rewrite_persisted`, `prompt_generated`, `planner_started`, `planner_finished`, `worker_started`, `worker_finished`, `summary_captured`, `check_started`, `check_passed`, `check_failed`, `branch_created`, `commit_created`, `push_completed`, `merge_started`, `merge_completed`, `deploy_skipped`, `deploy_started`, `deploy_completed`, `deploy_result`, `deploy_poll_started`, `deploy_poll_tick`, `deploy_poll_ready`, `deploy_poll_failed`, `deploy_poll_timeout`, `deploy_poll_unavailable`, `loop_blocked_on_deploy`, `sql_detected`, `sql_scan_passed`, `sql_scan_blocked`, `sql_applied`, `resource_request_pending`, `resource_request_waiting`, `resource_request_fulfilled`, `next_task_requested`, `loop_stopped`, `slack_degraded`, `error`
 
 ---
 
@@ -215,6 +216,45 @@ Before any SQL execution:
 
 ---
 
+## Resource & Credential Gate
+
+Some tasks can't be finished without something only a human can provide — a new
+API key, a service token, or access to an external resource. The
+`request_resources_if_needed` node (enabled by default; disable with
+`RESOURCE_GATE=false`) catches this so the runner pauses for a human instead of
+committing/deploying incomplete work or looping past the gap.
+
+How it works:
+
+1. The worker prompt asks every worker to report **Credentials Needed** and
+   **Resources Needed** — *names only, never values* — for anything it lacked
+   that blocked the task (or `none`).
+2. `parse_worker_summary` extracts those into `credentials_needed` /
+   `resources_needed`. Placeholders (`none`, `N/A`, …) are filtered out.
+3. If anything real is requested, the node writes a human-readable request to
+   `outbox/<task_id>_resource_request.txt`, logs `resource_request_pending`, and
+   waits for a fulfillment file at `inbox/<task_id>_resources_provided.txt`.
+4. **Unfulfilled** → the task is marked `blocked`, `stop_reason` is set to
+   `awaiting_resources`, a `resource_request_waiting` event is logged, and the
+   loop halts cleanly at `decide_continue_or_stop` (it does **not** commit,
+   deploy, or queue another task on top of the gap). Provision what's needed
+   (e.g. add the credential to `.env`), create the fulfillment file, flip the
+   task back to `queued`, and re-run.
+5. **Fulfilled** (fulfillment file present) → the node logs
+   `resource_request_fulfilled` and the loop proceeds. The fulfillment file is
+   only an "unblock" signal: its contents are **never read or logged**, so
+   secrets stay out of the flight recorder. The worker reports credential
+   *names* only, so nothing secret is ever written to `outbox/` either.
+
+The gate runs **regardless of worker success**, so a worker that failed *because*
+it lacked a credential surfaces an actionable request rather than a bare failure.
+
+The decision helpers in `tools/resource_gate.py` (`collect_requests`,
+`evaluate_gate`, `format_request_file`) are pure/side-effect free and unit-tested
+in `tests/test_resource_gate.py`, which also covers the graph node.
+
+---
+
 ## Vercel Behavior
 
 The `deploy_if_needed` graph node runs after the worker's changes are committed
@@ -265,7 +305,8 @@ off the flight recorder: every call to `log_event(...)` is offered to
 - `SLACK_NOTIFY_EVENTS` overrides which events ping Slack (comma-separated). The
   default curated set is: `task_completed`, `error`, `loop_stopped`,
   `loop_blocked_on_deploy`, `deploy_poll_failed`, `deploy_poll_timeout`,
-  `sql_scan_blocked`, `sql_approval_pending`, `check_failed`.
+  `sql_scan_blocked`, `sql_approval_pending`, `resource_request_pending`,
+  `check_failed`.
 - Reaching Slack failing (network error, non-2xx) **never** interrupts the
   runner — the failure is swallowed and recorded as a `slack_degraded` event, so
   the flight recorder keeps the full trail. `slack_degraded` is intentionally not
@@ -298,14 +339,15 @@ Allowed with warnings: `DROP TABLE IF EXISTS`, `DROP POLICY IF EXISTS`, `DROP TR
 5. `dispatch_worker` — send prompt to worker, capture result
 6. `capture_worker_result` — store output in state
 7. `parse_worker_summary` — extract structured summary from output
-8. `run_checks_if_needed` — run `./scripts/check.sh`
-9. `commit_push_merge_if_needed` — git commit/push/merge flow; late guard blocks any remaining protected-branch attempts
-10. `apply_sql_if_needed` — scan and apply SQL migrations
-11. `deploy_if_needed` — trigger a Vercel deploy and poll it to a terminal state (only when a commit landed; see **Vercel Behavior**)
-12. `update_github_if_needed` — comment/close GitHub issues
-13. `update_logs_and_state` — mark task complete/failed, log
-14. `ask_chatgpt_next_task` — send summary back to ChatGPT
-15. `decide_continue_or_stop` — check loop limits, decide to continue or stop
+8. `request_resources_if_needed` — resource/credential request gate; pauses the loop when the worker reports a missing credential/resource (see **Resource & Credential Gate**)
+9. `run_checks_if_needed` — run `./scripts/check.sh`
+10. `commit_push_merge_if_needed` — git commit/push/merge flow; late guard blocks any remaining protected-branch attempts
+11. `apply_sql_if_needed` — scan and apply SQL migrations
+12. `deploy_if_needed` — trigger a Vercel deploy and poll it to a terminal state (only when a commit landed; see **Vercel Behavior**)
+13. `update_github_if_needed` — comment/close GitHub issues
+14. `update_logs_and_state` — mark task complete/failed, log
+15. `ask_chatgpt_next_task` — send summary back to ChatGPT
+16. `decide_continue_or_stop` — check loop limits, decide to continue or stop
 
 ---
 

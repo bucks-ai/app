@@ -23,6 +23,7 @@ _DEFAULT_SLACK_EVENTS = frozenset({
     "deploy_poll_timeout",
     "sql_scan_blocked",
     "sql_approval_pending",
+    "resource_request_pending",
     "check_failed",
 })
 
@@ -90,6 +91,9 @@ class RunnerConfig:
     require_sql_approval: bool = field(
         default_factory=lambda: os.getenv("REQUIRE_SQL_APPROVAL", "false").lower() == "true"
     )
+    resource_gate_enabled: bool = field(
+        default_factory=lambda: os.getenv("RESOURCE_GATE", "true").lower() == "true"
+    )
 
     @property
     def has_openai(self) -> bool:
@@ -137,6 +141,7 @@ class RunnerConfig:
             "vercel_poll_interval": self.vercel_poll_interval,
             "auto_apply_sql": self.auto_apply_sql,
             "require_sql_approval": self.require_sql_approval,
+            "resource_gate_enabled": self.resource_gate_enabled,
         }
 
 

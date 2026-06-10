@@ -171,6 +171,13 @@ def test_push_skipped():
     assert result["push_result"] == "skipped", f"Got {result['push_result']!r}"
 
 
+def test_list_does_not_bleed_into_next_section():
+    """A bulleted list must stop at the next section header, not absorb it."""
+    result = parse_worker_summary(CANONICAL)
+    assert result["files_modified"] == ["lib/db.ts", "lib/schema.ts"], result["files_modified"]
+    assert result["files_created"] == ["app/api/buckets/route.ts"], result["files_created"]
+
+
 def test_empty_text():
     result = parse_worker_summary("")
     assert result["sql_required"] is None
@@ -193,6 +200,7 @@ if __name__ == "__main__":
         test_no_false_positive_check_result_from_prose,
         test_no_false_positive_sql_required_sql_prose,
         test_push_skipped,
+        test_list_does_not_bleed_into_next_section,
         test_empty_text,
     ]
     passed = failed = 0

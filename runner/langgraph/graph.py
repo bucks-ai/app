@@ -15,10 +15,12 @@ from tools.task_tools import (
     mark_task_running,
     mark_task_complete,
     mark_task_failed,
+    mark_task_blocked,
     add_task,
     update_task_branch,
 )
 from tools.summary_tools import parse_worker_summary
+from tools.resource_gate import collect_requests, evaluate_gate, format_request_file
 from tools.git_tools import (
     create_branch,
     run_check,
@@ -58,6 +60,8 @@ Complete this task fully. When done, output a structured summary including:
 - Push Result: (done or skipped)
 - SQL Required: yes/no
 - SQL File Path: (if applicable)
+- Credentials Needed: (bullet list of secret/API-key NAMES you needed but did not have — names only, never values; write "none" if none blocked you)
+- Resources Needed: (bullet list of external access/services you needed but lacked — write "none" if none blocked you)
 - Known Limitations: (bullet list)
 - Next Task: (suggestions)
 """
@@ -185,6 +189,69 @@ def parse_worker_summary_node(state: RunnerState) -> RunnerState:
     summary = parse_worker_summary(output)
     state.worker_summary = summary
     return _persist(state, "parse_worker_summary")
+
+
+def request_resources_if_needed(state: RunnerState) -> RunnerState:
+    """Resource & credential request gate.
+
+    When the worker reports it needs a credential (API key / token / secret) or
+    an external resource it doesn't have, pause the loop and surface a
+    human-actionable request — instead of committing/deploying incomplete work or
+    looping past the gap. Mirrors the SQL approval gate: the request is written to
+    ``outbox/`` and the loop only proceeds once a fulfillment file lands in
+    ``inbox/``. Runs regardless of worker success, so a worker that failed *for
+    lack of a credential* surfaces a request rather than a bare failure.
+
+    Only credential/resource *names* are ever written or logged — never values
+    (see tools/resource_gate.py). When blocked, the task is marked ``blocked`` and
+    ``stop_reason`` halts the loop at ``decide_continue_or_stop``.
+    """
+    if not cfg.resource_gate_enabled:
+        return state
+
+    summary = state.worker_summary or {}
+    requests = collect_requests(summary)
+    if not requests["all"]:
+        return state  # nothing requested → proceed normally
+
+    task = state.current_task or {}
+    task_id = state.current_task_id or "unknown"
+    request_path = _RUNNER_DIR / "outbox" / f"{task_id}_resource_request.txt"
+    provided_path = _RUNNER_DIR / "inbox" / f"{task_id}_resources_provided.txt"
+
+    # Surface the request for a human (idempotent — only on first encounter).
+    if not request_path.exists():
+        request_path.write_text(format_request_file(
+            task_id, task.get("title", ""), requests, provided_path.name,
+        ))
+        log_event("resource_request_pending", {
+            "task_id": task_id,
+            "credentials_needed": requests["credentials"],
+            "resources_needed": requests["resources"],
+            "review_path": str(request_path),
+            "fulfill_by": str(provided_path),
+            "message": f"Worker needs resources/credentials. See {request_path.name}; create {provided_path.name} to unblock.",
+        }, task_id=task_id)
+
+    gate = evaluate_gate(summary, provided=provided_path.exists())
+    if gate["blocked"]:
+        state.resource_request_status = "pending"
+        state.stop_reason = "awaiting_resources"
+        mark_task_blocked(task_id, "awaiting resources/credentials")
+        log_event("resource_request_waiting", {
+            "task_id": task_id,
+            "message": f"Waiting for fulfillment file: {provided_path}",
+            "credentials_needed": requests["credentials"],
+            "resources_needed": requests["resources"],
+        }, task_id=task_id)
+    else:
+        # Human signalled fulfillment (file present); never read its contents.
+        state.resource_request_status = "fulfilled"
+        log_event("resource_request_fulfilled", {
+            "task_id": task_id,
+            "count": len(requests["all"]),
+        }, task_id=task_id)
+    return _persist(state, "request_resources_if_needed")
 
 
 def run_checks_if_needed(state: RunnerState) -> RunnerState:
@@ -408,6 +475,7 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
     state.check_passed = None
     state.deploy_result = None
     state.deploy_ready = None
+    state.resource_request_status = None
     return _persist(state, "update_logs_and_state")
 
 
@@ -472,6 +540,15 @@ def _route_after_chatgpt(state: RunnerState) -> str:
     return "choose_worker"
 
 
+def _route_after_resource_gate(state: RunnerState) -> str:
+    # When the gate is awaiting human-provided resources it halts the loop:
+    # skip commit/deploy/etc. and go straight to decide_continue_or_stop, which
+    # ends the run cleanly on the stop_reason set in the node.
+    if state.resource_request_status == "pending":
+        return "decide_continue_or_stop"
+    return "run_checks_if_needed"
+
+
 def _route_after_decide(state: RunnerState) -> str:
     if state.status == "stopped":
         return END
@@ -490,6 +567,7 @@ def build_graph():
     builder.add_node("dispatch_worker", dispatch_worker)
     builder.add_node("capture_worker_result", capture_worker_result)
     builder.add_node("parse_worker_summary", parse_worker_summary_node)
+    builder.add_node("request_resources_if_needed", request_resources_if_needed)
     builder.add_node("run_checks_if_needed", run_checks_if_needed)
     builder.add_node("commit_push_merge_if_needed", commit_push_merge_if_needed)
     builder.add_node("apply_sql_if_needed", apply_sql_if_needed)
@@ -514,7 +592,11 @@ def build_graph():
     builder.add_edge("generate_worker_prompt", "dispatch_worker")
     builder.add_edge("dispatch_worker", "capture_worker_result")
     builder.add_edge("capture_worker_result", "parse_worker_summary")
-    builder.add_edge("parse_worker_summary", "run_checks_if_needed")
+    builder.add_edge("parse_worker_summary", "request_resources_if_needed")
+    builder.add_conditional_edges("request_resources_if_needed", _route_after_resource_gate, {
+        "decide_continue_or_stop": "decide_continue_or_stop",
+        "run_checks_if_needed": "run_checks_if_needed",
+    })
     builder.add_edge("run_checks_if_needed", "commit_push_merge_if_needed")
     builder.add_edge("commit_push_merge_if_needed", "apply_sql_if_needed")
     builder.add_edge("apply_sql_if_needed", "deploy_if_needed")

@@ -70,5 +70,6 @@ class RunnerState(BaseModel):
     deploy_ready: Optional[bool] = None
     sql_scan: Optional[dict] = None
     sql_approval_status: Optional[str] = None  # pending | approved | rejected | None
+    resource_request_status: Optional[str] = None  # pending | fulfilled | None
     messages: list[dict] = Field(default_factory=list)
     stop_reason: Optional[str] = None
