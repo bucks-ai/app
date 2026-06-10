@@ -60,6 +60,8 @@ def cmd_setup(args):
         missing.append("SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY (SQL needs manual execution)")
     if not cfg.has_vercel:
         missing.append("VERCEL_TOKEN (deploy status unavailable)")
+    if not cfg.has_slack:
+        missing.append("SLACK_WEBHOOK_URL (Slack notifications disabled)")
 
     if missing:
         print("Missing (degraded mode):")

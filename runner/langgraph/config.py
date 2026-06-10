@@ -10,6 +10,30 @@ _env_path = Path(__file__).parent / ".env"
 load_dotenv(_env_path, override=False)
 
 
+# Default set of runner events worth pushing to Slack. Curated to the important
+# lifecycle moments — completions, failures, and human-action prompts — so Slack
+# isn't flooded with every fine-grained flight-recorder event. Override via the
+# SLACK_NOTIFY_EVENTS env var (comma-separated event types).
+_DEFAULT_SLACK_EVENTS = frozenset({
+    "task_completed",
+    "error",
+    "loop_stopped",
+    "loop_blocked_on_deploy",
+    "deploy_poll_failed",
+    "deploy_poll_timeout",
+    "sql_scan_blocked",
+    "sql_approval_pending",
+    "check_failed",
+})
+
+
+def _load_slack_events() -> frozenset:
+    raw = os.getenv("SLACK_NOTIFY_EVENTS")
+    if not raw:
+        return _DEFAULT_SLACK_EVENTS
+    return frozenset(e.strip() for e in raw.split(",") if e.strip())
+
+
 @dataclass
 class RunnerConfig:
     openai_api_key: Optional[str] = field(default_factory=lambda: os.getenv("OPENAI_API_KEY"))
@@ -23,6 +47,13 @@ class RunnerConfig:
     vercel_project_id: Optional[str] = field(
         default_factory=lambda: os.getenv("VERCEL_PROJECT_ID")
     )
+    slack_webhook_url: Optional[str] = field(
+        default_factory=lambda: os.getenv("SLACK_WEBHOOK_URL")
+    )
+    slack_notify: bool = field(
+        default_factory=lambda: os.getenv("SLACK_NOTIFY", "true").lower() == "true"
+    )
+    slack_notify_events: frozenset = field(default_factory=_load_slack_events)
     repo_path: str = field(
         default_factory=lambda: os.getenv("BUCKS_AI_REPO_PATH", "/home/arnavt/bucks-ai")
     )
@@ -80,6 +111,10 @@ class RunnerConfig:
     def has_vercel(self) -> bool:
         return bool(self.vercel_token)
 
+    @property
+    def has_slack(self) -> bool:
+        return bool(self.slack_webhook_url)
+
     def report(self) -> dict:
         return {
             "openai": self.has_openai,
@@ -88,6 +123,8 @@ class RunnerConfig:
             "supabase": self.has_supabase,
             "vercel": self.has_vercel,
             "vercel_project_id": self.vercel_project_id,
+            "slack": self.has_slack,
+            "slack_notify": self.slack_notify,
             "repo_path": self.repo_path,
             "runner_mode": self.runner_mode,
             "max_loop_tasks": self.max_loop_tasks,

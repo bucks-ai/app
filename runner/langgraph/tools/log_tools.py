@@ -62,7 +62,18 @@ def read_logs(tail: int = 50) -> list[dict]:
     return events
 
 
+def _maybe_notify_slack(event_type: str, payload: dict, task_id: str = None):
+    """Fan the event out to Slack. Imported lazily and fully guarded so a
+    notification failure can never break the flight recorder."""
+    try:
+        from tools.slack_tools import notify_event
+        notify_event(event_type, payload, task_id)
+    except Exception:
+        pass
+
+
 def log_event(event_type: str, payload: dict, task_id: str = None):
     event = new_event(event_type, payload, task_id)
     append_jsonl_event(event)
+    _maybe_notify_slack(event_type, payload, task_id)
     return event

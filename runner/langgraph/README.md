@@ -82,6 +82,9 @@ Copy `.env.example` to `.env` and fill in:
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase SQL execution |
 | `VERCEL_TOKEN` | Deploy status / trigger |
 | `VERCEL_PROJECT_ID` | Scope deploy polling to one Vercel project (optional) |
+| `SLACK_WEBHOOK_URL` | Slack notifications for notable runner events (optional) |
+| `SLACK_NOTIFY` | Enable/disable Slack notifications (default: true) |
+| `SLACK_NOTIFY_EVENTS` | Comma-separated event types to notify on (default: curated set) |
 | `BUCKS_AI_REPO_PATH` | Path to repo (default: `/home/arnavt/bucks-ai`) |
 | `RUNNER_MODE` | `browser_or_cli` (default) |
 | `MAX_LOOP_TASKS` | Max tasks per run (default: 10) |
@@ -156,7 +159,7 @@ Append-only JSONL flight recorder. Each line is a JSON event:
 {"event_type": "task_loaded", "timestamp": "...", "task_id": "...", "payload": {...}}
 ```
 
-Event types: `task_started`, `task_loaded`, `branch_rewritten`, `branch_rewrite_persisted`, `prompt_generated`, `planner_started`, `planner_finished`, `worker_started`, `worker_finished`, `summary_captured`, `check_started`, `check_passed`, `check_failed`, `branch_created`, `commit_created`, `push_completed`, `merge_started`, `merge_completed`, `deploy_skipped`, `deploy_started`, `deploy_completed`, `deploy_result`, `deploy_poll_started`, `deploy_poll_tick`, `deploy_poll_ready`, `deploy_poll_failed`, `deploy_poll_timeout`, `deploy_poll_unavailable`, `loop_blocked_on_deploy`, `sql_detected`, `sql_scan_passed`, `sql_scan_blocked`, `sql_applied`, `next_task_requested`, `loop_stopped`, `error`
+Event types: `task_started`, `task_loaded`, `branch_rewritten`, `branch_rewrite_persisted`, `prompt_generated`, `planner_started`, `planner_finished`, `worker_started`, `worker_finished`, `summary_captured`, `check_started`, `check_passed`, `check_failed`, `branch_created`, `commit_created`, `push_completed`, `merge_started`, `merge_completed`, `deploy_skipped`, `deploy_started`, `deploy_completed`, `deploy_result`, `deploy_poll_started`, `deploy_poll_tick`, `deploy_poll_ready`, `deploy_poll_failed`, `deploy_poll_timeout`, `deploy_poll_unavailable`, `loop_blocked_on_deploy`, `sql_detected`, `sql_scan_passed`, `sql_scan_blocked`, `sql_applied`, `next_task_requested`, `loop_stopped`, `slack_degraded`, `error`
 
 ---
 
@@ -245,6 +248,32 @@ treated as a failure and the loop continues.
 `tests/test_deploy_node.py`).
 
 Without token, Vercel steps are skipped with a logged note.
+
+---
+
+## Slack Notifications
+
+The runner can push **notable** lifecycle events to a Slack channel via an
+[Incoming Webhook](https://api.slack.com/messaging/webhooks). Notifications hang
+off the flight recorder: every call to `log_event(...)` is offered to
+`tools/slack_tools.py`, which posts only the events listed in
+`SLACK_NOTIFY_EVENTS`.
+
+- Set `SLACK_WEBHOOK_URL` to enable. Without it, notifications are a no-op and
+  the runner is otherwise unaffected.
+- `SLACK_NOTIFY=false` disables notifications without removing the webhook.
+- `SLACK_NOTIFY_EVENTS` overrides which events ping Slack (comma-separated). The
+  default curated set is: `task_completed`, `error`, `loop_stopped`,
+  `loop_blocked_on_deploy`, `deploy_poll_failed`, `deploy_poll_timeout`,
+  `sql_scan_blocked`, `sql_approval_pending`, `check_failed`.
+- Reaching Slack failing (network error, non-2xx) **never** interrupts the
+  runner — the failure is swallowed and recorded as a `slack_degraded` event, so
+  the flight recorder keeps the full trail. `slack_degraded` is intentionally not
+  in the notify set, so a Slack outage can't loop back into more Slack posts.
+
+`format_event(...)` builds the message text and is pure/side-effect free, so the
+formatting and filtering are unit-tested without the network (see
+`tests/test_slack_tools.py`).
 
 ---
 
