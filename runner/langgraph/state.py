@@ -57,6 +57,7 @@ class RunnerState(BaseModel):
     last_completed_step: Optional[str] = None
     last_commit: Optional[str] = None
     loop_count: int = 0
+    consecutive_failures: int = 0
     started_at: Optional[str] = None
     updated_at: Optional[str] = None
     error: Optional[str] = None
@@ -71,5 +72,6 @@ class RunnerState(BaseModel):
     sql_scan: Optional[dict] = None
     sql_approval_status: Optional[str] = None  # pending | approved | rejected | None
     resource_request_status: Optional[str] = None  # pending | fulfilled | None
+    retry_pending: Optional[bool] = None  # a failed task was requeued for retry this loop
     messages: list[dict] = Field(default_factory=list)
     stop_reason: Optional[str] = None

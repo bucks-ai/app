@@ -16,9 +16,11 @@ from tools.task_tools import (
     mark_task_complete,
     mark_task_failed,
     mark_task_blocked,
+    requeue_task,
     add_task,
     update_task_branch,
 )
+from tools.failure_guard import evaluate_failure
 from tools.summary_tools import parse_worker_summary
 from tools.resource_gate import collect_requests, evaluate_gate, format_request_file
 from tools.git_tools import (
@@ -464,10 +466,56 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
     if result.get("success"):
         mark_task_complete(task_id, str(state.worker_summary or "")[:500])
         log_event("task_completed", {"task_id": task_id}, task_id=task_id)
+        # A success breaks any failure streak and clears the retry signal.
+        state.consecutive_failures = 0
+        state.retry_pending = False
     else:
         err = result.get("error") or "worker returned no output"
-        mark_task_failed(task_id, err)
-        log_event("error", {"task_id": task_id, "error": err})
+        state.retry_pending = False
+        if cfg.failure_guard_enabled:
+            decision = evaluate_failure(
+                task,
+                state.consecutive_failures,
+                max_task_retries=cfg.max_task_retries,
+                max_consecutive_failures=cfg.max_consecutive_failures,
+            )
+            state.consecutive_failures = decision["consecutive_failures"]
+
+            if decision["action"] == "retry":
+                # Transient failure: requeue the task for another attempt instead
+                # of abandoning it. It keeps its place in the queue, so
+                # load_next_task picks it up again next loop.
+                requeue_task(task_id, decision["retry_count"])
+                state.retry_pending = True
+                log_event("task_retry_scheduled", {
+                    "task_id": task_id,
+                    "error": err,
+                    "attempt": decision["retry_count"],
+                    "max_retries": cfg.max_task_retries,
+                }, task_id=task_id)
+            else:
+                # Retries exhausted (or disabled): record a permanent failure.
+                mark_task_failed(task_id, err)
+                log_event("error", {
+                    "task_id": task_id,
+                    "error": err,
+                    "retries_exhausted": cfg.max_task_retries > 0,
+                })
+
+            # Circuit breaker: too many back-to-back failures halts the loop so the
+            # runner stops piling tasks onto a run that's clearly going sideways.
+            # Independent of the retry decision — the requeued task is preserved
+            # for the next run while this run stops cleanly.
+            if decision["circuit_open"]:
+                state.stop_reason = decision["stop_reason"]
+                log_event("loop_blocked_on_failures", {
+                    "task_id": task_id,
+                    "consecutive_failures": state.consecutive_failures,
+                    "max_consecutive_failures": cfg.max_consecutive_failures,
+                }, task_id=task_id)
+        else:
+            mark_task_failed(task_id, err)
+            log_event("error", {"task_id": task_id, "error": err})
 
     state.loop_count += 1
     state.current_task = None
@@ -483,6 +531,10 @@ def ask_chatgpt_next_task(state: RunnerState) -> RunnerState:
     # If the loop is already flagged to stop (e.g. a deploy failed or timed out),
     # don't ask the planner for — or queue — another task that would never run.
     if state.stop_reason:
+        return state
+    # A failed task was just requeued for retry; let that retry run next loop
+    # rather than piling a fresh planner task on top of it.
+    if state.retry_pending:
         return state
     summary_text = str(state.worker_summary or {})
     planner = ChatGPTWorker()

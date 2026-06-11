@@ -97,6 +97,9 @@ Copy `.env.example` to `.env` and fill in:
 | `VERCEL_POLL_INTERVAL` | Seconds between deployment status reads (default: 5) |
 | `AUTO_APPLY_SQL` | Auto-apply scanned SQL (default: true) — **keep false until SQL parsing is verified** |
 | `RESOURCE_GATE` | Pause the loop when a worker reports it needs a missing credential/resource (default: true) |
+| `FAILURE_GUARD` | Retry failed tasks and stop the loop on repeated failures (default: true) |
+| `MAX_TASK_RETRIES` | Times a failed task is requeued before giving up (default: 1) |
+| `MAX_CONSECUTIVE_FAILURES` | Consecutive failures that trip the circuit breaker and halt the loop (default: 3) |
 
 ---
 
@@ -252,6 +255,39 @@ it lacked a credential surfaces an actionable request rather than a bare failure
 The decision helpers in `tools/resource_gate.py` (`collect_requests`,
 `evaluate_gate`, `format_request_file`) are pure/side-effect free and unit-tested
 in `tests/test_resource_gate.py`, which also covers the graph node.
+
+---
+
+## Failure & Retry Guard
+
+When a worker fails, `update_logs_and_state` no longer just records a bare
+failure and moves on (which loses transient-failure work and lets a broken run
+burn its whole loop/runtime budget producing more failures). With
+`FAILURE_GUARD=true` (default) it applies two protections:
+
+1. **Per-task retry** — the failed task is requeued (status → `queued`, its
+   `retry_count` bumped) up to `MAX_TASK_RETRIES` times (default 1) before being
+   marked permanently `failed`. The requeued task keeps its place in the queue,
+   so `load_next_task` picks it up again on the next loop. Each retry logs a
+   `task_retry_scheduled` event; the final give-up logs the usual `error` event
+   with `retries_exhausted: true`. While a retry is pending the runner does
+   **not** ask the planner for a fresh task — it lets the retry run first.
+2. **Consecutive-failure circuit breaker** — the runner tracks how many tasks
+   have failed back-to-back on `state.consecutive_failures`. Once that reaches
+   `MAX_CONSECUTIVE_FAILURES` (default 3) the guard sets `stop_reason`
+   (`consecutive_failures`), logs `loop_blocked_on_failures`, and the loop halts
+   cleanly at `decide_continue_or_stop` instead of piling new tasks onto a run
+   that's clearly going sideways. Any **successful** task resets the counter to 0.
+
+Retry and the breaker are independent: a task with retries remaining is still
+requeued for the next run even when the same failure trips the breaker and stops
+this run. Set `MAX_TASK_RETRIES=0` to disable retries (fail immediately) or
+`MAX_CONSECUTIVE_FAILURES=0` to disable the breaker. `FAILURE_GUARD=false`
+restores the old behavior: mark failed and continue.
+
+The decision logic in `tools/failure_guard.py` (`task_retry_count`,
+`evaluate_failure`) is pure/side-effect free and unit-tested in
+`tests/test_failure_guard.py`, which also covers the graph node.
 
 ---
 

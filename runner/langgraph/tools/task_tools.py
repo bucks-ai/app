@@ -92,6 +92,23 @@ def mark_task_blocked(task_id: str, reason: str):
     save_tasks(tasks)
 
 
+def requeue_task(task_id: str, retry_count: int):
+    """Requeue a failed task for another attempt (status → ``queued``).
+
+    Records ``retry_count`` so the failure guard can cap how many times a task is
+    retried before it is marked permanently ``failed``. Distinct from
+    ``mark_task_failed``: a requeued task stays alive in the queue and is picked
+    up again by ``get_next_queued_task`` on the next loop.
+    """
+    tasks = load_tasks()
+    for task in tasks:
+        if task["id"] == task_id:
+            task["status"] = "queued"
+            task["retry_count"] = retry_count
+            task["updated_at"] = datetime.utcnow().isoformat()
+    save_tasks(tasks)
+
+
 def update_task_branch(task_id: str, branch: str):
     """Persist a rewritten branch name back to tasks.json for the given task."""
     tasks = load_tasks()

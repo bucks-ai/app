@@ -19,6 +19,7 @@ _DEFAULT_SLACK_EVENTS = frozenset({
     "error",
     "loop_stopped",
     "loop_blocked_on_deploy",
+    "loop_blocked_on_failures",
     "deploy_poll_failed",
     "deploy_poll_timeout",
     "sql_scan_blocked",
@@ -94,6 +95,15 @@ class RunnerConfig:
     resource_gate_enabled: bool = field(
         default_factory=lambda: os.getenv("RESOURCE_GATE", "true").lower() == "true"
     )
+    failure_guard_enabled: bool = field(
+        default_factory=lambda: os.getenv("FAILURE_GUARD", "true").lower() == "true"
+    )
+    max_task_retries: int = field(
+        default_factory=lambda: int(os.getenv("MAX_TASK_RETRIES", "1"))
+    )
+    max_consecutive_failures: int = field(
+        default_factory=lambda: int(os.getenv("MAX_CONSECUTIVE_FAILURES", "3"))
+    )
 
     @property
     def has_openai(self) -> bool:
@@ -142,6 +152,9 @@ class RunnerConfig:
             "auto_apply_sql": self.auto_apply_sql,
             "require_sql_approval": self.require_sql_approval,
             "resource_gate_enabled": self.resource_gate_enabled,
+            "failure_guard_enabled": self.failure_guard_enabled,
+            "max_task_retries": self.max_task_retries,
+            "max_consecutive_failures": self.max_consecutive_failures,
         }
 
 
