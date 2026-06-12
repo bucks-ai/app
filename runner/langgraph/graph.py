@@ -1,5 +1,6 @@
 """LangGraph StateGraph for the bucks.ai Autonomous Development Runner."""
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated
@@ -22,6 +23,7 @@ from tools.task_tools import (
 )
 from tools.failure_guard import evaluate_failure
 from tools.repeated_error_guard import evaluate_error_repetition, evaluate_task_repetition
+from tools.worker_timeout_guard import evaluate_worker_timeout
 from tools.summary_tools import parse_worker_summary
 from tools.resource_gate import collect_requests, evaluate_gate, format_request_file
 from tools.git_tools import (
@@ -171,9 +173,11 @@ def dispatch_worker(state: RunnerState) -> RunnerState:
     else:
         worker = ClaudeWorker()
 
+    _start = time.monotonic()
     result = worker.run_worker_prompt(prompt, task)
+    state.worker_elapsed_seconds = round(time.monotonic() - _start, 2)
     state.worker_result = result.model_dump()
-    log_event("worker_finished", {"worker": state.current_worker, "success": result.success, "task_id": state.current_task_id})
+    log_event("worker_finished", {"worker": state.current_worker, "success": result.success, "elapsed_seconds": state.worker_elapsed_seconds, "task_id": state.current_task_id})
     return _persist(state, "dispatch_worker")
 
 
@@ -504,6 +508,31 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
                 "error": err,
             }, task_id=task_id)
 
+        # ── Worker timeout guard ─────────────────────────────────────────────
+        if cfg.worker_timeout_guard_enabled:
+            tg = evaluate_worker_timeout(
+                state.worker_elapsed_seconds,
+                err,
+                state.worker_timeout_count,
+                cfg.max_worker_timeouts,
+                cfg.worker_timeout_threshold,
+            )
+            state.worker_timeout_count = tg["timeout_count"]
+            if tg["timed_out"]:
+                log_event("worker_timeout_detected", {
+                    "task_id": task_id,
+                    "elapsed_seconds": state.worker_elapsed_seconds,
+                    "timeout_count": tg["timeout_count"],
+                    "max_worker_timeouts": cfg.max_worker_timeouts,
+                }, task_id=task_id)
+            if tg["blocked"] and not state.stop_reason:
+                state.stop_reason = tg["stop_reason"]
+                log_event("loop_blocked_on_worker_timeout", {
+                    "task_id": task_id,
+                    "timeout_count": tg["timeout_count"],
+                    "max_worker_timeouts": cfg.max_worker_timeouts,
+                }, task_id=task_id)
+
         if cfg.failure_guard_enabled:
             decision = evaluate_failure(
                 task,
@@ -552,6 +581,7 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
     state.loop_count += 1
     state.current_task = None
     state.worker_result = None
+    state.worker_elapsed_seconds = None
     state.check_passed = None
     state.deploy_result = None
     state.deploy_ready = None

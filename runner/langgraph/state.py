@@ -75,5 +75,7 @@ class RunnerState(BaseModel):
     retry_pending: Optional[bool] = None  # a failed task was requeued for retry this loop
     error_history: list[dict] = Field(default_factory=list)  # recent {error, task_id} records
     task_attempt_counts: dict = Field(default_factory=dict)   # task_id → run count this session
+    worker_elapsed_seconds: Optional[float] = None  # wall-clock seconds of the last dispatch
+    worker_timeout_count: int = 0                   # cumulative timeouts this session
     messages: list[dict] = Field(default_factory=list)
     stop_reason: Optional[str] = None

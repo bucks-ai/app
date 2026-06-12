@@ -28,6 +28,7 @@ _DEFAULT_SLACK_EVENTS = frozenset({
     "sql_approval_pending",
     "resource_request_pending",
     "check_failed",
+    "loop_blocked_on_worker_timeout",
 })
 
 
@@ -115,6 +116,15 @@ class RunnerConfig:
     max_task_attempts: int = field(
         default_factory=lambda: int(os.getenv("MAX_TASK_ATTEMPTS", "3"))
     )
+    worker_timeout_guard_enabled: bool = field(
+        default_factory=lambda: os.getenv("WORKER_TIMEOUT_GUARD", "true").lower() == "true"
+    )
+    max_worker_timeouts: int = field(
+        default_factory=lambda: int(os.getenv("MAX_WORKER_TIMEOUTS", "3"))
+    )
+    worker_timeout_threshold: int = field(
+        default_factory=lambda: int(os.getenv("WORKER_TIMEOUT_THRESHOLD", "570"))
+    )
 
     @property
     def has_openai(self) -> bool:
@@ -169,6 +179,9 @@ class RunnerConfig:
             "max_repeated_errors": self.max_repeated_errors,
             "repeated_error_window": self.repeated_error_window,
             "max_task_attempts": self.max_task_attempts,
+            "worker_timeout_guard_enabled": self.worker_timeout_guard_enabled,
+            "max_worker_timeouts": self.max_worker_timeouts,
+            "worker_timeout_threshold": self.worker_timeout_threshold,
         }
 
 
