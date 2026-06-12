@@ -21,6 +21,7 @@ from tools.task_tools import (
     update_task_branch,
 )
 from tools.failure_guard import evaluate_failure
+from tools.repeated_error_guard import evaluate_error_repetition, evaluate_task_repetition
 from tools.summary_tools import parse_worker_summary
 from tools.resource_gate import collect_requests, evaluate_gate, format_request_file
 from tools.git_tools import (
@@ -463,6 +464,22 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
     result = state.worker_result or {}
     task_id = task.get("id", "")
 
+    # ── Repeated-task guard ──────────────────────────────────────────────────
+    if task_id:
+        rep_task = evaluate_task_repetition(
+            task_id, state.task_attempt_counts, cfg.max_task_attempts
+        )
+        counts = dict(state.task_attempt_counts)
+        counts[task_id] = rep_task["attempt_count"]
+        state.task_attempt_counts = counts
+        if rep_task["blocked"] and not state.stop_reason:
+            state.stop_reason = rep_task["stop_reason"]
+            log_event("loop_blocked_on_repeated_task", {
+                "task_id": task_id,
+                "attempt_count": rep_task["attempt_count"],
+                "max_task_attempts": cfg.max_task_attempts,
+            }, task_id=task_id)
+
     if result.get("success"):
         mark_task_complete(task_id, str(state.worker_summary or "")[:500])
         log_event("task_completed", {"task_id": task_id}, task_id=task_id)
@@ -472,6 +489,21 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
     else:
         err = result.get("error") or "worker returned no output"
         state.retry_pending = False
+
+        # ── Repeated-error guard ─────────────────────────────────────────────
+        rep_err = evaluate_error_repetition(
+            err, state.error_history, cfg.max_repeated_errors, cfg.repeated_error_window
+        )
+        state.error_history = list(state.error_history) + [{"error": err, "task_id": task_id}]
+        if rep_err["blocked"] and not state.stop_reason:
+            state.stop_reason = rep_err["stop_reason"]
+            log_event("loop_blocked_on_repeated_error", {
+                "task_id": task_id,
+                "match_count": rep_err["match_count"],
+                "max_repeated_errors": cfg.max_repeated_errors,
+                "error": err,
+            }, task_id=task_id)
+
         if cfg.failure_guard_enabled:
             decision = evaluate_failure(
                 task,

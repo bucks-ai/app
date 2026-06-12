@@ -73,5 +73,7 @@ class RunnerState(BaseModel):
     sql_approval_status: Optional[str] = None  # pending | approved | rejected | None
     resource_request_status: Optional[str] = None  # pending | fulfilled | None
     retry_pending: Optional[bool] = None  # a failed task was requeued for retry this loop
+    error_history: list[dict] = Field(default_factory=list)  # recent {error, task_id} records
+    task_attempt_counts: dict = Field(default_factory=dict)   # task_id → run count this session
     messages: list[dict] = Field(default_factory=list)
     stop_reason: Optional[str] = None
