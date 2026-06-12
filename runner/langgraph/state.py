@@ -26,6 +26,8 @@ class WorkerResult(BaseModel):
     prompt_written: bool = False
     prompt_path: Optional[str] = None
     response_path: Optional[str] = None
+    api_cost: Optional[float] = None
+    tokens_used: Optional[int] = None
 
 
 class ToolResult(BaseModel):
@@ -77,5 +79,6 @@ class RunnerState(BaseModel):
     task_attempt_counts: dict = Field(default_factory=dict)   # task_id → run count this session
     worker_elapsed_seconds: Optional[float] = None  # wall-clock seconds of the last dispatch
     worker_timeout_count: int = 0                   # cumulative timeouts this session
+    session_cost: float = 0.0                       # cumulative API cost ($) this session
     messages: list[dict] = Field(default_factory=list)
     stop_reason: Optional[str] = None

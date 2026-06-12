@@ -24,6 +24,7 @@ from tools.task_tools import (
 from tools.failure_guard import evaluate_failure
 from tools.repeated_error_guard import evaluate_error_repetition, evaluate_task_repetition
 from tools.worker_timeout_guard import evaluate_worker_timeout
+from tools.cost_budget_guard import evaluate_cost_budget
 from tools.summary_tools import parse_worker_summary
 from tools.resource_gate import collect_requests, evaluate_gate, format_request_file
 from tools.git_tools import (
@@ -577,6 +578,34 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
         else:
             mark_task_failed(task_id, err)
             log_event("error", {"task_id": task_id, "error": err})
+
+    # ── Cost & budget guard ──────────────────────────────────────────────────
+    if cfg.cost_budget_guard_enabled:
+        task_cost = (result.get("api_cost") or 0.0) or cfg.estimated_cost_per_task_dollars
+        cb = evaluate_cost_budget(
+            task_cost=task_cost,
+            session_cost=state.session_cost,
+            max_session_cost=cfg.max_session_cost_dollars,
+            max_task_cost=cfg.max_task_cost_dollars,
+        )
+        state.session_cost = cb["session_cost"]
+        if task_cost > 0:
+            log_event("cost_per_worker_run", {
+                "task_id": task_id,
+                "task_cost": cb["task_cost"],
+                "session_cost": cb["session_cost"],
+            }, task_id=task_id)
+        if cb["blocked"] and not state.stop_reason:
+            state.stop_reason = cb["stop_reason"]
+            log_event("loop_blocked_on_cost_budget", {
+                "task_id": task_id,
+                "task_cost": cb["task_cost"],
+                "session_cost": cb["session_cost"],
+                "max_session_cost": cfg.max_session_cost_dollars,
+                "max_task_cost": cfg.max_task_cost_dollars,
+                "task_exceeded": cb["task_exceeded"],
+                "session_exceeded": cb["session_exceeded"],
+            }, task_id=task_id)
 
     state.loop_count += 1
     state.current_task = None

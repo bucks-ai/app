@@ -29,6 +29,7 @@ _DEFAULT_SLACK_EVENTS = frozenset({
     "resource_request_pending",
     "check_failed",
     "loop_blocked_on_worker_timeout",
+    "loop_blocked_on_cost_budget",
 })
 
 
@@ -125,6 +126,18 @@ class RunnerConfig:
     worker_timeout_threshold: int = field(
         default_factory=lambda: int(os.getenv("WORKER_TIMEOUT_THRESHOLD", "570"))
     )
+    cost_budget_guard_enabled: bool = field(
+        default_factory=lambda: os.getenv("COST_BUDGET_GUARD", "true").lower() == "true"
+    )
+    max_session_cost_dollars: float = field(
+        default_factory=lambda: float(os.getenv("MAX_SESSION_COST_DOLLARS", "0.0"))
+    )
+    max_task_cost_dollars: float = field(
+        default_factory=lambda: float(os.getenv("MAX_TASK_COST_DOLLARS", "0.0"))
+    )
+    estimated_cost_per_task_dollars: float = field(
+        default_factory=lambda: float(os.getenv("ESTIMATED_COST_PER_TASK_DOLLARS", "0.0"))
+    )
 
     @property
     def has_openai(self) -> bool:
@@ -182,6 +195,10 @@ class RunnerConfig:
             "worker_timeout_guard_enabled": self.worker_timeout_guard_enabled,
             "max_worker_timeouts": self.max_worker_timeouts,
             "worker_timeout_threshold": self.worker_timeout_threshold,
+            "cost_budget_guard_enabled": self.cost_budget_guard_enabled,
+            "max_session_cost_dollars": self.max_session_cost_dollars,
+            "max_task_cost_dollars": self.max_task_cost_dollars,
+            "estimated_cost_per_task_dollars": self.estimated_cost_per_task_dollars,
         }
 
 
