@@ -6,6 +6,7 @@ Usage:
   python main.py next-task
   python main.py run-once
   python main.py run-loop
+  python main.py sync-github-issues [repo]
   python main.py scan-sql path/to/file.sql
   python main.py logs [--tail N]
   python main.py reset-state [--hard]
@@ -88,6 +89,23 @@ def cmd_next_task(args):
         print(json.dumps(task, indent=2))
     else:
         print("No queued tasks.")
+
+
+def cmd_sync_github_issues(args):
+    from config import get_config
+    from tools.github_tools import sync_open_issues_to_tasks
+
+    cfg = get_config()
+    repo = getattr(args, "repo", None) or cfg.github_repo
+    if not repo:
+        print("No GitHub repo configured. Set GITHUB_REPO=owner/name or pass repo.")
+        return
+    result = sync_open_issues_to_tasks(repo)
+    print(json.dumps({
+        "repo": result.get("repo"),
+        "synced": result.get("synced", 0),
+        "task_ids": [task.get("id") for task in result.get("tasks", [])],
+    }, indent=2))
 
 
 def cmd_run_once(args):
@@ -223,6 +241,9 @@ def main():
     sub.add_parser("run-once", help="Run one LangGraph cycle")
     sub.add_parser("run-loop", help="Run continuous autonomous loop")
 
+    p_sync = sub.add_parser("sync-github-issues", help="Import open GitHub issues into the local task queue")
+    p_sync.add_argument("repo", nargs="?", help="GitHub repo in owner/name form")
+
     p_sql = sub.add_parser("scan-sql", help="Scan a SQL file for dangerous statements")
     p_sql.add_argument("path", help="Path to .sql file")
 
@@ -242,6 +263,7 @@ def main():
         "setup": cmd_setup,
         "status": cmd_status,
         "next-task": cmd_next_task,
+        "sync-github-issues": cmd_sync_github_issues,
         "run-once": cmd_run_once,
         "run-loop": cmd_run_loop,
         "scan-sql": cmd_scan_sql,

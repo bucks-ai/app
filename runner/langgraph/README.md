@@ -201,11 +201,21 @@ The ChatGPT planner similarly uses OpenAI API if `OPENAI_API_KEY` is set, otherw
 ## GitHub Integration
 
 When `GITHUB_TOKEN` is set:
-- Lists open issues and can create tasks from them.
-- Comments on issues when tasks complete.
-- Closes issues when merged.
+- Lists open issues from `GITHUB_REPO=owner/name` and imports them into `.runtime/tasks.local.json`.
+- Upserts imported issue tasks by issue number, so repeated syncs refresh title/labels/body without duplicating tasks or resetting running/completed status.
+- Comments on linked issues when tasks complete or fail.
+- Closes linked issues after a successful checked task run.
 
 Without token, all GitHub operations degrade gracefully — tasks.json only.
+
+Run an explicit sync with:
+
+```bash
+python runner/langgraph/main.py sync-github-issues owner/name
+```
+
+If no repo argument is supplied, the runner uses `GITHUB_REPO` (or
+`GITHUB_REPOSITORY`) from the environment.
 
 ---
 

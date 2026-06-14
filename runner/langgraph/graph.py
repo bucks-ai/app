@@ -40,7 +40,7 @@ from tools.git_tools import (
 from tools.sql_guard import scan_sql_text
 from tools.supabase_tools import apply_sql_file
 from tools.vercel_tools import trigger_deploy
-from tools.github_tools import create_or_update_task_from_issue
+from tools.github_tools import sync_open_issues_to_tasks
 from tools.task_quality_guard import guard_planner_task
 from tools.strategic_decision_gate import (
     evaluate_strategic_gate,
@@ -93,6 +93,9 @@ def _persist(state: RunnerState, step: str) -> RunnerState:
 
 def load_next_task(state: RunnerState) -> RunnerState:
     task = get_next_queued_task()
+    if not task and cfg.has_github and cfg.github_repo:
+        sync_open_issues_to_tasks(cfg.github_repo)
+        task = get_next_queued_task()
     if task:
         branch = task.get("branch") or f"feature/{task['id']}"
         if branch.lower() in _PROTECTED_BRANCHES:
@@ -459,21 +462,32 @@ def deploy_if_needed(state: RunnerState) -> RunnerState:
 
 
 def update_github_if_needed(state: RunnerState) -> RunnerState:
-    if not cfg.has_github:
+    if not cfg.has_github or not cfg.github_repo:
         return state
     summary = state.worker_summary or {}
     task = state.current_task or {}
     issue_number = task.get("issue_number")
     if issue_number:
-        from tools.github_tools import comment_issue
-        repo = f"arnavt687/bucks-ai"
+        from tools.github_tools import update_issue_for_task_result
         digest = state.worker_summary_digest or build_run_summary_digest(summary, task=task, max_chars=500)
-        body = f"Runner completed task: {task.get('title')}\n\nSummary:\n{digest[:500]}"
+        deploy_verdict = None
         if state.deploy_result is not None:
             poll = (state.deploy_result or {}).get("poll") or {}
-            verdict = "ready" if state.deploy_ready else (poll.get("state") or "not ready")
-            body += f"\n\nDeploy: {verdict}"
-        comment_issue(repo, issue_number, body)
+            deploy_verdict = "ready" if state.deploy_ready else (poll.get("state") or "not ready")
+        result = state.worker_result or {}
+        success = bool(result.get("success") and state.check_passed)
+        update = update_issue_for_task_result(
+            cfg.github_repo,
+            task,
+            digest,
+            success=success,
+            deploy_verdict=deploy_verdict,
+        )
+        log_event("github_issue_updated", {
+            "task_id": state.current_task_id,
+            "repo": cfg.github_repo,
+            **update,
+        }, task_id=state.current_task_id)
     return _persist(state, "update_github_if_needed")
 
 

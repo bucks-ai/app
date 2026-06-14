@@ -48,6 +48,9 @@ class RunnerConfig:
     openai_api_key: Optional[str] = field(default_factory=lambda: os.getenv("OPENAI_API_KEY"))
     anthropic_api_key: Optional[str] = field(default_factory=lambda: os.getenv("ANTHROPIC_API_KEY"))
     github_token: Optional[str] = field(default_factory=lambda: os.getenv("GITHUB_TOKEN"))
+    github_repo: Optional[str] = field(
+        default_factory=lambda: os.getenv("GITHUB_REPO") or os.getenv("GITHUB_REPOSITORY")
+    )
     supabase_url: Optional[str] = field(default_factory=lambda: os.getenv("SUPABASE_URL"))
     supabase_service_role_key: Optional[str] = field(
         default_factory=lambda: os.getenv("SUPABASE_SERVICE_ROLE_KEY")
@@ -177,6 +180,7 @@ class RunnerConfig:
             "openai": self.has_openai,
             "anthropic": self.has_anthropic,
             "github": self.has_github,
+            "github_repo": self.github_repo,
             "supabase": self.has_supabase,
             "vercel": self.has_vercel,
             "vercel_project_id": self.vercel_project_id,
