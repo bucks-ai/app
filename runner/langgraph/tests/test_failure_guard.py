@@ -172,6 +172,55 @@ def test_node_success_resets_consecutive_failures():
     _with_stubbed_task_io(body)
 
 
+def test_node_success_uses_run_summary_digest_for_task_summary():
+    def body(calls):
+        graph.cfg.failure_guard_enabled = True
+        s = RunnerState(
+            current_task_id="t1",
+            current_task={"id": "t1", "title": "Digest task"},
+            worker_result={"success": True},
+            worker_summary={
+                "files_created": [],
+                "files_modified": ["runner/langgraph/graph.py"],
+                "check_result": True,
+                "sql_required": False,
+            },
+            worker_summary_digest="Task: Digest task\nCheck: pass",
+        )
+        out = graph.update_logs_and_state(s)
+        assert calls["complete"] == [("t1", "Task: Digest task\nCheck: pass")], calls
+        assert out.worker_summary_digest == "Task: Digest task\nCheck: pass"
+    _with_stubbed_task_io(body)
+
+
+def test_parse_worker_summary_node_stores_and_logs_digest():
+    events = []
+    orig_log = graph.log_event
+    graph.log_event = lambda event_type, payload, task_id=None: events.append((event_type, payload, task_id))
+    try:
+        s = RunnerState(
+            current_task_id="t1",
+            current_task={"id": "t1", "title": "Digest task"},
+            worker_result={"success": True, "output": """
+- Files Created: (none)
+- Files Modified:
+  - runner/langgraph/graph.py
+- Check Result: pass
+- Commit Result: skipped
+- Push Result: skipped
+- SQL Required: no
+- SQL File Path: N/A
+"""},
+        )
+        out = graph.parse_worker_summary_node(s)
+        assert out.worker_summary_digest.startswith("Task: Digest task"), out.worker_summary_digest
+        assert out.worker_summary["run_summary_digest"] == out.worker_summary_digest
+        assert events and events[0][0] == "run_summary_digest", events
+        assert events[0][1]["digest"] == out.worker_summary_digest
+    finally:
+        graph.log_event = orig_log
+
+
 def test_node_disabled_guard_falls_back_to_mark_failed():
     def body(calls):
         graph.cfg.failure_guard_enabled = False
@@ -234,6 +283,8 @@ if __name__ == "__main__":
         test_node_marks_failed_when_retries_exhausted,
         test_node_circuit_breaker_sets_stop_reason,
         test_node_success_resets_consecutive_failures,
+        test_node_success_uses_run_summary_digest_for_task_summary,
+        test_parse_worker_summary_node_stores_and_logs_digest,
         test_node_disabled_guard_falls_back_to_mark_failed,
         test_ask_next_task_skips_when_retry_pending,
         test_stop_reason_constant_surfaces_in_stop,

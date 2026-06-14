@@ -25,7 +25,7 @@ from tools.failure_guard import evaluate_failure
 from tools.repeated_error_guard import evaluate_error_repetition, evaluate_task_repetition
 from tools.worker_timeout_guard import evaluate_worker_timeout
 from tools.cost_budget_guard import evaluate_cost_budget
-from tools.summary_tools import parse_worker_summary
+from tools.summary_tools import build_run_summary_digest, parse_worker_summary
 from tools.resource_gate import collect_requests, evaluate_gate, format_request_file
 from tools.git_tools import (
     create_branch,
@@ -117,8 +117,7 @@ def load_next_task(state: RunnerState) -> RunnerState:
 def ask_chatgpt_for_task_if_needed(state: RunnerState) -> RunnerState:
     if state.current_task:
         return state
-    summary = state.worker_summary or {}
-    summary_text = str(summary)
+    summary_text = state.worker_summary_digest or build_run_summary_digest(state.worker_summary)
     log_event("next_task_requested", {"summary_preview": summary_text[:200]})
     planner = ChatGPTWorker()
     new_task = planner.ask_for_next_task(summary_text)
@@ -195,7 +194,15 @@ def parse_worker_summary_node(state: RunnerState) -> RunnerState:
     result = state.worker_result or {}
     output = result.get("output") or ""
     summary = parse_worker_summary(output)
+    digest = build_run_summary_digest(summary, task=state.current_task)
+    summary["run_summary_digest"] = digest
     state.worker_summary = summary
+    state.worker_summary_digest = digest
+    log_event("run_summary_digest", {
+        "task_id": state.current_task_id,
+        "digest": digest,
+        "raw_length": summary.get("raw_length"),
+    }, task_id=state.current_task_id)
     return _persist(state, "parse_worker_summary")
 
 
@@ -455,7 +462,8 @@ def update_github_if_needed(state: RunnerState) -> RunnerState:
     if issue_number:
         from tools.github_tools import comment_issue
         repo = f"arnavt687/bucks-ai"
-        body = f"Runner completed task: {task.get('title')}\n\nSummary: {str(summary)[:500]}"
+        digest = state.worker_summary_digest or build_run_summary_digest(summary, task=task, max_chars=500)
+        body = f"Runner completed task: {task.get('title')}\n\nSummary:\n{digest[:500]}"
         if state.deploy_result is not None:
             poll = (state.deploy_result or {}).get("poll") or {}
             verdict = "ready" if state.deploy_ready else (poll.get("state") or "not ready")
@@ -486,7 +494,8 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
             }, task_id=task_id)
 
     if result.get("success"):
-        mark_task_complete(task_id, str(state.worker_summary or "")[:500])
+        digest = state.worker_summary_digest or build_run_summary_digest(state.worker_summary, task=task, max_chars=500)
+        mark_task_complete(task_id, digest[:500])
         log_event("task_completed", {"task_id": task_id}, task_id=task_id)
         # A success breaks any failure streak and clears the retry signal.
         state.consecutive_failures = 0
@@ -627,7 +636,7 @@ def ask_chatgpt_next_task(state: RunnerState) -> RunnerState:
     # rather than piling a fresh planner task on top of it.
     if state.retry_pending:
         return state
-    summary_text = str(state.worker_summary or {})
+    summary_text = state.worker_summary_digest or build_run_summary_digest(state.worker_summary)
     planner = ChatGPTWorker()
     new_task = planner.ask_for_next_task(summary_text)
     if new_task:

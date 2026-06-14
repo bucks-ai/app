@@ -4,7 +4,12 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from tools.summary_tools import parse_worker_summary, _extract_section, _bool_from_text
+from tools.summary_tools import (
+    build_run_summary_digest,
+    parse_worker_summary,
+    _extract_section,
+    _bool_from_text,
+)
 
 # ---------------------------------------------------------------------------
 # Canonical structured output (matches the prompt template exactly)
@@ -185,6 +190,54 @@ def test_empty_text():
     assert result["files_created"] == []
 
 
+def test_parse_includes_run_summary_digest():
+    result = parse_worker_summary(CANONICAL)
+    digest = result["run_summary_digest"]
+    assert "Files: created app/api/buckets/route.ts; modified lib/db.ts; lib/schema.ts" in digest
+    assert "Check: pass" in digest
+    assert "SQL: no" in digest
+    assert "Next: add unit tests" in digest
+
+
+def test_digest_includes_task_label_and_resource_needs():
+    summary = parse_worker_summary("""
+- Files Created: (none)
+- Files Modified:
+  - runner/langgraph/graph.py
+- Check Result: fail
+- Commit Result: skipped
+- Push Result: skipped
+- SQL Required: yes
+- SQL File Path: supabase/run-summary.sql
+- Credentials Needed:
+  - SUPABASE_SERVICE_ROLE_KEY
+- Resources Needed:
+  - Supabase SQL editor access
+- Known Limitations:
+  - SQL was not applied
+- Next Task:
+  - apply SQL
+""")
+    digest = build_run_summary_digest(summary, task={"title": "Add digest"})
+    assert digest.startswith("Task: Add digest")
+    assert "Check: fail" in digest
+    assert "SQL: yes (supabase/run-summary.sql)" in digest
+    assert "Needs: credentials SUPABASE_SERVICE_ROLE_KEY; resources Supabase SQL editor access" in digest
+    assert "Limitations: SQL was not applied" in digest
+
+
+def test_digest_truncates_predictably():
+    summary = {
+        "files_created": [f"created-{idx}.txt" for idx in range(10)],
+        "files_modified": [f"modified-{idx}.txt" for idx in range(10)],
+        "check_result": True,
+        "sql_required": False,
+    }
+    digest = build_run_summary_digest(summary, max_chars=80)
+    assert len(digest) <= 80
+    assert digest.endswith("…")
+
+
 if __name__ == "__main__":
     import traceback
     tests = [
@@ -202,6 +255,9 @@ if __name__ == "__main__":
         test_push_skipped,
         test_list_does_not_bleed_into_next_section,
         test_empty_text,
+        test_parse_includes_run_summary_digest,
+        test_digest_includes_task_label_and_resource_needs,
+        test_digest_truncates_predictably,
     ]
     passed = failed = 0
     for t in tests:

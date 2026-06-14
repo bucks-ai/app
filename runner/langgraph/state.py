@@ -68,6 +68,7 @@ class RunnerState(BaseModel):
     current_task: Optional[dict] = None
     worker_result: Optional[dict] = None
     worker_summary: Optional[dict] = None
+    worker_summary_digest: Optional[str] = None
     check_passed: Optional[bool] = None
     deploy_result: Optional[dict] = None
     deploy_ready: Optional[bool] = None

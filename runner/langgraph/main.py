@@ -164,6 +164,7 @@ def cmd_reset_state(args):
         "current_task": None,
         "worker_result": None,
         "worker_summary": None,
+        "worker_summary_digest": None,
         "check_passed": None,
         "sql_scan": None,
         "sql_approval_status": None,
