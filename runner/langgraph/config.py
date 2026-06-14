@@ -30,6 +30,9 @@ _DEFAULT_SLACK_EVENTS = frozenset({
     "check_failed",
     "loop_blocked_on_worker_timeout",
     "loop_blocked_on_cost_budget",
+    "loop_blocked_on_strategic_gate",
+    "strategic_gate_triggered",
+    "strategic_gate_approved",
 })
 
 
@@ -138,6 +141,12 @@ class RunnerConfig:
     estimated_cost_per_task_dollars: float = field(
         default_factory=lambda: float(os.getenv("ESTIMATED_COST_PER_TASK_DOLLARS", "0.0"))
     )
+    strategic_gate_enabled: bool = field(
+        default_factory=lambda: os.getenv("STRATEGIC_GATE", "true").lower() == "true"
+    )
+    strategic_pause_interval: int = field(
+        default_factory=lambda: int(os.getenv("STRATEGIC_PAUSE_INTERVAL", "0"))
+    )
 
     @property
     def has_openai(self) -> bool:
@@ -199,6 +208,8 @@ class RunnerConfig:
             "max_session_cost_dollars": self.max_session_cost_dollars,
             "max_task_cost_dollars": self.max_task_cost_dollars,
             "estimated_cost_per_task_dollars": self.estimated_cost_per_task_dollars,
+            "strategic_gate_enabled": self.strategic_gate_enabled,
+            "strategic_pause_interval": self.strategic_pause_interval,
         }
 
 

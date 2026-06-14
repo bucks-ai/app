@@ -83,3 +83,6 @@ class RunnerState(BaseModel):
     session_cost: float = 0.0                       # cumulative API cost ($) this session
     messages: list[dict] = Field(default_factory=list)
     stop_reason: Optional[str] = None
+    strategic_gate_status: Optional[str] = None     # pending | None
+    strategic_tasks_since_gate: int = 0             # task loops since last strategic gate
+    strategic_gate_at_loop: Optional[int] = None    # loop_count when the gate last triggered

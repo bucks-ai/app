@@ -42,6 +42,11 @@ from tools.supabase_tools import apply_sql_file
 from tools.vercel_tools import trigger_deploy
 from tools.github_tools import create_or_update_task_from_issue
 from tools.task_quality_guard import guard_planner_task
+from tools.strategic_decision_gate import (
+    evaluate_strategic_gate,
+    format_review_file,
+    STRATEGIC_GATE_STOP,
+)
 from workers.chatgpt_worker import ChatGPTWorker
 from workers.claude_worker import ClaudeWorker
 from workers.codex_worker import CodexWorker
@@ -627,6 +632,85 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
     return _persist(state, "update_logs_and_state")
 
 
+def run_strategic_gate(state: RunnerState) -> RunnerState:
+    """Strategic decision gate: pause the loop every N tasks for human review.
+
+    When ``STRATEGIC_PAUSE_INTERVAL`` is set to N > 0, the loop pauses after
+    every N completed task loops and writes a review request to ``outbox/``.
+    The human creates an approval file in ``inbox/`` to resume.
+
+    If the gate was already pending from a prior run (persisted in state), this
+    node re-checks the inbox on each restart — so one additional task may run
+    between the gate firing and the approval check on the next restart.  That
+    is the inherent cost of a post-task gate; it is acceptable for review
+    intervals of 5+ tasks.
+    """
+    if not cfg.strategic_gate_enabled or cfg.strategic_pause_interval <= 0:
+        return state
+
+    # Re-check a gate that fired in a prior run: look for the approval file.
+    if state.strategic_gate_status == "pending":
+        gate_loop = state.strategic_gate_at_loop or 0
+        approved_path = _RUNNER_DIR / "inbox" / f"strategic_review_{gate_loop}_approved.txt"
+        if approved_path.exists():
+            state.strategic_gate_status = None
+            state.strategic_gate_at_loop = None
+            state.strategic_tasks_since_gate = 0
+            log_event("strategic_gate_approved", {
+                "gate_loop": gate_loop,
+                "message": "Human approved strategic review; resuming autonomous run.",
+            })
+        else:
+            state.stop_reason = STRATEGIC_GATE_STOP
+            log_event("loop_blocked_on_strategic_gate", {
+                "gate_loop": gate_loop,
+                "message": f"Waiting for approval file: inbox/strategic_review_{gate_loop}_approved.txt",
+            })
+        return _persist(state, "run_strategic_gate")
+
+    # Fresh evaluation: increment the counter and check whether the interval is reached.
+    gate = evaluate_strategic_gate(
+        tasks_since_gate=state.strategic_tasks_since_gate,
+        strategic_pause_interval=cfg.strategic_pause_interval,
+    )
+    state.strategic_tasks_since_gate = gate["tasks_since_gate"]
+
+    if gate["triggered"]:
+        gate_loop = state.loop_count
+        review_path = _RUNNER_DIR / "outbox" / f"strategic_review_{gate_loop}.txt"
+        approved_path = _RUNNER_DIR / "inbox" / f"strategic_review_{gate_loop}_approved.txt"
+
+        # Write the review request (idempotent — only on first encounter).
+        if not review_path.exists():
+            digest = state.worker_summary_digest or ""
+            review_path.write_text(format_review_file(
+                loop_count=gate_loop,
+                tasks_since_gate=cfg.strategic_pause_interval,
+                summary_digest=digest,
+                inbox_filename=approved_path.name,
+            ))
+
+        if not approved_path.exists():
+            state.strategic_gate_status = "pending"
+            state.strategic_gate_at_loop = gate_loop
+            state.stop_reason = STRATEGIC_GATE_STOP
+            log_event("strategic_gate_triggered", {
+                "loop_count": gate_loop,
+                "tasks_since_gate": cfg.strategic_pause_interval,
+                "review_path": str(review_path),
+                "approve_by": str(approved_path),
+                "message": (
+                    f"Strategic review required after {cfg.strategic_pause_interval} tasks. "
+                    f"See {review_path.name}; create {approved_path.name} to resume."
+                ),
+            })
+        else:
+            # Pre-approved (edge case: operator already created the file).
+            log_event("strategic_gate_auto_approved", {"gate_loop": gate_loop})
+
+    return _persist(state, "run_strategic_gate")
+
+
 def ask_chatgpt_next_task(state: RunnerState) -> RunnerState:
     # If the loop is already flagged to stop (e.g. a deploy failed or timed out),
     # don't ask the planner for — or queue — another task that would never run.
@@ -701,6 +785,12 @@ def _route_after_resource_gate(state: RunnerState) -> str:
     return "run_checks_if_needed"
 
 
+def _route_after_strategic_gate(state: RunnerState) -> str:
+    if state.strategic_gate_status == "pending":
+        return "decide_continue_or_stop"
+    return "ask_chatgpt_next_task"
+
+
 def _route_after_decide(state: RunnerState) -> str:
     if state.status == "stopped":
         return END
@@ -726,6 +816,7 @@ def build_graph():
     builder.add_node("deploy_if_needed", deploy_if_needed)
     builder.add_node("update_github_if_needed", update_github_if_needed)
     builder.add_node("update_logs_and_state", update_logs_and_state)
+    builder.add_node("run_strategic_gate", run_strategic_gate)
     builder.add_node("ask_chatgpt_next_task", ask_chatgpt_next_task)
     builder.add_node("decide_continue_or_stop", decide_continue_or_stop)
 
@@ -754,7 +845,11 @@ def build_graph():
     builder.add_edge("apply_sql_if_needed", "deploy_if_needed")
     builder.add_edge("deploy_if_needed", "update_github_if_needed")
     builder.add_edge("update_github_if_needed", "update_logs_and_state")
-    builder.add_edge("update_logs_and_state", "ask_chatgpt_next_task")
+    builder.add_edge("update_logs_and_state", "run_strategic_gate")
+    builder.add_conditional_edges("run_strategic_gate", _route_after_strategic_gate, {
+        "ask_chatgpt_next_task": "ask_chatgpt_next_task",
+        "decide_continue_or_stop": "decide_continue_or_stop",
+    })
     builder.add_edge("ask_chatgpt_next_task", "decide_continue_or_stop")
 
     builder.add_conditional_edges("decide_continue_or_stop", _route_after_decide, {
