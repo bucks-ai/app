@@ -9,7 +9,9 @@ persistence are stubbed so no network or disk I/O happens.
 """
 import os
 import sys
+import tempfile
 import traceback
+from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -41,6 +43,16 @@ def _stub_trigger(verdict, calls):
         calls.append({"project_name": project_name, "project_id": project_id})
         return verdict
     return _trigger
+
+
+def _run_with_temp_runner_dir(fn):
+    original_runner_dir = graph._RUNNER_DIR
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            graph._RUNNER_DIR = Path(tmp)
+            return fn()
+    finally:
+        graph._RUNNER_DIR = original_runner_dir
 
 
 # ---------------------------------------------------------------------------
@@ -98,10 +110,12 @@ def test_blocks_loop_on_deploy_failure():
     graph.cfg.vercel_token = "test-token"
     graph.cfg.block_on_deploy_failure = True
 
-    state = graph.deploy_if_needed(_landed_state())
+    state = _run_with_temp_runner_dir(lambda: graph.deploy_if_needed(_landed_state()))
 
     assert state.deploy_ready is False
     assert state.stop_reason == "deploy_failed", state.stop_reason
+    assert state.rollback_revert_status == "manual_required", state.rollback_revert_status
+    assert state.rollback_revert_plan["recommended_action"] == "manual_review", state.rollback_revert_plan
 
 
 def test_blocks_loop_on_deploy_timeout():
@@ -111,9 +125,10 @@ def test_blocks_loop_on_deploy_timeout():
     graph.cfg.vercel_token = "test-token"
     graph.cfg.block_on_deploy_failure = True
 
-    state = graph.deploy_if_needed(_landed_state())
+    state = _run_with_temp_runner_dir(lambda: graph.deploy_if_needed(_landed_state()))
 
     assert state.stop_reason == "deploy_timed_out", state.stop_reason
+    assert state.rollback_revert_status == "manual_required", state.rollback_revert_status
 
 
 def test_does_not_block_when_deploy_ready():
@@ -154,6 +169,39 @@ def test_does_not_block_on_unavailable_deploy():
     state = graph.deploy_if_needed(_landed_state())
 
     assert state.stop_reason is None, state.stop_reason
+    assert state.rollback_revert_plan is None, state.rollback_revert_plan
+
+
+def test_writes_rollback_revert_plan_for_failed_deploy():
+    verdict = {
+        "success": False,
+        "poll": {
+            "ready": False,
+            "terminal": True,
+            "timed_out": False,
+            "state": "ERROR",
+            "deployment": {"uid": "dpl_123", "url": "example.vercel.app"},
+        },
+    }
+    graph.trigger_deploy = _stub_trigger(verdict, [])
+    graph.cfg.auto_deploy = True
+    graph.cfg.vercel_token = "test-token"
+    graph.cfg.block_on_deploy_failure = True
+    graph.cfg.rollback_revert_policy = "rollback_then_revert"
+
+    try:
+        def _run():
+            state = graph.deploy_if_needed(_landed_state())
+            plan_path = graph._RUNNER_DIR / "outbox" / "t1_rollback_revert_plan.txt"
+            assert plan_path.exists(), "failed deploy should write a recovery plan"
+            text = plan_path.read_text()
+            assert "Recommended action: rollback_deployment_then_revert_commit" in text
+            return state
+
+        state = _run_with_temp_runner_dir(_run)
+        assert state.rollback_revert_plan["policy"] == "rollback_then_revert", state.rollback_revert_plan
+    finally:
+        graph.cfg.rollback_revert_policy = "manual"
 
 
 def test_ask_chatgpt_next_task_skips_when_stopping():
@@ -261,6 +309,7 @@ if __name__ == "__main__":
         test_does_not_block_when_deploy_ready,
         test_does_not_block_when_flag_disabled,
         test_does_not_block_on_unavailable_deploy,
+        test_writes_rollback_revert_plan_for_failed_deploy,
         test_ask_chatgpt_next_task_skips_when_stopping,
         test_skips_when_no_commit,
         test_skips_when_check_failed,

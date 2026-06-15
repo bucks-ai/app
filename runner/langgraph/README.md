@@ -94,6 +94,7 @@ Copy `.env.example` to `.env` and fill in:
 | `AUTO_DEPLOY` | Auto-trigger Vercel (default: true) |
 | `AUTO_DEPLOY_POLL` | Poll the triggered deployment until it finishes (default: true) |
 | `BLOCK_ON_DEPLOY_FAILURE` | Stop the loop when a polled deploy fails or times out (default: true) |
+| `ROLLBACK_REVERT_POLICY` | Recovery plan to write after a failed/timed-out deploy: `manual`, `rollback`, `revert`, `rollback_then_revert`, or `disabled` (default: `manual`) |
 | `VERCEL_POLL_TIMEOUT` | Max seconds to poll a deployment before giving up (default: 180) |
 | `VERCEL_POLL_INTERVAL` | Seconds between deployment status reads (default: 5) |
 | `AUTO_APPLY_SQL` | Auto-apply scanned SQL (default: true) — **keep false until SQL parsing is verified** |
@@ -164,7 +165,7 @@ Append-only JSONL flight recorder. Each line is a JSON event:
 {"event_type": "task_loaded", "timestamp": "...", "task_id": "...", "payload": {...}}
 ```
 
-Event types: `task_started`, `task_loaded`, `branch_rewritten`, `branch_rewrite_persisted`, `prompt_generated`, `planner_started`, `planner_finished`, `worker_started`, `worker_finished`, `summary_captured`, `run_summary_digest`, `check_started`, `check_passed`, `check_failed`, `branch_created`, `commit_created`, `push_completed`, `merge_started`, `merge_completed`, `branch_cleanup_completed`, `deploy_skipped`, `deploy_started`, `deploy_completed`, `deploy_result`, `deploy_poll_started`, `deploy_poll_tick`, `deploy_poll_ready`, `deploy_poll_failed`, `deploy_poll_timeout`, `deploy_poll_unavailable`, `loop_blocked_on_deploy`, `sql_detected`, `sql_scan_passed`, `sql_scan_blocked`, `sql_applied`, `resource_request_pending`, `resource_request_waiting`, `resource_request_fulfilled`, `next_task_requested`, `loop_stopped`, `slack_degraded`, `error`
+Event types: `task_started`, `task_loaded`, `branch_rewritten`, `branch_rewrite_persisted`, `prompt_generated`, `planner_started`, `planner_finished`, `worker_started`, `worker_finished`, `summary_captured`, `run_summary_digest`, `check_started`, `check_passed`, `check_failed`, `branch_created`, `commit_created`, `push_completed`, `merge_started`, `merge_completed`, `branch_cleanup_completed`, `deploy_skipped`, `deploy_started`, `deploy_completed`, `deploy_result`, `deploy_poll_started`, `deploy_poll_tick`, `deploy_poll_ready`, `deploy_poll_failed`, `deploy_poll_timeout`, `deploy_poll_unavailable`, `loop_blocked_on_deploy`, `rollback_revert_policy_required`, `sql_detected`, `sql_scan_passed`, `sql_scan_blocked`, `sql_applied`, `resource_request_pending`, `resource_request_waiting`, `resource_request_fulfilled`, `next_task_requested`, `loop_stopped`, `slack_degraded`, `error`
 
 ---
 
@@ -330,6 +331,16 @@ tasks on top of a broken deployment instead of looping past it. A degraded or
 unavailable deploy (no token, API unreachable, or polling disabled) is **not**
 treated as a failure and the loop continues.
 
+When a real deploy failure or timeout occurs, `ROLLBACK_REVERT_POLICY` also
+creates an explicit operator recovery plan at
+`outbox/<task_id>_rollback_revert_plan.txt`, records it on
+`state.rollback_revert_plan`, and emits `rollback_revert_policy_required`.
+The default `manual` policy requires a human to choose between rolling back the
+deployment and reverting source. `rollback`, `revert`, and
+`rollback_then_revert` change the recommended action written into the plan.
+`disabled` records no recovery plan. The runner does not silently mutate `main`
+or call rollback APIs from this policy path; recovery stays operator-approved.
+
 `poll_deployment_until_terminal(...)` is read-only and takes injectable
 `fetch`/`sleep`/`now` callables so the loop is unit-testable without the network
 (see `tests/test_vercel_polling.py`; the node itself is covered by
@@ -353,8 +364,8 @@ off the flight recorder: every call to `log_event(...)` is offered to
 - `SLACK_NOTIFY_EVENTS` overrides which events ping Slack (comma-separated). The
   default curated set is: `task_completed`, `error`, `loop_stopped`,
   `loop_blocked_on_deploy`, `deploy_poll_failed`, `deploy_poll_timeout`,
-  `sql_scan_blocked`, `sql_approval_pending`, `resource_request_pending`,
-  `check_failed`.
+  `rollback_revert_policy_required`, `sql_scan_blocked`, `sql_approval_pending`,
+  `resource_request_pending`, `check_failed`.
 - Reaching Slack failing (network error, non-2xx) **never** interrupts the
   runner — the failure is swallowed and recorded as a `slack_degraded` event, so
   the flight recorder keeps the full trail. `slack_degraded` is intentionally not

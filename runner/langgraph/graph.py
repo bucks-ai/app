@@ -28,6 +28,10 @@ from tools.codex_usage_limit_guard import evaluate_codex_usage_limit
 from tools.cost_budget_guard import evaluate_cost_budget
 from tools.summary_tools import build_run_summary_digest, parse_worker_summary
 from tools.resource_gate import collect_requests, evaluate_gate, format_request_file
+from tools.rollback_revert_policy import (
+    evaluate_rollback_revert_policy,
+    format_recovery_plan,
+)
 from tools.git_tools import (
     create_branch,
     run_check,
@@ -463,6 +467,29 @@ def deploy_if_needed(state: RunnerState) -> RunnerState:
                 "elapsed": poll.get("elapsed"),
             }, task_id=state.current_task_id)
 
+    decision = evaluate_rollback_revert_policy(
+        deploy_result=deploy,
+        policy=cfg.rollback_revert_policy,
+        task=state.current_task,
+        commit_sha=state.last_commit,
+    )
+    state.rollback_revert_status = decision.get("status")
+    state.rollback_revert_plan = decision if decision.get("required") else None
+    if decision.get("required"):
+        task_id = state.current_task_id or "unknown"
+        plan_path = _RUNNER_DIR / "outbox" / f"{task_id}_rollback_revert_plan.txt"
+        plan_path.parent.mkdir(parents=True, exist_ok=True)
+        if not plan_path.exists():
+            plan_path.write_text(format_recovery_plan(decision))
+        log_event("rollback_revert_policy_required", {
+            "task_id": task_id,
+            "policy": decision.get("policy"),
+            "recommended_action": decision.get("recommended_action"),
+            "reason": decision.get("reason"),
+            "plan_path": str(plan_path),
+            "warnings": decision.get("warnings", []),
+        }, task_id=task_id)
+
     return _persist(state, "deploy_if_needed")
 
 
@@ -670,6 +697,8 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
     state.check_passed = None
     state.deploy_result = None
     state.deploy_ready = None
+    state.rollback_revert_status = None
+    state.rollback_revert_plan = None
     state.resource_request_status = None
     return _persist(state, "update_logs_and_state")
 

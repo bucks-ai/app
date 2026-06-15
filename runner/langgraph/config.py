@@ -24,6 +24,7 @@ _DEFAULT_SLACK_EVENTS = frozenset({
     "loop_blocked_on_repeated_task",
     "deploy_poll_failed",
     "deploy_poll_timeout",
+    "rollback_revert_policy_required",
     "sql_scan_blocked",
     "sql_approval_pending",
     "resource_request_pending",
@@ -93,6 +94,9 @@ class RunnerConfig:
     )
     block_on_deploy_failure: bool = field(
         default_factory=lambda: os.getenv("BLOCK_ON_DEPLOY_FAILURE", "true").lower() == "true"
+    )
+    rollback_revert_policy: str = field(
+        default_factory=lambda: os.getenv("ROLLBACK_REVERT_POLICY", "manual")
     )
     vercel_poll_timeout: int = field(
         default_factory=lambda: int(os.getenv("VERCEL_POLL_TIMEOUT", "180"))
@@ -205,6 +209,7 @@ class RunnerConfig:
             "auto_deploy": self.auto_deploy,
             "auto_deploy_poll": self.auto_deploy_poll,
             "block_on_deploy_failure": self.block_on_deploy_failure,
+            "rollback_revert_policy": self.rollback_revert_policy,
             "vercel_poll_timeout": self.vercel_poll_timeout,
             "vercel_poll_interval": self.vercel_poll_interval,
             "auto_apply_sql": self.auto_apply_sql,

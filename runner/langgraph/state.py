@@ -72,6 +72,8 @@ class RunnerState(BaseModel):
     check_passed: Optional[bool] = None
     deploy_result: Optional[dict] = None
     deploy_ready: Optional[bool] = None
+    rollback_revert_status: Optional[str] = None
+    rollback_revert_plan: Optional[dict] = None
     sql_scan: Optional[dict] = None
     sql_approval_status: Optional[str] = None  # pending | approved | rejected | None
     resource_request_status: Optional[str] = None  # pending | fulfilled | None
