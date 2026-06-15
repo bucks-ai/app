@@ -82,6 +82,9 @@ class RunnerConfig:
     auto_merge: bool = field(
         default_factory=lambda: os.getenv("AUTO_MERGE", "true").lower() == "true"
     )
+    auto_cleanup_branches: bool = field(
+        default_factory=lambda: os.getenv("AUTO_CLEANUP_BRANCHES", "true").lower() == "true"
+    )
     auto_deploy: bool = field(
         default_factory=lambda: os.getenv("AUTO_DEPLOY", "true").lower() == "true"
     )
@@ -198,6 +201,7 @@ class RunnerConfig:
             "max_loop_tasks": self.max_loop_tasks,
             "max_runtime_minutes": self.max_runtime_minutes,
             "auto_merge": self.auto_merge,
+            "auto_cleanup_branches": self.auto_cleanup_branches,
             "auto_deploy": self.auto_deploy,
             "auto_deploy_poll": self.auto_deploy_poll,
             "block_on_deploy_failure": self.block_on_deploy_failure,

@@ -34,6 +34,7 @@ from tools.git_tools import (
     commit_all,
     push_branch,
     merge_feature_branch,
+    cleanup_feature_branch,
     fetch_pull_main,
     push_deploy_if_available,
     current_branch,
@@ -322,8 +323,11 @@ def commit_push_merge_if_needed(state: RunnerState) -> RunnerState:
         push_branch(cfg.repo_path, branch)
 
         if cfg.auto_merge:
-            merge_feature_branch(cfg.repo_path, branch)
-            fetch_pull_main(cfg.repo_path)
+            merge = merge_feature_branch(cfg.repo_path, branch)
+            if merge.get("success"):
+                fetch_pull_main(cfg.repo_path)
+                if cfg.auto_cleanup_branches:
+                    cleanup_feature_branch(cfg.repo_path, branch)
 
     return _persist(state, "commit_push_merge_if_needed")
 

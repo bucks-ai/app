@@ -102,11 +102,15 @@ def _worker_done_state():
 
 def _wire_git(commit_result):
     """Stub the git_tools symbols imported into graph; record push/merge calls."""
-    calls = {"push": [], "merge": [], "fetch": 0}
+    calls = {"push": [], "merge": [], "cleanup": [], "fetch": 0}
     graph.create_branch = lambda repo, branch: {"success": True, "output": ""}
     graph.commit_all = lambda repo, message: commit_result
     graph.push_branch = lambda repo, branch: calls["push"].append(branch)
-    graph.merge_feature_branch = lambda repo, branch: calls["merge"].append(branch)
+    def _merge(repo, branch):
+        calls["merge"].append(branch)
+        return {"success": True, "output": ""}
+    graph.merge_feature_branch = _merge
+    graph.cleanup_feature_branch = lambda repo, branch: calls["cleanup"].append(branch)
     def _fetch(repo):
         calls["fetch"] += 1
     graph.fetch_pull_main = _fetch
@@ -119,12 +123,14 @@ def test_node_sets_last_commit_when_worker_already_committed():
         "sha": "wrk5678 worker commit", "output": "nothing to commit",
     })
     graph.cfg.auto_merge = True
+    graph.cfg.auto_cleanup_branches = True
 
     state = graph.commit_push_merge_if_needed(_worker_done_state())
 
     assert state.last_commit == "wrk5678 worker commit", state.last_commit
     assert calls["push"] == ["feature/t1"], "worker commit should still be pushed"
     assert calls["merge"] == ["feature/t1"], "worker commit should still be merged"
+    assert calls["cleanup"] == ["feature/t1"], "merged feature branch should be cleaned up"
 
 
 def test_node_skips_on_real_commit_failure():
@@ -133,12 +139,14 @@ def test_node_skips_on_real_commit_failure():
         "sha": "", "output": "hook rejected",
     })
     graph.cfg.auto_merge = True
+    graph.cfg.auto_cleanup_branches = True
 
     state = graph.commit_push_merge_if_needed(_worker_done_state())
 
     assert state.last_commit is None, state.last_commit
     assert calls["push"] == [], "nothing should be pushed on a real commit failure"
     assert calls["merge"] == [], calls
+    assert calls["cleanup"] == [], calls
 
 
 def test_node_sets_last_commit_on_normal_commit():
@@ -147,12 +155,51 @@ def test_node_sets_last_commit_on_normal_commit():
         "sha": "abc1234 msg", "output": "",
     })
     graph.cfg.auto_merge = False
+    graph.cfg.auto_cleanup_branches = True
 
     state = graph.commit_push_merge_if_needed(_worker_done_state())
 
     assert state.last_commit == "abc1234 msg", state.last_commit
     assert calls["push"] == ["feature/t1"], calls
     assert calls["merge"] == [], "no merge when auto_merge is off"
+    assert calls["cleanup"] == [], "no cleanup when auto_merge is off"
+
+
+def test_node_skips_cleanup_when_merge_fails():
+    calls = _wire_git({
+        "success": True, "committed": True, "nothing_to_commit": False,
+        "sha": "abc1234 msg", "output": "",
+    })
+    graph.merge_feature_branch = lambda repo, branch: (
+        calls["merge"].append(branch) or {"success": False, "output": "conflict"}
+    )
+    graph.cfg.auto_merge = True
+    graph.cfg.auto_cleanup_branches = True
+
+    state = graph.commit_push_merge_if_needed(_worker_done_state())
+
+    assert state.last_commit == "abc1234 msg", state.last_commit
+    assert calls["push"] == ["feature/t1"], calls
+    assert calls["merge"] == ["feature/t1"], calls
+    assert calls["fetch"] == 0, "must not fetch main after a failed merge"
+    assert calls["cleanup"] == [], "must not clean up branch after a failed merge"
+
+
+def test_node_respects_branch_cleanup_flag():
+    calls = _wire_git({
+        "success": True, "committed": True, "nothing_to_commit": False,
+        "sha": "abc1234 msg", "output": "",
+    })
+    graph.cfg.auto_merge = True
+    graph.cfg.auto_cleanup_branches = False
+
+    state = graph.commit_push_merge_if_needed(_worker_done_state())
+
+    assert state.last_commit == "abc1234 msg", state.last_commit
+    assert calls["push"] == ["feature/t1"], calls
+    assert calls["merge"] == ["feature/t1"], calls
+    assert calls["fetch"] == 1, calls
+    assert calls["cleanup"] == [], "cleanup disabled by config"
 
 
 if __name__ == "__main__":
@@ -163,6 +210,8 @@ if __name__ == "__main__":
         test_node_sets_last_commit_when_worker_already_committed,
         test_node_skips_on_real_commit_failure,
         test_node_sets_last_commit_on_normal_commit,
+        test_node_skips_cleanup_when_merge_fails,
+        test_node_respects_branch_cleanup_flag,
     ]
     passed = failed = 0
     for t in tests:

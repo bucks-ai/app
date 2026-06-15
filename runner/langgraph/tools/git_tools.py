@@ -3,6 +3,8 @@ import os
 from tools.shell_tools import run_command
 from tools.log_tools import log_event
 
+_PROTECTED_BRANCHES = {"main", "master", "dev", "develop", "production", "release"}
+
 
 def _git(args: list[str], cwd: str, timeout: int = 60):
     return run_command(["git"] + args, cwd=cwd, timeout=timeout)
@@ -87,6 +89,43 @@ def merge_feature_branch(repo_path: str, branch: str) -> dict:
     r = run_command(["bash", script, branch], cwd=repo_path, timeout=300)
     log_event("merge_completed", {"branch": branch, "success": r.success, "output": r.output[-500:]})
     return {"success": r.success, "output": r.output}
+
+
+def cleanup_feature_branch(repo_path: str, branch: str) -> dict:
+    if branch.lower() in _PROTECTED_BRANCHES:
+        result = {
+            "success": False,
+            "local_deleted": False,
+            "remote_deleted": False,
+            "output": f"Refusing to clean up protected branch '{branch}'.",
+        }
+        log_event("branch_cleanup_completed", {"branch": branch, **result})
+        return result
+
+    current = current_branch(repo_path)
+    checkout = None
+    if current == branch:
+        checkout = _git(["checkout", "main"], repo_path)
+        if not checkout.success:
+            result = {
+                "success": False,
+                "local_deleted": False,
+                "remote_deleted": False,
+                "output": checkout.output,
+            }
+            log_event("branch_cleanup_completed", {"branch": branch, **result})
+            return result
+
+    local = _git(["branch", "-d", branch], repo_path)
+    remote = _git(["push", "origin", "--delete", branch], repo_path, timeout=120)
+    result = {
+        "success": local.success and remote.success,
+        "local_deleted": local.success,
+        "remote_deleted": remote.success,
+        "output": "\n".join(part for part in [local.output, remote.output] if part),
+    }
+    log_event("branch_cleanup_completed", {"branch": branch, **result})
+    return result
 
 
 def push_deploy_if_available(repo_path: str) -> dict:
