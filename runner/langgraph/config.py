@@ -173,6 +173,12 @@ class RunnerConfig:
     chatgpt_model: str = field(
         default_factory=lambda: os.getenv("CHATGPT_MODEL", "")
     )
+    context_compression_max_tokens: int = field(
+        default_factory=lambda: int(os.getenv("CONTEXT_COMPRESSION_MAX_TOKENS", "12000"))
+    )
+    context_compression_keep_recent: int = field(
+        default_factory=lambda: int(os.getenv("CONTEXT_COMPRESSION_KEEP_RECENT", "4"))
+    )
 
     @property
     def has_openai(self) -> bool:
@@ -244,6 +250,8 @@ class RunnerConfig:
             "model_routing_policy": self.model_routing_policy,
             "claude_model": self.claude_model,
             "chatgpt_model": self.chatgpt_model,
+            "context_compression_max_tokens": self.context_compression_max_tokens,
+            "context_compression_keep_recent": self.context_compression_keep_recent,
         }
 
 

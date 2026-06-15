@@ -27,6 +27,7 @@ from tools.worker_timeout_guard import evaluate_worker_timeout
 from tools.codex_usage_limit_guard import evaluate_codex_usage_limit
 from tools.cost_budget_guard import evaluate_cost_budget
 from tools.summary_tools import build_run_summary_digest, parse_worker_summary
+from tools.context_compression import compress_messages
 from tools.resource_gate import collect_requests, evaluate_gate, format_request_file
 from tools.rollback_revert_policy import (
     evaluate_rollback_revert_policy,
@@ -93,6 +94,32 @@ def _persist(state: RunnerState, step: str) -> RunnerState:
     state.last_completed_step = step
     state.updated_at = datetime.utcnow().isoformat()
     update_state(_state_dict(state))
+    return state
+
+
+def _compress_context_if_needed(state: RunnerState, *, reason: str) -> RunnerState:
+    result = compress_messages(
+        state.messages,
+        max_tokens=cfg.context_compression_max_tokens,
+        keep_recent=cfg.context_compression_keep_recent,
+        summary_digest=state.worker_summary_digest,
+    )
+    if not result["compressed"]:
+        return state
+
+    state.messages = result["messages"]
+    state.context_compression = {
+        "reason": reason,
+        "tokens_before": result["tokens_before"],
+        "tokens_after": result["tokens_after"],
+        "messages_before": result["messages_before"],
+        "messages_after": result["messages_after"],
+        "dropped_messages": result["dropped_messages"],
+    }
+    log_event("context_compressed", {
+        "task_id": state.current_task_id,
+        **state.context_compression,
+    }, task_id=state.current_task_id)
     return state
 
 
@@ -191,6 +218,7 @@ def resolve_model_node(state: RunnerState) -> RunnerState:
 
 
 def generate_worker_prompt(state: RunnerState) -> RunnerState:
+    state = _compress_context_if_needed(state, reason="before_worker_prompt")
     task = state.current_task or {}
     prompt = _TASK_PROMPT_TEMPLATE.format(
         repo_path=cfg.repo_path,
@@ -246,6 +274,7 @@ def parse_worker_summary_node(state: RunnerState) -> RunnerState:
         "digest": digest,
         "raw_length": summary.get("raw_length"),
     }, task_id=state.current_task_id)
+    state = _compress_context_if_needed(state, reason="after_worker_summary")
     return _persist(state, "parse_worker_summary")
 
 
@@ -730,6 +759,7 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
     state.rollback_revert_plan = None
     state.resource_request_status = None
     state.resolved_model = None
+    state.context_compression = None
     return _persist(state, "update_logs_and_state")
 
 

@@ -102,6 +102,8 @@ Copy `.env.example` to `.env` and fill in:
 | `FAILURE_GUARD` | Retry failed tasks and stop the loop on repeated failures (default: true) |
 | `MAX_TASK_RETRIES` | Times a failed task is requeued before giving up (default: 1) |
 | `MAX_CONSECUTIVE_FAILURES` | Consecutive failures that trip the circuit breaker and halt the loop (default: 3) |
+| `CONTEXT_COMPRESSION_MAX_TOKENS` | Soft token ceiling for persisted runner messages before older context is compressed (default: 12000) |
+| `CONTEXT_COMPRESSION_KEEP_RECENT` | Number of newest messages to preserve verbatim during compression (default: 4) |
 
 ---
 
@@ -157,6 +159,20 @@ On first run, the runner migrates any existing `tasks.json` to `.runtime/tasks.l
 
 ---
 
+## Context Compression
+
+The runner keeps `state.messages` compact with deterministic local compression.
+When the estimated token count exceeds `CONTEXT_COMPRESSION_MAX_TOKENS`, older
+messages are replaced with one synthetic system notice and the newest
+`CONTEXT_COMPRESSION_KEEP_RECENT` messages are preserved verbatim. The notice
+includes counts and the latest `worker_summary_digest`, not raw worker output.
+
+Compression runs before a new worker prompt is added and after the worker summary
+digest is available. Each compression logs `context_compressed` with token/message
+counts only.
+
+---
+
 ## logs/runs.jsonl
 
 Append-only JSONL flight recorder. Each line is a JSON event:
@@ -165,7 +181,7 @@ Append-only JSONL flight recorder. Each line is a JSON event:
 {"event_type": "task_loaded", "timestamp": "...", "task_id": "...", "payload": {...}}
 ```
 
-Event types: `task_started`, `task_loaded`, `branch_rewritten`, `branch_rewrite_persisted`, `prompt_generated`, `planner_started`, `planner_finished`, `worker_started`, `worker_finished`, `summary_captured`, `run_summary_digest`, `check_started`, `check_passed`, `check_failed`, `branch_created`, `commit_created`, `push_completed`, `merge_started`, `merge_completed`, `branch_cleanup_completed`, `deploy_skipped`, `deploy_started`, `deploy_completed`, `deploy_result`, `deploy_poll_started`, `deploy_poll_tick`, `deploy_poll_ready`, `deploy_poll_failed`, `deploy_poll_timeout`, `deploy_poll_unavailable`, `loop_blocked_on_deploy`, `rollback_revert_policy_required`, `sql_detected`, `sql_scan_passed`, `sql_scan_blocked`, `sql_applied`, `resource_request_pending`, `resource_request_waiting`, `resource_request_fulfilled`, `next_task_requested`, `loop_stopped`, `slack_degraded`, `error`
+Event types: `task_started`, `task_loaded`, `branch_rewritten`, `branch_rewrite_persisted`, `prompt_generated`, `context_compressed`, `planner_started`, `planner_finished`, `worker_started`, `worker_finished`, `summary_captured`, `run_summary_digest`, `check_started`, `check_passed`, `check_failed`, `branch_created`, `commit_created`, `push_completed`, `merge_started`, `merge_completed`, `branch_cleanup_completed`, `deploy_skipped`, `deploy_started`, `deploy_completed`, `deploy_result`, `deploy_poll_started`, `deploy_poll_tick`, `deploy_poll_ready`, `deploy_poll_failed`, `deploy_poll_timeout`, `deploy_poll_unavailable`, `loop_blocked_on_deploy`, `rollback_revert_policy_required`, `sql_detected`, `sql_scan_passed`, `sql_scan_blocked`, `sql_applied`, `resource_request_pending`, `resource_request_waiting`, `resource_request_fulfilled`, `next_task_requested`, `loop_stopped`, `slack_degraded`, `error`
 
 ---
 

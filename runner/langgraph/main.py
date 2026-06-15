@@ -183,6 +183,7 @@ def cmd_reset_state(args):
         "worker_result": None,
         "worker_summary": None,
         "worker_summary_digest": None,
+        "context_compression": None,
         "check_passed": None,
         "sql_scan": None,
         "sql_approval_status": None,
