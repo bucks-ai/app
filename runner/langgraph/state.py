@@ -80,6 +80,7 @@ class RunnerState(BaseModel):
     task_attempt_counts: dict = Field(default_factory=dict)   # task_id → run count this session
     worker_elapsed_seconds: Optional[float] = None  # wall-clock seconds of the last dispatch
     worker_timeout_count: int = 0                   # cumulative timeouts this session
+    codex_usage_limit_count: int = 0               # cumulative Codex usage-limit errors this session
     session_cost: float = 0.0                       # cumulative API cost ($) this session
     messages: list[dict] = Field(default_factory=list)
     stop_reason: Optional[str] = None

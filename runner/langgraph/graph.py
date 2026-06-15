@@ -24,6 +24,7 @@ from tools.task_tools import (
 from tools.failure_guard import evaluate_failure
 from tools.repeated_error_guard import evaluate_error_repetition, evaluate_task_repetition
 from tools.worker_timeout_guard import evaluate_worker_timeout
+from tools.codex_usage_limit_guard import evaluate_codex_usage_limit
 from tools.cost_budget_guard import evaluate_cost_budget
 from tools.summary_tools import build_run_summary_digest, parse_worker_summary
 from tools.resource_gate import collect_requests, evaluate_gate, format_request_file
@@ -560,6 +561,29 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
                     "task_id": task_id,
                     "timeout_count": tg["timeout_count"],
                     "max_worker_timeouts": cfg.max_worker_timeouts,
+                }, task_id=task_id)
+
+        # ── Codex usage-limit guard ──────────────────────────────────────────
+        if cfg.codex_usage_limit_guard_enabled:
+            cug = evaluate_codex_usage_limit(
+                err,
+                result.get("worker"),
+                state.codex_usage_limit_count,
+                cfg.max_codex_usage_limit_errors,
+            )
+            state.codex_usage_limit_count = cug["usage_limit_count"]
+            if cug["usage_limit_detected"]:
+                log_event("codex_usage_limit_detected", {
+                    "task_id": task_id,
+                    "usage_limit_count": cug["usage_limit_count"],
+                    "max_codex_usage_limit_errors": cfg.max_codex_usage_limit_errors,
+                }, task_id=task_id)
+            if cug["blocked"] and not state.stop_reason:
+                state.stop_reason = cug["stop_reason"]
+                log_event("loop_blocked_on_codex_usage_limit", {
+                    "task_id": task_id,
+                    "usage_limit_count": cug["usage_limit_count"],
+                    "max_codex_usage_limit_errors": cfg.max_codex_usage_limit_errors,
                 }, task_id=task_id)
 
         if cfg.failure_guard_enabled:

@@ -33,6 +33,7 @@ _DEFAULT_SLACK_EVENTS = frozenset({
     "loop_blocked_on_strategic_gate",
     "strategic_gate_triggered",
     "strategic_gate_approved",
+    "loop_blocked_on_codex_usage_limit",
 })
 
 
@@ -150,6 +151,12 @@ class RunnerConfig:
     strategic_pause_interval: int = field(
         default_factory=lambda: int(os.getenv("STRATEGIC_PAUSE_INTERVAL", "0"))
     )
+    codex_usage_limit_guard_enabled: bool = field(
+        default_factory=lambda: os.getenv("CODEX_USAGE_LIMIT_GUARD", "true").lower() == "true"
+    )
+    max_codex_usage_limit_errors: int = field(
+        default_factory=lambda: int(os.getenv("MAX_CODEX_USAGE_LIMIT_ERRORS", "2"))
+    )
 
     @property
     def has_openai(self) -> bool:
@@ -214,6 +221,8 @@ class RunnerConfig:
             "estimated_cost_per_task_dollars": self.estimated_cost_per_task_dollars,
             "strategic_gate_enabled": self.strategic_gate_enabled,
             "strategic_pause_interval": self.strategic_pause_interval,
+            "codex_usage_limit_guard_enabled": self.codex_usage_limit_guard_enabled,
+            "max_codex_usage_limit_errors": self.max_codex_usage_limit_errors,
         }
 
 
