@@ -28,19 +28,20 @@ class ChatGPTWorker(BaseWorker):
     def run_worker_prompt(self, prompt: str, task: dict) -> WorkerResult:
         cfg = get_config()
         task_id = task.get("id", "planner")
+        model = task.get("resolved_model") or cfg.chatgpt_model or "gpt-4o"
 
-        log_event("planner_started", {"task_id": task_id, "mode": "api" if cfg.has_openai else "outbox"})
+        log_event("planner_started", {"task_id": task_id, "mode": "api" if cfg.has_openai else "outbox", "model": model})
 
         if cfg.has_openai:
-            return self._run_api(prompt, task_id, cfg.openai_api_key)
+            return self._run_api(prompt, task_id, cfg.openai_api_key, model=model)
         return self._run_outbox(prompt, task_id)
 
-    def _run_api(self, prompt: str, task_id: str, api_key: str) -> WorkerResult:
+    def _run_api(self, prompt: str, task_id: str, api_key: str, model: str = "gpt-4o") -> WorkerResult:
         try:
             from openai import OpenAI
             client = OpenAI(api_key=api_key)
             response = client.chat.completions.create(
-                model="gpt-4o",
+                model=model,
                 messages=[
                     {"role": "system", "content": _PLANNER_SYSTEM},
                     {"role": "user", "content": prompt},
@@ -48,7 +49,7 @@ class ChatGPTWorker(BaseWorker):
                 temperature=0.2,
             )
             output = response.choices[0].message.content
-            log_event("planner_finished", {"task_id": task_id, "mode": "api", "output_len": len(output)})
+            log_event("planner_finished", {"task_id": task_id, "mode": "api", "model": model, "output_len": len(output)})
             return WorkerResult(worker="chatgpt", mode="api", success=True, output=output)
         except Exception as e:
             log_event("error", {"worker": "chatgpt", "error": str(e)})

@@ -12,19 +12,23 @@ class ClaudeWorker(BaseWorker):
 
     def run_worker_prompt(self, prompt: str, task: dict) -> WorkerResult:
         task_id = task.get("id", "task")
-        log_event("worker_started", {"worker": "claude", "task_id": task_id})
+        model = task.get("resolved_model") or None
+        log_event("worker_started", {"worker": "claude", "task_id": task_id, "model": model})
 
         if shutil.which("claude"):
-            result = self._run_cli(prompt, task_id)
+            result = self._run_cli(prompt, task_id, model=model)
         else:
             result = self._run_outbox(prompt, task_id)
 
         log_event("worker_finished", {"worker": "claude", "task_id": task_id, "success": result.success})
         return result
 
-    def _run_cli(self, prompt: str, task_id: str) -> WorkerResult:
+    def _run_cli(self, prompt: str, task_id: str, model: str | None = None) -> WorkerResult:
         path = self._write_outbox(task_id, prompt)
-        cmd = ["claude", "--print", "--dangerously-skip-permissions", f"@{path}"]
+        cmd = ["claude", "--print", "--dangerously-skip-permissions"]
+        if model:
+            cmd += ["--model", model]
+        cmd.append(f"@{path}")
         r = run_command(cmd, timeout=600)
         return WorkerResult(
             worker="claude",

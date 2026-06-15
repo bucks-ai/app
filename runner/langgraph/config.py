@@ -164,6 +164,15 @@ class RunnerConfig:
     max_codex_usage_limit_errors: int = field(
         default_factory=lambda: int(os.getenv("MAX_CODEX_USAGE_LIMIT_ERRORS", "2"))
     )
+    model_routing_policy: str = field(
+        default_factory=lambda: os.getenv("MODEL_ROUTING_POLICY", "default")
+    )
+    claude_model: str = field(
+        default_factory=lambda: os.getenv("CLAUDE_MODEL", "")
+    )
+    chatgpt_model: str = field(
+        default_factory=lambda: os.getenv("CHATGPT_MODEL", "")
+    )
 
     @property
     def has_openai(self) -> bool:
@@ -232,6 +241,9 @@ class RunnerConfig:
             "strategic_pause_interval": self.strategic_pause_interval,
             "codex_usage_limit_guard_enabled": self.codex_usage_limit_guard_enabled,
             "max_codex_usage_limit_errors": self.max_codex_usage_limit_errors,
+            "model_routing_policy": self.model_routing_policy,
+            "claude_model": self.claude_model,
+            "chatgpt_model": self.chatgpt_model,
         }
 
 

@@ -53,6 +53,7 @@ from tools.strategic_decision_gate import (
     format_review_file,
     STRATEGIC_GATE_STOP,
 )
+from tools.model_routing_policy import evaluate_model_routing_policy
 from workers.chatgpt_worker import ChatGPTWorker
 from workers.claude_worker import ClaudeWorker
 from workers.codex_worker import CodexWorker
@@ -164,6 +165,31 @@ def choose_worker(state: RunnerState) -> RunnerState:
     return _persist(state, "choose_worker")
 
 
+def resolve_model_node(state: RunnerState) -> RunnerState:
+    worker = state.current_worker
+    task = state.current_task or {}
+    config_override = (
+        cfg.claude_model if worker == "claude"
+        else cfg.chatgpt_model if worker in ("chatgpt", "codex")
+        else ""
+    ) or None
+    decision = evaluate_model_routing_policy(
+        worker=worker,
+        policy=cfg.model_routing_policy,
+        task=task,
+        config_model_override=config_override,
+    )
+    state.resolved_model = decision["resolved_model"]
+    log_event("model_resolved", {
+        "worker": worker,
+        "resolved_model": state.resolved_model,
+        "policy": decision["policy"],
+        "source": decision["source"],
+        "task_id": state.current_task_id,
+    }, task_id=state.current_task_id)
+    return _persist(state, "resolve_model")
+
+
 def generate_worker_prompt(state: RunnerState) -> RunnerState:
     task = state.current_task or {}
     prompt = _TASK_PROMPT_TEMPLATE.format(
@@ -179,6 +205,9 @@ def generate_worker_prompt(state: RunnerState) -> RunnerState:
 
 def dispatch_worker(state: RunnerState) -> RunnerState:
     task = state.current_task or {}
+    if state.resolved_model:
+        task = dict(task)
+        task["resolved_model"] = state.resolved_model
     prompt = (state.messages[-1]["content"] if state.messages else "")
     mark_task_running(task.get("id", ""))
 
@@ -700,6 +729,7 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
     state.rollback_revert_status = None
     state.rollback_revert_plan = None
     state.resource_request_status = None
+    state.resolved_model = None
     return _persist(state, "update_logs_and_state")
 
 
@@ -876,6 +906,7 @@ def build_graph():
     builder.add_node("load_next_task", load_next_task)
     builder.add_node("ask_chatgpt_for_task_if_needed", ask_chatgpt_for_task_if_needed)
     builder.add_node("choose_worker", choose_worker)
+    builder.add_node("resolve_model", resolve_model_node)
     builder.add_node("generate_worker_prompt", generate_worker_prompt)
     builder.add_node("dispatch_worker", dispatch_worker)
     builder.add_node("capture_worker_result", capture_worker_result)
@@ -902,7 +933,8 @@ def build_graph():
         "decide_continue_or_stop": "decide_continue_or_stop",
         "choose_worker": "choose_worker",
     })
-    builder.add_edge("choose_worker", "generate_worker_prompt")
+    builder.add_edge("choose_worker", "resolve_model")
+    builder.add_edge("resolve_model", "generate_worker_prompt")
     builder.add_edge("generate_worker_prompt", "dispatch_worker")
     builder.add_edge("dispatch_worker", "capture_worker_result")
     builder.add_edge("capture_worker_result", "parse_worker_summary")

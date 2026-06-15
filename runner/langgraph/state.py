@@ -89,3 +89,4 @@ class RunnerState(BaseModel):
     strategic_gate_status: Optional[str] = None     # pending | None
     strategic_tasks_since_gate: int = 0             # task loops since last strategic gate
     strategic_gate_at_loop: Optional[int] = None    # loop_count when the gate last triggered
+    resolved_model: Optional[str] = None            # model resolved by model_routing_policy
