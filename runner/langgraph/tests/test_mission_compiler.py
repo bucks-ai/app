@@ -550,9 +550,9 @@ def test_route_compile_with_task_to_choose_worker():
     assert graph._route_after_compile_mission(s) == "choose_worker"
 
 
-def test_route_compile_no_task_to_chatgpt():
+def test_route_compile_no_task_to_seed_queue():
     s = RunnerState(current_task=None)
-    assert graph._route_after_compile_mission(s) == "ask_chatgpt_for_task_if_needed"
+    assert graph._route_after_compile_mission(s) == "seed_mission_queue_if_needed"
 
 
 def test_node_is_wired_into_graph():
@@ -611,7 +611,7 @@ if __name__ == "__main__":
         test_route_load_no_task_to_compile,
         test_route_load_with_task_to_choose_worker,
         test_route_compile_with_task_to_choose_worker,
-        test_route_compile_no_task_to_chatgpt,
+        test_route_compile_no_task_to_seed_queue,
         test_node_is_wired_into_graph,
     ]
     passed = failed = 0

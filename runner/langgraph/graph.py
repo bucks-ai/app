@@ -61,6 +61,17 @@ from tools.mission_compiler import (
     compile_mission,
     format_mission_summary,
 )
+from tools.seeded_mission_queue import (
+    fetch_next_queued_mission,
+    fetch_mission_tasks,
+    seed_tasks_from_mission,
+    mark_mission_running,
+    mark_mission_task_complete as mark_seeded_task_complete,
+    mark_mission_task_failed as mark_seeded_task_failed,
+    check_mission_completion,
+    mark_mission_completed,
+    mark_mission_failed,
+)
 from workers.chatgpt_worker import ChatGPTWorker
 from workers.claude_worker import ClaudeWorker
 from workers.codex_worker import CodexWorker
@@ -243,6 +254,77 @@ def compile_mission_if_needed(state: RunnerState) -> RunnerState:
     })
 
     return _persist(state, "compile_mission_if_needed")
+
+
+def seed_mission_queue_if_needed(state: RunnerState) -> RunnerState:
+    """Seeded Mission Queue Executor: poll Supabase for queued missions and seed the local queue.
+
+    Runs when the local task queue is empty (``state.current_task is None``) and
+    ``SEEDED_MISSION_QUEUE=true`` (the default).  Fetches the oldest ``queued``
+    mission from the Supabase ``missions`` table, converts its ``mission_tasks``
+    rows into runner task dicts, adds them to the local queue, and marks the
+    mission as ``running`` in Supabase.
+
+    Each seeded task carries ``seeded_mission_id`` and ``seeded_task_id`` fields
+    so that ``update_logs_and_state`` can sync completion status back to Supabase
+    when the task finishes.
+
+    Skips silently when:
+      - ``SEEDED_MISSION_QUEUE=false``
+      - Supabase is not configured
+      - No queued missions exist (falls through to ChatGPT planner)
+      - A task is already loaded (mission compiler or load_next_task found one)
+    """
+    if not cfg.seeded_mission_queue_enabled or not cfg.has_supabase:
+        return state
+
+    if state.current_task:
+        return state
+
+    mission = fetch_next_queued_mission()
+    if not mission:
+        return state
+
+    mission_id = str(mission.get("id", ""))
+    mission_name = mission.get("name", "")
+
+    tasks_rows = fetch_mission_tasks(mission_id)
+    if not tasks_rows:
+        log_event("seeded_mission_queue_empty", {
+            "mission_id": mission_id,
+            "mission_name": mission_name,
+            "message": "Mission has no tasks; skipping.",
+        })
+        return state
+
+    tasks = seed_tasks_from_mission(mission, tasks_rows)
+    for task in tasks:
+        add_task(task)
+
+    mark_mission_running(mission_id)
+
+    # Load the first seeded task into the current task slot and clear the
+    # "no_queued_tasks" stop_reason so the loop continues.
+    first_task = get_next_queued_task()
+    if first_task:
+        branch = first_task.get("branch") or f"feature/{first_task['id']}"
+        if branch.lower() in _PROTECTED_BRANCHES:
+            safe_branch = f"feature/{first_task['id']}"
+            first_task = dict(first_task)
+            first_task["branch"] = safe_branch
+            update_task_branch(first_task["id"], safe_branch)
+        state.current_task = first_task
+        state.current_task_id = first_task["id"]
+        state.stop_reason = None
+
+    log_event("seeded_mission_queued", {
+        "mission_id": mission_id,
+        "mission_name": mission_name,
+        "task_count": len(tasks),
+        "task_ids": [t["id"] for t in tasks],
+    })
+
+    return _persist(state, "seed_mission_queue_if_needed")
 
 
 def ask_chatgpt_for_task_if_needed(state: RunnerState) -> RunnerState:
@@ -837,6 +919,36 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
                 "session_exceeded": cb["session_exceeded"],
             }, task_id=task_id)
 
+    # ── Seeded mission sync ──────────────────────────────────────────────────
+    # Propagate task completion/failure back to Supabase when the task was
+    # seeded from a mission row.  Only the Supabase row IDs are used here —
+    # no credentials or secret values are read from the task dict.
+    seeded_task_id = task.get("seeded_task_id")
+    seeded_mission_id = task.get("seeded_mission_id")
+    if seeded_task_id and seeded_mission_id and cfg.seeded_mission_queue_enabled and cfg.has_supabase:
+        if result.get("success"):
+            _sync_digest = state.worker_summary_digest or build_run_summary_digest(
+                state.worker_summary, task=task, max_chars=500
+            )
+            mark_seeded_task_complete(seeded_task_id, _sync_digest[:500])
+        else:
+            _sync_err = result.get("error") or "worker returned no output"
+            mark_seeded_task_failed(seeded_task_id, _sync_err[:500])
+
+        completion = check_mission_completion(seeded_mission_id)
+        if completion.get("status") == "completed":
+            mark_mission_completed(seeded_mission_id)
+        elif completion.get("status") == "failed":
+            mark_mission_failed(seeded_mission_id)
+
+        log_event("seeded_mission_task_synced", {
+            "task_id": task_id,
+            "seeded_task_id": seeded_task_id,
+            "seeded_mission_id": seeded_mission_id,
+            "success": bool(result.get("success")),
+            "mission_status": completion.get("status"),
+        }, task_id=task_id)
+
     state.loop_count += 1
     state.current_task = None
     state.worker_result = None
@@ -992,6 +1104,12 @@ def _route_after_load(state: RunnerState) -> str:
 def _route_after_compile_mission(state: RunnerState) -> str:
     if state.current_task:
         return "choose_worker"
+    return "seed_mission_queue_if_needed"
+
+
+def _route_after_seed_mission_queue(state: RunnerState) -> str:
+    if state.current_task:
+        return "choose_worker"
     return "ask_chatgpt_for_task_if_needed"
 
 
@@ -1030,6 +1148,7 @@ def build_graph():
 
     builder.add_node("load_next_task", load_next_task)
     builder.add_node("compile_mission_if_needed", compile_mission_if_needed)
+    builder.add_node("seed_mission_queue_if_needed", seed_mission_queue_if_needed)
     builder.add_node("ask_chatgpt_for_task_if_needed", ask_chatgpt_for_task_if_needed)
     builder.add_node("choose_worker", choose_worker)
     builder.add_node("resolve_model", resolve_model_node)
@@ -1055,6 +1174,10 @@ def build_graph():
         "choose_worker": "choose_worker",
     })
     builder.add_conditional_edges("compile_mission_if_needed", _route_after_compile_mission, {
+        "choose_worker": "choose_worker",
+        "seed_mission_queue_if_needed": "seed_mission_queue_if_needed",
+    })
+    builder.add_conditional_edges("seed_mission_queue_if_needed", _route_after_seed_mission_queue, {
         "choose_worker": "choose_worker",
         "ask_chatgpt_for_task_if_needed": "ask_chatgpt_for_task_if_needed",
     })

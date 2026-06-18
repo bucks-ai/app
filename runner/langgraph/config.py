@@ -185,6 +185,9 @@ class RunnerConfig:
     mission_compiler_enabled: bool = field(
         default_factory=lambda: os.getenv("MISSION_COMPILER", "true").lower() == "true"
     )
+    seeded_mission_queue_enabled: bool = field(
+        default_factory=lambda: os.getenv("SEEDED_MISSION_QUEUE", "true").lower() == "true"
+    )
 
     @property
     def has_openai(self) -> bool:
@@ -265,6 +268,7 @@ class RunnerConfig:
             "context_compression_max_tokens": self.context_compression_max_tokens,
             "context_compression_keep_recent": self.context_compression_keep_recent,
             "mission_compiler_enabled": self.mission_compiler_enabled,
+            "seeded_mission_queue_enabled": self.seeded_mission_queue_enabled,
         }
 
 
