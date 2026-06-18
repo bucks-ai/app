@@ -182,6 +182,9 @@ class RunnerConfig:
     claude_auth_mode: str = field(
         default_factory=lambda: os.getenv("CLAUDE_AUTH_MODE", "api_key")
     )
+    mission_compiler_enabled: bool = field(
+        default_factory=lambda: os.getenv("MISSION_COMPILER", "true").lower() == "true"
+    )
 
     @property
     def has_openai(self) -> bool:
@@ -261,6 +264,7 @@ class RunnerConfig:
             "chatgpt_model": self.chatgpt_model,
             "context_compression_max_tokens": self.context_compression_max_tokens,
             "context_compression_keep_recent": self.context_compression_keep_recent,
+            "mission_compiler_enabled": self.mission_compiler_enabled,
         }
 
 

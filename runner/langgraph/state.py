@@ -91,3 +91,5 @@ class RunnerState(BaseModel):
     strategic_tasks_since_gate: int = 0             # task loops since last strategic gate
     strategic_gate_at_loop: Optional[int] = None    # loop_count when the gate last triggered
     resolved_model: Optional[str] = None            # model resolved by model_routing_policy
+    mission_name: Optional[str] = None              # name of the compiled mission, if any
+    mission_compiled: Optional[bool] = None         # True when a mission was compiled this session

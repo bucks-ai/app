@@ -55,6 +55,12 @@ from tools.strategic_decision_gate import (
     STRATEGIC_GATE_STOP,
 )
 from tools.model_routing_policy import evaluate_model_routing_policy
+from tools.mission_compiler import (
+    parse_mission_file,
+    validate_mission,
+    compile_mission,
+    format_mission_summary,
+)
 from workers.chatgpt_worker import ChatGPTWorker
 from workers.claude_worker import ClaudeWorker
 from workers.codex_worker import CodexWorker
@@ -154,6 +160,89 @@ def load_next_task(state: RunnerState) -> RunnerState:
         state.current_task = None
         state.stop_reason = "no_queued_tasks"
     return _persist(state, "load_next_task")
+
+
+def compile_mission_if_needed(state: RunnerState) -> RunnerState:
+    """Mission compiler: check inbox for a YAML mission file and expand it into tasks.
+
+    Looks for the first ``.yml`` or ``.yaml`` file in ``inbox/``, parses it as
+    a mission spec, and populates the task queue.  After compilation the source
+    file is renamed to ``*.processed`` so the compiler does not re-expand the
+    same mission on subsequent runner restarts.
+
+    Runs only when ``MISSION_COMPILER=true`` (the default). Skipped silently
+    when no mission file is found. Logs and skips on parse or validation errors
+    rather than halting the loop so the runner can still ask ChatGPT for tasks.
+    """
+    if not cfg.mission_compiler_enabled:
+        return state
+
+    inbox = _RUNNER_DIR / "inbox"
+    mission_files = sorted(inbox.glob("*.yml")) + sorted(inbox.glob("*.yaml"))
+
+    if not mission_files:
+        return state
+
+    mission_path = mission_files[0]
+    try:
+        mission = parse_mission_file(mission_path)
+    except Exception as e:
+        log_event("mission_compiler_error", {
+            "path": str(mission_path),
+            "error": f"parse error: {e}",
+        })
+        return state
+
+    errors = validate_mission(mission)
+    if errors:
+        log_event("mission_compiler_invalid", {
+            "path": str(mission_path),
+            "errors": errors,
+        })
+        return state
+
+    tasks = compile_mission(mission)
+    mission_name = mission.get("name", "mission")
+
+    for task in tasks:
+        add_task(task)
+
+    # Write compilation summary to outbox (idempotent).
+    stem = mission_path.stem
+    summary_path = _RUNNER_DIR / "outbox" / f"mission_{stem}_compiled.txt"
+    if not summary_path.exists():
+        summary_path.write_text(format_mission_summary(mission, tasks))
+
+    # Mark source file as processed so the compiler doesn't re-expand it.
+    processed_path = Path(str(mission_path) + ".processed")
+    if mission_path.exists():
+        mission_path.rename(processed_path)
+
+    state.mission_name = mission_name
+    state.mission_compiled = True
+
+    # Load the first compiled task into the current task slot and clear the
+    # "no_queued_tasks" stop_reason that load_next_task set.
+    task = get_next_queued_task()
+    if task:
+        branch = task.get("branch") or f"feature/{task['id']}"
+        if branch.lower() in _PROTECTED_BRANCHES:
+            safe_branch = f"feature/{task['id']}"
+            task = dict(task)
+            task["branch"] = safe_branch
+            update_task_branch(task["id"], safe_branch)
+        state.current_task = task
+        state.current_task_id = task["id"]
+        state.stop_reason = None
+
+    log_event("mission_compiled", {
+        "mission": mission_name,
+        "task_count": len(tasks),
+        "task_ids": [t["id"] for t in tasks],
+        "summary_path": str(summary_path),
+    })
+
+    return _persist(state, "compile_mission_if_needed")
 
 
 def ask_chatgpt_for_task_if_needed(state: RunnerState) -> RunnerState:
@@ -896,8 +985,14 @@ def decide_continue_or_stop(state: RunnerState) -> RunnerState:
 
 def _route_after_load(state: RunnerState) -> str:
     if state.stop_reason:
-        return "ask_chatgpt_for_task_if_needed"
+        return "compile_mission_if_needed"
     return "choose_worker"
+
+
+def _route_after_compile_mission(state: RunnerState) -> str:
+    if state.current_task:
+        return "choose_worker"
+    return "ask_chatgpt_for_task_if_needed"
 
 
 def _route_after_chatgpt(state: RunnerState) -> str:
@@ -934,6 +1029,7 @@ def build_graph():
     builder = StateGraph(RunnerState)
 
     builder.add_node("load_next_task", load_next_task)
+    builder.add_node("compile_mission_if_needed", compile_mission_if_needed)
     builder.add_node("ask_chatgpt_for_task_if_needed", ask_chatgpt_for_task_if_needed)
     builder.add_node("choose_worker", choose_worker)
     builder.add_node("resolve_model", resolve_model_node)
@@ -955,8 +1051,12 @@ def build_graph():
     builder.set_entry_point("load_next_task")
 
     builder.add_conditional_edges("load_next_task", _route_after_load, {
-        "ask_chatgpt_for_task_if_needed": "ask_chatgpt_for_task_if_needed",
+        "compile_mission_if_needed": "compile_mission_if_needed",
         "choose_worker": "choose_worker",
+    })
+    builder.add_conditional_edges("compile_mission_if_needed", _route_after_compile_mission, {
+        "choose_worker": "choose_worker",
+        "ask_chatgpt_for_task_if_needed": "ask_chatgpt_for_task_if_needed",
     })
 
     builder.add_conditional_edges("ask_chatgpt_for_task_if_needed", _route_after_chatgpt, {
