@@ -179,6 +179,9 @@ class RunnerConfig:
     context_compression_keep_recent: int = field(
         default_factory=lambda: int(os.getenv("CONTEXT_COMPRESSION_KEEP_RECENT", "4"))
     )
+    claude_auth_mode: str = field(
+        default_factory=lambda: os.getenv("CLAUDE_AUTH_MODE", "api_key")
+    )
 
     @property
     def has_openai(self) -> bool:
@@ -187,6 +190,11 @@ class RunnerConfig:
     @property
     def has_anthropic(self) -> bool:
         return bool(self.anthropic_api_key)
+
+    @property
+    def has_claude(self) -> bool:
+        """True if Claude can be used — either via subscription or API key."""
+        return self.claude_auth_mode == "subscription" or self.has_anthropic
 
     @property
     def has_github(self) -> bool:
@@ -208,6 +216,7 @@ class RunnerConfig:
         return {
             "openai": self.has_openai,
             "anthropic": self.has_anthropic,
+            "claude_auth_mode": self.claude_auth_mode,
             "github": self.has_github,
             "github_repo": self.github_repo,
             "supabase": self.has_supabase,

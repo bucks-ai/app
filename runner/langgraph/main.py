@@ -53,8 +53,8 @@ def cmd_setup(args):
     missing = []
     if not cfg.has_openai:
         missing.append("OPENAI_API_KEY (ChatGPT planner will use outbox/manual mode)")
-    if not cfg.has_anthropic:
-        missing.append("ANTHROPIC_API_KEY (Claude API not available, will use CLI or outbox)")
+    if not cfg.has_claude:
+        missing.append("ANTHROPIC_API_KEY or CLAUDE_AUTH_MODE=subscription (Claude not available, will use CLI or outbox)")
     if not cfg.has_github:
         missing.append("GITHUB_TOKEN (GitHub tools degraded, tasks.json only)")
     if not cfg.has_supabase:

@@ -1,4 +1,5 @@
 """Claude Code worker adapter — CLI, outbox, or manual fallback."""
+import os
 import shutil
 from config import get_config
 from state import WorkerResult
@@ -13,23 +14,44 @@ class ClaudeWorker(BaseWorker):
     def run_worker_prompt(self, prompt: str, task: dict) -> WorkerResult:
         task_id = task.get("id", "task")
         model = task.get("resolved_model") or None
-        log_event("worker_started", {"worker": "claude", "task_id": task_id, "model": model})
+        cfg = get_config()
+        auth_mode = cfg.claude_auth_mode
+        log_event("worker_started", {
+            "worker": "claude",
+            "task_id": task_id,
+            "model": model,
+            "auth_mode": auth_mode,
+        })
 
         if shutil.which("claude"):
-            result = self._run_cli(prompt, task_id, model=model)
+            result = self._run_cli(prompt, task_id, model=model, auth_mode=auth_mode)
         else:
             result = self._run_outbox(prompt, task_id)
 
         log_event("worker_finished", {"worker": "claude", "task_id": task_id, "success": result.success})
         return result
 
-    def _run_cli(self, prompt: str, task_id: str, model: str | None = None) -> WorkerResult:
+    def _run_cli(
+        self,
+        prompt: str,
+        task_id: str,
+        model: str | None = None,
+        auth_mode: str = "api_key",
+    ) -> WorkerResult:
         path = self._write_outbox(task_id, prompt)
         cmd = ["claude", "--print", "--dangerously-skip-permissions"]
         if model:
             cmd += ["--model", model]
         cmd.append(f"@{path}")
-        r = run_command(cmd, timeout=600)
+
+        # In subscription mode strip ANTHROPIC_API_KEY so the CLI falls back to
+        # the OAuth/keychain token set up via `claude auth login` or `claude
+        # setup-token`, rather than the API key taking precedence.
+        env = None
+        if auth_mode == "subscription":
+            env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
+
+        r = run_command(cmd, timeout=600, env=env)
         return WorkerResult(
             worker="claude",
             mode="cli",

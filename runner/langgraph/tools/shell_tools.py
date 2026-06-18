@@ -4,7 +4,13 @@ from state import ToolResult
 from tools.log_tools import log_event
 
 
-def run_command(cmd: str | list, cwd: str = None, timeout: int = 120, stdin_data: str = None) -> ToolResult:
+def run_command(
+    cmd: str | list,
+    cwd: str = None,
+    timeout: int = 120,
+    stdin_data: str = None,
+    env: dict | None = None,
+) -> ToolResult:
     shell = isinstance(cmd, str)
     try:
         result = subprocess.run(
@@ -15,6 +21,7 @@ def run_command(cmd: str | list, cwd: str = None, timeout: int = 120, stdin_data
             text=True,
             timeout=timeout,
             input=stdin_data,
+            env=env,
         )
         success = result.returncode == 0
         output = (result.stdout or "") + (result.stderr or "")
