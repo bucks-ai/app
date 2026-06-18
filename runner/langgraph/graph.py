@@ -335,7 +335,12 @@ def ask_chatgpt_for_task_if_needed(state: RunnerState) -> RunnerState:
     planner = ChatGPTWorker()
     new_task = planner.ask_for_next_task(summary_text)
     if new_task:
-        new_task = guard_planner_task(new_task, context="ask_chatgpt_for_task_if_needed")
+        new_task = guard_planner_task(
+            new_task,
+            context="ask_chatgpt_for_task_if_needed",
+            v2=cfg.planner_quality_gate_v2_enabled,
+            scope_guard=cfg.planner_scope_guard_enabled,
+        )
     if new_task:
         add_task(new_task)
         task = get_next_queued_task()
@@ -1056,7 +1061,12 @@ def ask_chatgpt_next_task(state: RunnerState) -> RunnerState:
     planner = ChatGPTWorker()
     new_task = planner.ask_for_next_task(summary_text)
     if new_task:
-        new_task = guard_planner_task(new_task, context="ask_chatgpt_next_task")
+        new_task = guard_planner_task(
+            new_task,
+            context="ask_chatgpt_next_task",
+            v2=cfg.planner_quality_gate_v2_enabled,
+            scope_guard=cfg.planner_scope_guard_enabled,
+        )
     if new_task:
         add_task(new_task)
         log_event("next_task_requested", {"new_task": new_task})
