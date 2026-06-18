@@ -38,6 +38,54 @@ LangGraph loop controller
 
 ---
 
+## Task Acceptance Criteria Gate
+
+> **Every task must carry concrete acceptance criteria before a worker is dispatched.**
+
+The gate runs immediately after a worker is chosen (`choose_worker` → `check_acceptance_criteria` → `resolve_model`). It validates that the task dict provides unambiguous answers to five questions:
+
+| Criterion | Field / description keyword |
+|-----------|----------------------------|
+| **Allowed scope** | `acceptance_criteria.allowed_scope` or "expected files / allowed scope" in description |
+| **Forbidden scope** | `acceptance_criteria.forbidden_scope` or "must not modify / forbidden scope" in description |
+| **Required checks** | `acceptance_criteria.required_checks` or "required checks / must pass" in description |
+| **Success evidence** | `acceptance_criteria.success_evidence` or "done condition / success criteria" in description |
+| **Rollback behavior** | `acceptance_criteria.rollback_behavior` or "rollback / on failure" in description |
+
+An optional boolean field `acceptance_criteria.human_approval_required` is recognised but not required.
+
+**Primary method (recommended):** include a structured `acceptance_criteria` dict in the task:
+
+```json
+{
+  "id": "my-task",
+  "title": "Add OAuth login",
+  "type": "backend",
+  "branch": "feature/my-task",
+  "acceptance_criteria": {
+    "allowed_scope": ["app/auth/", "tests/auth/"],
+    "forbidden_scope": "Do not modify app UI, routes, SQL migrations, or .env files.",
+    "required_checks": "check.sh must pass; auth unit tests must pass.",
+    "success_evidence": "Logs task_acceptance_criteria_passed; new OAuth route returns 200.",
+    "rollback_behavior": "Mark task failed; no automatic revert.",
+    "human_approval_required": false
+  }
+}
+```
+
+**Fallback method:** keyword-scan the `description` field. A description that mentions phrases such as "allowed scope", "forbidden scope", "required checks", "done condition", and "rollback" will satisfy the gate without a structured dict.
+
+**Logged events:**
+- `task_acceptance_criteria_passed` — task has all required criteria.
+- `task_acceptance_criteria_warned` — criteria missing in non-strict mode (task still runs).
+- `task_acceptance_criteria_rejected` — criteria missing in strict mode (task marked failed, loop stops).
+
+**Config:**
+- `ACCEPTANCE_CRITERIA_GATE_ENABLED=true` (default) — enable validation.
+- `ACCEPTANCE_CRITERIA_STRICT_MODE=false` (default) — set to `true` to block tasks missing criteria.
+
+---
+
 ## Roles
 
 | Component | Role |
@@ -98,6 +146,8 @@ Copy `.env.example` to `.env` and fill in:
 | `VERCEL_POLL_TIMEOUT` | Max seconds to poll a deployment before giving up (default: 180) |
 | `VERCEL_POLL_INTERVAL` | Seconds between deployment status reads (default: 5) |
 | `AUTO_APPLY_SQL` | Auto-apply scanned SQL (default: true) — **keep false until SQL parsing is verified** |
+| `ACCEPTANCE_CRITERIA_GATE_ENABLED` | Validate that tasks include concrete acceptance criteria before executing the worker (default: true) |
+| `ACCEPTANCE_CRITERIA_STRICT_MODE` | Block task execution when criteria are missing; false (default) logs a warning but proceeds |
 | `RESOURCE_GATE` | Pause the loop when a worker reports it needs a missing credential/resource (default: true) |
 | `FAILURE_GUARD` | Retry failed tasks and stop the loop on repeated failures (default: true) |
 | `MAX_TASK_RETRIES` | Times a failed task is requeued before giving up (default: 1) |

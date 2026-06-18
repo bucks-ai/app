@@ -49,6 +49,7 @@ from tools.supabase_tools import apply_sql_file
 from tools.vercel_tools import trigger_deploy
 from tools.github_tools import sync_open_issues_to_tasks
 from tools.task_quality_guard import guard_planner_task
+from tools.acceptance_criteria_gate import guard_acceptance_criteria
 from tools.strategic_decision_gate import (
     evaluate_strategic_gate,
     format_review_file,
@@ -366,6 +367,42 @@ def choose_worker(state: RunnerState) -> RunnerState:
 
     log_event("worker_started", {"worker": state.current_worker, "task_id": state.current_task_id})
     return _persist(state, "choose_worker")
+
+
+def check_acceptance_criteria(state: RunnerState) -> RunnerState:
+    """Task Acceptance Criteria Gate.
+
+    Validates that the current task carries concrete acceptance criteria before
+    a worker is dispatched. When ACCEPTANCE_CRITERIA_GATE_ENABLED is true:
+    - Non-strict mode (default): logs a warning when criteria are missing but
+      allows the task to proceed.
+    - Strict mode (ACCEPTANCE_CRITERIA_STRICT_MODE=true): marks the task failed
+      and sets stop_reason so the loop stops cleanly.
+    """
+    if not cfg.acceptance_criteria_gate_enabled:
+        return state
+
+    task = state.current_task or {}
+    result = guard_acceptance_criteria(
+        task,
+        context="check_acceptance_criteria",
+        strict_mode=cfg.acceptance_criteria_strict_mode,
+    )
+
+    if result["passed"]:
+        state.acceptance_criteria_status = "passed"
+    elif cfg.acceptance_criteria_strict_mode:
+        state.acceptance_criteria_status = "failed"
+        task_id = state.current_task_id or "unknown"
+        state.stop_reason = "missing_acceptance_criteria"
+        mark_task_failed(
+            task_id,
+            "missing acceptance criteria: " + "; ".join(result["issues"]),
+        )
+    else:
+        state.acceptance_criteria_status = "warned"
+
+    return _persist(state, "check_acceptance_criteria")
 
 
 def resolve_model_node(state: RunnerState) -> RunnerState:
@@ -1130,6 +1167,12 @@ def _route_after_chatgpt(state: RunnerState) -> str:
     return "choose_worker"
 
 
+def _route_after_acceptance_criteria(state: RunnerState) -> str:
+    if state.acceptance_criteria_status == "failed":
+        return "decide_continue_or_stop"
+    return "resolve_model"
+
+
 def _route_after_resource_gate(state: RunnerState) -> str:
     # When the gate is awaiting human-provided resources it halts the loop:
     # skip commit/deploy/etc. and go straight to decide_continue_or_stop, which
@@ -1161,6 +1204,7 @@ def build_graph():
     builder.add_node("seed_mission_queue_if_needed", seed_mission_queue_if_needed)
     builder.add_node("ask_chatgpt_for_task_if_needed", ask_chatgpt_for_task_if_needed)
     builder.add_node("choose_worker", choose_worker)
+    builder.add_node("check_acceptance_criteria", check_acceptance_criteria)
     builder.add_node("resolve_model", resolve_model_node)
     builder.add_node("generate_worker_prompt", generate_worker_prompt)
     builder.add_node("dispatch_worker", dispatch_worker)
@@ -1196,7 +1240,11 @@ def build_graph():
         "decide_continue_or_stop": "decide_continue_or_stop",
         "choose_worker": "choose_worker",
     })
-    builder.add_edge("choose_worker", "resolve_model")
+    builder.add_edge("choose_worker", "check_acceptance_criteria")
+    builder.add_conditional_edges("check_acceptance_criteria", _route_after_acceptance_criteria, {
+        "resolve_model": "resolve_model",
+        "decide_continue_or_stop": "decide_continue_or_stop",
+    })
     builder.add_edge("resolve_model", "generate_worker_prompt")
     builder.add_edge("generate_worker_prompt", "dispatch_worker")
     builder.add_edge("dispatch_worker", "capture_worker_result")

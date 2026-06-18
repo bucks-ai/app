@@ -194,6 +194,12 @@ class RunnerConfig:
     planner_scope_guard_enabled: bool = field(
         default_factory=lambda: os.getenv("PLANNER_SCOPE_GUARD", "true").lower() == "true"
     )
+    acceptance_criteria_gate_enabled: bool = field(
+        default_factory=lambda: os.getenv("ACCEPTANCE_CRITERIA_GATE_ENABLED", "true").lower() == "true"
+    )
+    acceptance_criteria_strict_mode: bool = field(
+        default_factory=lambda: os.getenv("ACCEPTANCE_CRITERIA_STRICT_MODE", "false").lower() == "true"
+    )
 
     @property
     def has_openai(self) -> bool:
@@ -277,6 +283,8 @@ class RunnerConfig:
             "seeded_mission_queue_enabled": self.seeded_mission_queue_enabled,
             "planner_quality_gate_v2_enabled": self.planner_quality_gate_v2_enabled,
             "planner_scope_guard_enabled": self.planner_scope_guard_enabled,
+            "acceptance_criteria_gate_enabled": self.acceptance_criteria_gate_enabled,
+            "acceptance_criteria_strict_mode": self.acceptance_criteria_strict_mode,
         }
 
 

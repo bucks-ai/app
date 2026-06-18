@@ -93,3 +93,4 @@ class RunnerState(BaseModel):
     resolved_model: Optional[str] = None            # model resolved by model_routing_policy
     mission_name: Optional[str] = None              # name of the compiled mission, if any
     mission_compiled: Optional[bool] = None         # True when a mission was compiled this session
+    acceptance_criteria_status: Optional[str] = None  # passed | warned | failed | None
