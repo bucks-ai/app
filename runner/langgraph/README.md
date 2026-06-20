@@ -148,6 +148,7 @@ Copy `.env.example` to `.env` and fill in:
 | `AUTO_APPLY_SQL` | Auto-apply scanned SQL (default: true) — **keep false until SQL parsing is verified** |
 | `ACCEPTANCE_CRITERIA_GATE_ENABLED` | Validate that tasks include concrete acceptance criteria before executing the worker (default: true) |
 | `ACCEPTANCE_CRITERIA_STRICT_MODE` | Block task execution when criteria are missing; false (default) logs a warning but proceeds |
+| `CLAUDE_SUBAGENT_PACK_ENABLED` | Inject specialised subagent context into Claude worker prompts based on task type/title (default: true) |
 | `RESOURCE_GATE` | Pause the loop when a worker reports it needs a missing credential/resource (default: true) |
 | `FAILURE_GUARD` | Retry failed tasks and stop the loop on repeated failures (default: true) |
 | `MAX_TASK_RETRIES` | Times a failed task is requeued before giving up (default: 1) |

@@ -5,6 +5,7 @@ from config import get_config
 from state import WorkerResult
 from tools.log_tools import log_event
 from tools.shell_tools import run_command
+from tools.claude_subagent_pack import select_subagent, build_subagent_prompt_prefix
 from workers.base_worker import BaseWorker
 
 
@@ -16,6 +17,19 @@ class ClaudeWorker(BaseWorker):
         model = task.get("resolved_model") or None
         cfg = get_config()
         auth_mode = cfg.claude_auth_mode
+
+        # Inject subagent context when the pack is enabled.
+        if cfg.claude_subagent_pack_enabled:
+            subagent = select_subagent(task)
+            prefix = build_subagent_prompt_prefix(subagent)
+            if prefix:
+                prompt = prefix + prompt
+            log_event("claude_subagent_selected", {
+                "task_id": task_id,
+                "subagent": subagent["name"],
+                "task_type": task.get("type", ""),
+            })
+
         log_event("worker_started", {
             "worker": "claude",
             "task_id": task_id,

@@ -208,6 +208,9 @@ class RunnerConfig:
     definition_of_done_strict_mode: bool = field(
         default_factory=lambda: os.getenv("DEFINITION_OF_DONE_STRICT_MODE", "false").lower() == "true"
     )
+    claude_subagent_pack_enabled: bool = field(
+        default_factory=lambda: os.getenv("CLAUDE_SUBAGENT_PACK_ENABLED", "true").lower() == "true"
+    )
 
     @property
     def has_openai(self) -> bool:
@@ -295,6 +298,7 @@ class RunnerConfig:
             "acceptance_criteria_strict_mode": self.acceptance_criteria_strict_mode,
             "definition_of_done_gate_enabled": self.definition_of_done_gate_enabled,
             "definition_of_done_strict_mode": self.definition_of_done_strict_mode,
+            "claude_subagent_pack_enabled": self.claude_subagent_pack_enabled,
         }
 
 
