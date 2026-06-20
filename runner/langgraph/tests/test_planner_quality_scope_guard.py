@@ -16,10 +16,6 @@ import traceback
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-# Stub load_tasks so tests don't touch disk.
-import tools.task_tools as _tt
-_tt.load_tasks = lambda: []
-
 from tools.task_quality_guard import (
     validate_planner_task,
     evaluate_scope_guard,

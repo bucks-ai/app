@@ -17,8 +17,10 @@ from config import RunnerConfig
 # ── Config field and property tests ──────────────────────────────────────────
 
 def test_default_auth_mode_is_api_key():
-    cfg = RunnerConfig(anthropic_api_key=None)
-    assert cfg.claude_auth_mode == "api_key"
+    with mock.patch.dict(os.environ, {}, clear=False):
+        os.environ.pop("CLAUDE_AUTH_MODE", None)
+        cfg = RunnerConfig(anthropic_api_key=None)
+        assert cfg.claude_auth_mode == "api_key"
 
 
 def test_subscription_auth_mode_from_env():
@@ -58,9 +60,11 @@ def test_report_includes_claude_auth_mode():
 
 
 def test_report_default_claude_auth_mode():
-    cfg = RunnerConfig()
-    report = cfg.report()
-    assert report["claude_auth_mode"] == "api_key"
+    with mock.patch.dict(os.environ, {}, clear=False):
+        os.environ.pop("CLAUDE_AUTH_MODE", None)
+        cfg = RunnerConfig()
+        report = cfg.report()
+        assert report["claude_auth_mode"] == "api_key"
 
 
 # ── Worker env-stripping tests ────────────────────────────────────────────────
