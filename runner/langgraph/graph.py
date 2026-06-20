@@ -50,6 +50,7 @@ from tools.vercel_tools import trigger_deploy
 from tools.github_tools import sync_open_issues_to_tasks
 from tools.task_quality_guard import guard_planner_task
 from tools.acceptance_criteria_gate import guard_acceptance_criteria
+from tools.definition_of_done import guard_definition_of_done
 from tools.strategic_decision_gate import (
     evaluate_strategic_gate,
     format_review_file,
@@ -489,6 +490,55 @@ def parse_worker_summary_node(state: RunnerState) -> RunnerState:
     }, task_id=state.current_task_id)
     state = _compress_context_if_needed(state, reason="after_worker_summary")
     return _persist(state, "parse_worker_summary")
+
+
+def check_definition_of_done(state: RunnerState) -> RunnerState:
+    """Definition of Done enforcement gate.
+
+    Runs after the worker summary is parsed and checks whether the worker's
+    output demonstrates the task is truly complete. Only evaluated when the
+    worker reported success — a failed worker already goes through the failure
+    guard path.
+
+    When DEFINITION_OF_DONE_GATE_ENABLED is true (default):
+    - Non-strict mode (default): logs a warning on DoD failure but lets the
+      loop continue to commit/deploy.
+    - Strict mode (DEFINITION_OF_DONE_STRICT_MODE=true): marks the task failed
+      and sets stop_reason so the loop stops cleanly.
+    """
+    if not cfg.definition_of_done_gate_enabled:
+        return state
+
+    result = state.worker_result or {}
+    if not result.get("success"):
+        return state
+
+    summary = state.worker_summary or {}
+    task = state.current_task or {}
+    raw_output = result.get("output") or ""
+
+    decision = guard_definition_of_done(
+        summary=summary,
+        task=task,
+        raw_output=raw_output,
+        context="check_definition_of_done",
+        strict_mode=cfg.definition_of_done_strict_mode,
+    )
+
+    if decision["passed"]:
+        state.definition_of_done_status = "passed"
+    elif cfg.definition_of_done_strict_mode:
+        state.definition_of_done_status = "failed"
+        task_id = state.current_task_id or "unknown"
+        state.stop_reason = "definition_of_done_not_met"
+        mark_task_failed(
+            task_id,
+            "definition of done not met: " + "; ".join(decision["issues"]),
+        )
+    else:
+        state.definition_of_done_status = "warned"
+
+    return _persist(state, "check_definition_of_done")
 
 
 def request_resources_if_needed(state: RunnerState) -> RunnerState:
@@ -1173,6 +1223,12 @@ def _route_after_acceptance_criteria(state: RunnerState) -> str:
     return "resolve_model"
 
 
+def _route_after_definition_of_done(state: RunnerState) -> str:
+    if state.definition_of_done_status == "failed":
+        return "decide_continue_or_stop"
+    return "request_resources_if_needed"
+
+
 def _route_after_resource_gate(state: RunnerState) -> str:
     # When the gate is awaiting human-provided resources it halts the loop:
     # skip commit/deploy/etc. and go straight to decide_continue_or_stop, which
@@ -1210,6 +1266,7 @@ def build_graph():
     builder.add_node("dispatch_worker", dispatch_worker)
     builder.add_node("capture_worker_result", capture_worker_result)
     builder.add_node("parse_worker_summary", parse_worker_summary_node)
+    builder.add_node("check_definition_of_done", check_definition_of_done)
     builder.add_node("request_resources_if_needed", request_resources_if_needed)
     builder.add_node("run_checks_if_needed", run_checks_if_needed)
     builder.add_node("commit_push_merge_if_needed", commit_push_merge_if_needed)
@@ -1249,7 +1306,11 @@ def build_graph():
     builder.add_edge("generate_worker_prompt", "dispatch_worker")
     builder.add_edge("dispatch_worker", "capture_worker_result")
     builder.add_edge("capture_worker_result", "parse_worker_summary")
-    builder.add_edge("parse_worker_summary", "request_resources_if_needed")
+    builder.add_edge("parse_worker_summary", "check_definition_of_done")
+    builder.add_conditional_edges("check_definition_of_done", _route_after_definition_of_done, {
+        "decide_continue_or_stop": "decide_continue_or_stop",
+        "request_resources_if_needed": "request_resources_if_needed",
+    })
     builder.add_conditional_edges("request_resources_if_needed", _route_after_resource_gate, {
         "decide_continue_or_stop": "decide_continue_or_stop",
         "run_checks_if_needed": "run_checks_if_needed",

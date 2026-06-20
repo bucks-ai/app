@@ -94,3 +94,4 @@ class RunnerState(BaseModel):
     mission_name: Optional[str] = None              # name of the compiled mission, if any
     mission_compiled: Optional[bool] = None         # True when a mission was compiled this session
     acceptance_criteria_status: Optional[str] = None  # passed | warned | failed | None
+    definition_of_done_status: Optional[str] = None  # passed | warned | failed | None
