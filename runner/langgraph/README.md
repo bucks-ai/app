@@ -86,6 +86,32 @@ An optional boolean field `acceptance_criteria.human_approval_required` is recog
 
 ---
 
+## Independent Code Review Gate
+
+> **An autonomous second look at every diff before it is committed.**
+
+The gate runs after `check.sh` passes and re-examines the actual `git diff` alongside the worker's reported files — independent of the worker's own self-report — to catch four categories of violation:
+
+| Check | What it catches |
+|-------|----------------|
+| **env-file guard** | Any `.env*` file modified (hard fail) |
+| **forbidden scope** | Files whose paths appear in `acceptance_criteria.forbidden_scope` (hard fail when defined) |
+| **secret patterns** | Added diff lines matching API key / password / token patterns (hard fail) |
+| **allowed scope** | Changed files outside `acceptance_criteria.allowed_scope` (hard fail when defined) |
+
+Files are collected from **both** the git diff and the worker's summary so a worker that under-reports what it touched is still caught.
+
+**Config:**
+- `INDEPENDENT_CODE_REVIEW_ENABLED=true` (default) — enable the gate.
+- `INDEPENDENT_CODE_REVIEW_STRICT_MODE=false` (default) — set to `true` to block commits on failure; false logs a warning and proceeds.
+
+**Logged events:**
+- `task_code_review_passed` — all checks passed.
+- `task_code_review_warned` — checks failed in non-strict mode (task still commits).
+- `task_code_review_rejected` — checks failed in strict mode (task marked failed, loop stops).
+
+---
+
 ## Roles
 
 | Component | Role |
@@ -151,6 +177,8 @@ Copy `.env.example` to `.env` and fill in:
 | `CLAUDE_SUBAGENT_PACK_ENABLED` | Inject specialised subagent context into Claude worker prompts based on task type/title (default: true) |
 | `CLAUDE_HOOKS_SAFETY_PACK_ENABLED` | Install and validate runner-safety PreToolUse hooks in .claude/settings.json before each Claude CLI dispatch (default: true) |
 | `CLAUDE_HOOKS_SAFETY_PACK_AUTO_INSTALL` | Auto-write the safety hook when it is missing; false only validates and logs a warning (default: true) |
+| `INDEPENDENT_CODE_REVIEW_ENABLED` | Run an independent code review gate after check.sh passes, scanning the diff for scope creep, .env modifications, and secret leaks (default: true) |
+| `INDEPENDENT_CODE_REVIEW_STRICT_MODE` | Block the commit when the code review finds violations; false (default) logs a warning but proceeds |
 | `RESOURCE_GATE` | Pause the loop when a worker reports it needs a missing credential/resource (default: true) |
 | `FAILURE_GUARD` | Retry failed tasks and stop the loop on repeated failures (default: true) |
 | `MAX_TASK_RETRIES` | Times a failed task is requeued before giving up (default: 1) |
@@ -469,6 +497,7 @@ Allowed with warnings: `DROP TABLE IF EXISTS`, `DROP POLICY IF EXISTS`, `DROP TR
 7. `parse_worker_summary` — extract structured summary from output
 8. `request_resources_if_needed` — resource/credential request gate; pauses the loop when the worker reports a missing credential/resource (see **Resource & Credential Gate**)
 9. `run_checks_if_needed` — run `./scripts/check.sh`
+9a. `check_independent_code_review` — independent diff review for scope creep, .env modifications, and secret leaks (runs after check.sh passes; see **Independent Code Review Gate**)
 10. `commit_push_merge_if_needed` — git commit/push/merge flow; late guard blocks any remaining protected-branch attempts, and successful auto-merges clean up the local and remote feature branch when `AUTO_CLEANUP_BRANCHES=true`
 11. `apply_sql_if_needed` — scan and apply SQL migrations
 12. `deploy_if_needed` — trigger a Vercel deploy and poll it to a terminal state (only when a commit landed; see **Vercel Behavior**)

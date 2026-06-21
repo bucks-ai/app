@@ -217,6 +217,12 @@ class RunnerConfig:
     claude_hooks_safety_pack_auto_install: bool = field(
         default_factory=lambda: os.getenv("CLAUDE_HOOKS_SAFETY_PACK_AUTO_INSTALL", "true").lower() == "true"
     )
+    independent_code_review_enabled: bool = field(
+        default_factory=lambda: os.getenv("INDEPENDENT_CODE_REVIEW_ENABLED", "true").lower() == "true"
+    )
+    independent_code_review_strict_mode: bool = field(
+        default_factory=lambda: os.getenv("INDEPENDENT_CODE_REVIEW_STRICT_MODE", "false").lower() == "true"
+    )
 
     @property
     def has_openai(self) -> bool:
@@ -307,6 +313,8 @@ class RunnerConfig:
             "claude_subagent_pack_enabled": self.claude_subagent_pack_enabled,
             "claude_hooks_safety_pack_enabled": self.claude_hooks_safety_pack_enabled,
             "claude_hooks_safety_pack_auto_install": self.claude_hooks_safety_pack_auto_install,
+            "independent_code_review_enabled": self.independent_code_review_enabled,
+            "independent_code_review_strict_mode": self.independent_code_review_strict_mode,
         }
 
 

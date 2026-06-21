@@ -52,6 +52,7 @@ from tools.task_quality_guard import guard_planner_task
 from tools.claude_hooks_safety_pack import write_hooks
 from tools.acceptance_criteria_gate import guard_acceptance_criteria
 from tools.definition_of_done import guard_definition_of_done
+from tools.independent_code_review import guard_code_review, get_diff_text
 from tools.strategic_decision_gate import (
     evaluate_strategic_gate,
     format_review_file,
@@ -559,6 +560,49 @@ def check_definition_of_done(state: RunnerState) -> RunnerState:
         state.definition_of_done_status = "warned"
 
     return _persist(state, "check_definition_of_done")
+
+
+def check_independent_code_review(state: RunnerState) -> RunnerState:
+    """Independent Code Review Gate.
+
+    After check.sh passes, re-examines the actual git diff and worker summary
+    for scope creep, .env modifications, and secret leaks — independent of the
+    worker's own self-report. When INDEPENDENT_CODE_REVIEW_STRICT_MODE=true, a
+    failed review marks the task failed and halts the loop before any commit.
+    """
+    if not cfg.independent_code_review_enabled:
+        return state
+
+    result = state.worker_result or {}
+    if not result.get("success") or not state.check_passed:
+        return state
+
+    task = state.current_task or {}
+    summary = state.worker_summary or {}
+    diff_text = get_diff_text(cfg.repo_path)
+
+    decision = guard_code_review(
+        diff_text=diff_text,
+        summary=summary,
+        task=task,
+        context="check_independent_code_review",
+        strict_mode=cfg.independent_code_review_strict_mode,
+    )
+
+    if decision["passed"]:
+        state.code_review_status = "passed"
+    elif cfg.independent_code_review_strict_mode:
+        state.code_review_status = "failed"
+        task_id = state.current_task_id or "unknown"
+        state.stop_reason = "code_review_rejected"
+        mark_task_failed(
+            task_id,
+            "independent code review rejected: " + "; ".join(decision["issues"]),
+        )
+    else:
+        state.code_review_status = "warned"
+
+    return _persist(state, "check_independent_code_review")
 
 
 def request_resources_if_needed(state: RunnerState) -> RunnerState:
@@ -1071,6 +1115,7 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
     state.rollback_revert_status = None
     state.rollback_revert_plan = None
     state.resource_request_status = None
+    state.code_review_status = None
     state.resolved_model = None
     state.context_compression = None
     return _persist(state, "update_logs_and_state")
@@ -1249,6 +1294,12 @@ def _route_after_definition_of_done(state: RunnerState) -> str:
     return "request_resources_if_needed"
 
 
+def _route_after_code_review(state: RunnerState) -> str:
+    if state.code_review_status == "failed":
+        return "decide_continue_or_stop"
+    return "request_resources_if_needed"
+
+
 def _route_after_resource_gate(state: RunnerState) -> str:
     # When the gate is awaiting human-provided resources it halts the loop:
     # skip commit/deploy/etc. and go straight to decide_continue_or_stop, which
@@ -1288,6 +1339,7 @@ def build_graph():
     builder.add_node("capture_worker_result", capture_worker_result)
     builder.add_node("parse_worker_summary", parse_worker_summary_node)
     builder.add_node("check_definition_of_done", check_definition_of_done)
+    builder.add_node("check_independent_code_review", check_independent_code_review)
     builder.add_node("request_resources_if_needed", request_resources_if_needed)
     builder.add_node("run_checks_if_needed", run_checks_if_needed)
     builder.add_node("commit_push_merge_if_needed", commit_push_merge_if_needed)
@@ -1330,6 +1382,10 @@ def build_graph():
     builder.add_edge("capture_worker_result", "parse_worker_summary")
     builder.add_edge("parse_worker_summary", "check_definition_of_done")
     builder.add_conditional_edges("check_definition_of_done", _route_after_definition_of_done, {
+        "decide_continue_or_stop": "decide_continue_or_stop",
+        "request_resources_if_needed": "check_independent_code_review",
+    })
+    builder.add_conditional_edges("check_independent_code_review", _route_after_code_review, {
         "decide_continue_or_stop": "decide_continue_or_stop",
         "request_resources_if_needed": "request_resources_if_needed",
     })
