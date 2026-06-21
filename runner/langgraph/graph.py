@@ -49,6 +49,7 @@ from tools.supabase_tools import apply_sql_file
 from tools.vercel_tools import trigger_deploy
 from tools.github_tools import sync_open_issues_to_tasks
 from tools.task_quality_guard import guard_planner_task
+from tools.claude_hooks_safety_pack import write_hooks
 from tools.acceptance_criteria_gate import guard_acceptance_criteria
 from tools.definition_of_done import guard_definition_of_done
 from tools.strategic_decision_gate import (
@@ -143,6 +144,25 @@ def _compress_context_if_needed(state: RunnerState, *, reason: str) -> RunnerSta
 
 
 # ── Nodes ────────────────────────────────────────────────────────────────────
+
+def install_hooks(state: RunnerState) -> RunnerState:
+    """Install runner-safety hooks into .claude/settings.json at startup.
+
+    Runs once before any task is dispatched, ensuring all Claude Code
+    PreToolUse guards are active for every worker in this session.
+    Skipped when the safety pack or auto-install is disabled.
+    """
+    if not cfg.claude_hooks_safety_pack_enabled or not cfg.claude_hooks_safety_pack_auto_install:
+        return state
+
+    result = write_hooks(cfg.repo_path)
+    log_event("claude_hooks_installed", {
+        "path": result["path"],
+        "wrote": result["wrote"],
+        "merged": result["merged"],
+    })
+    return _persist(state, "install_hooks")
+
 
 def load_next_task(state: RunnerState) -> RunnerState:
     task = get_next_queued_task()
@@ -1255,6 +1275,7 @@ def _route_after_decide(state: RunnerState) -> str:
 def build_graph():
     builder = StateGraph(RunnerState)
 
+    builder.add_node("install_hooks", install_hooks)
     builder.add_node("load_next_task", load_next_task)
     builder.add_node("compile_mission_if_needed", compile_mission_if_needed)
     builder.add_node("seed_mission_queue_if_needed", seed_mission_queue_if_needed)
@@ -1278,7 +1299,8 @@ def build_graph():
     builder.add_node("ask_chatgpt_next_task", ask_chatgpt_next_task)
     builder.add_node("decide_continue_or_stop", decide_continue_or_stop)
 
-    builder.set_entry_point("load_next_task")
+    builder.set_entry_point("install_hooks")
+    builder.add_edge("install_hooks", "load_next_task")
 
     builder.add_conditional_edges("load_next_task", _route_after_load, {
         "compile_mission_if_needed": "compile_mission_if_needed",
