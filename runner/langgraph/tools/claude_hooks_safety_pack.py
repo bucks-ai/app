@@ -2,7 +2,7 @@
 
 Generates and manages .claude/settings.json PreToolUse hooks that block
 dangerous shell commands (destructive git operations, credential exposure)
-when Claude workers are dispatched by the runner.
+and file writes to .env* paths when Claude workers are dispatched by the runner.
 
 All pure-logic helpers are I/O-free; only write_hooks() touches the filesystem.
 """
@@ -15,7 +15,7 @@ from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # Blocked patterns
-# Each entry is a regex (case-insensitive) matched against the full Bash command.
+# Each entry is a regex matched against the full Bash command or file path.
 # ---------------------------------------------------------------------------
 
 BLOCKED_BASH_PATTERNS: list[str] = [
@@ -28,6 +28,11 @@ BLOCKED_BASH_PATTERNS: list[str] = [
     r"git\s+branch\s+-D",
     r"--gpg-sign=false",
     r"commit\.gpgsign=false",
+]
+
+# Matches any path whose final component starts with ".env" (.env, .env.local, .envrc, …)
+BLOCKED_FILE_PATTERNS: list[str] = [
+    r"(^|/)\.env",
 ]
 
 # ---------------------------------------------------------------------------
@@ -58,6 +63,18 @@ _BASH_HOOK_CMD: str = (
     r"""sys.exit(2 if found else 0)" """
 )
 
+# Inline Python one-liner for Write and Edit tools.
+# Receives JSON on stdin: {"tool_name": "Write"|"Edit", "tool_input": {"file_path": "..."}}.
+# Exits 2 to block the tool call when file_path matches .env* pattern.
+_FILE_HOOK_CMD: str = (
+    r"""python3 -c "import json,sys,re;"""
+    r"""d=json.load(sys.stdin);"""
+    r"""fp=d.get('tool_input',{}).get('file_path','');"""
+    r"""blocked=bool(re.search(r'(^|/)\.env',fp));"""
+    r"""print('[runner-safety] BLOCKED .env write: '+fp,file=sys.stderr) if blocked else None;"""
+    r"""sys.exit(2 if blocked else 0)" """
+)
+
 
 # ---------------------------------------------------------------------------
 # Payload builder
@@ -68,6 +85,7 @@ def build_settings_payload() -> dict:
 
     Merge this into the existing .claude/settings.json rather than replacing it.
     """
+    file_hook = {"type": "command", "command": _FILE_HOOK_CMD.strip()}
     return {
         "hooks": {
             "PreToolUse": [
@@ -79,7 +97,15 @@ def build_settings_payload() -> dict:
                             "command": _BASH_HOOK_CMD.strip(),
                         }
                     ],
-                }
+                },
+                {
+                    "matcher": "Write",
+                    "hooks": [file_hook],
+                },
+                {
+                    "matcher": "Edit",
+                    "hooks": [file_hook],
+                },
             ]
         }
     }
@@ -90,13 +116,13 @@ def build_settings_payload() -> dict:
 # ---------------------------------------------------------------------------
 
 def write_hooks(repo_path: str | Path) -> dict:
-    """Merge runner-safety PreToolUse hook into <repo_path>/.claude/settings.json.
+    """Merge runner-safety PreToolUse hooks into <repo_path>/.claude/settings.json.
 
-    Existing content is preserved.  If the runner-safety hook is already present
-    (matched by command string equality) the file is left unchanged.
+    Existing content is preserved.  Each new hook entry is checked individually
+    by command string equality; only missing entries are appended.
 
     Returns:
-        dict with keys: wrote (bool), path (str), merged (bool — True if hook was added).
+        dict with keys: wrote (bool), path (str), merged (bool — True if any hook was added).
     """
     settings_path = Path(repo_path) / ".claude" / "settings.json"
 
@@ -107,21 +133,27 @@ def write_hooks(repo_path: str | Path) -> dict:
         except json.JSONDecodeError:
             existing = {}
 
-    runner_cmd = build_settings_payload()["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
-    existing_pre_tool: list = (
-        existing.get("hooks", {}).get("PreToolUse", [])
-    )
+    new_entries = build_settings_payload()["hooks"]["PreToolUse"]
+    existing_pre_tool: list = existing.get("hooks", {}).get("PreToolUse", [])
 
-    already_present = any(
-        isinstance(entry, dict)
-        and entry.get("hooks", [{}])[0].get("command") == runner_cmd
-        for entry in existing_pre_tool
-    )
+    # Collect all commands already installed to enable per-entry idempotency.
+    installed_cmds: set[str] = set()
+    for entry in existing_pre_tool:
+        if isinstance(entry, dict):
+            for hook in entry.get("hooks", []):
+                cmd = hook.get("command")
+                if cmd:
+                    installed_cmds.add(cmd)
 
-    if already_present:
+    to_add = [
+        entry for entry in new_entries
+        if entry.get("hooks", [{}])[0].get("command") not in installed_cmds
+    ]
+
+    if not to_add:
         return {"wrote": False, "path": str(settings_path), "merged": False}
 
-    merged_pre_tool = existing_pre_tool + build_settings_payload()["hooks"]["PreToolUse"]
+    merged_pre_tool = existing_pre_tool + to_add
 
     result = dict(existing)
     result["hooks"] = dict(existing.get("hooks", {}))
@@ -134,7 +166,7 @@ def write_hooks(repo_path: str | Path) -> dict:
 
 
 def validate_hooks(repo_path: str | Path) -> dict:
-    """Check whether the runner-safety PreToolUse hook is installed.
+    """Check whether all runner-safety PreToolUse hooks are installed.
 
     Returns:
         dict with keys: valid (bool), path (str), reason (str | None).
@@ -157,20 +189,27 @@ def validate_hooks(repo_path: str | Path) -> dict:
             "reason": "settings.json is not valid JSON",
         }
 
-    runner_cmd = build_settings_payload()["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
-    pre_tool = data.get("hooks", {}).get("PreToolUse", [])
-    found = any(
-        isinstance(entry, dict)
-        and entry.get("hooks", [{}])[0].get("command") == runner_cmd
-        for entry in pre_tool
-    )
+    required_cmds = {
+        entry.get("hooks", [{}])[0].get("command")
+        for entry in build_settings_payload()["hooks"]["PreToolUse"]
+    }
 
-    if found:
+    pre_tool = data.get("hooks", {}).get("PreToolUse", [])
+    installed_cmds: set[str] = set()
+    for entry in pre_tool:
+        if isinstance(entry, dict):
+            for hook in entry.get("hooks", []):
+                cmd = hook.get("command")
+                if cmd:
+                    installed_cmds.add(cmd)
+
+    missing = required_cmds - installed_cmds
+    if not missing:
         return {"valid": True, "path": str(settings_path), "reason": None}
     return {
         "valid": False,
         "path": str(settings_path),
-        "reason": "runner-safety PreToolUse Bash hook not found",
+        "reason": f"missing {len(missing)} required runner-safety hook(s)",
     }
 
 
@@ -185,3 +224,11 @@ def check_command(cmd: str) -> list[str]:
     Used in tests; not called at runtime.
     """
     return [p for p in BLOCKED_BASH_PATTERNS if re.search(p, cmd)]
+
+
+def check_file_path(fp: str) -> list[str]:
+    """Return the subset of BLOCKED_FILE_PATTERNS that match *fp*.
+
+    Used in tests; not called at runtime.
+    """
+    return [p for p in BLOCKED_FILE_PATTERNS if re.search(p, fp)]

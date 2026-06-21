@@ -6,11 +6,14 @@ from pathlib import Path
 
 from tools.claude_hooks_safety_pack import (
     BLOCKED_BASH_PATTERNS,
+    BLOCKED_FILE_PATTERNS,
     build_settings_payload,
     check_command,
+    check_file_path,
     validate_hooks,
     write_hooks,
     _BASH_HOOK_CMD,
+    _FILE_HOOK_CMD,
 )
 
 
@@ -236,3 +239,143 @@ def test_validate_hooks_false_on_invalid_json(tmp_path):
 def test_validate_hooks_path_in_result(tmp_path):
     result = validate_hooks(tmp_path)
     assert "settings.json" in result["path"]
+
+
+# ---------------------------------------------------------------------------
+# BLOCKED_FILE_PATTERNS — .env* path blocking
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("fp", [
+    ".env",
+    ".env.local",
+    ".env.production",
+    ".env.staging",
+    ".envrc",
+    "/abs/path/.env",
+    "/abs/path/.env.local",
+    "relative/path/.env",
+    "relative/path/.env.production",
+])
+def test_env_file_paths_are_blocked(fp):
+    matches = check_file_path(fp)
+    assert matches, f"Expected '{fp}' to be blocked but no pattern matched"
+
+
+@pytest.mark.parametrize("fp", [
+    "src/config.py",
+    "README.md",
+    ".github/workflows/ci.yml",
+    "tests/test_env.py",
+    "docs/environment.md",
+    "myenv.txt",
+    "env_config.json",
+])
+def test_safe_file_paths_are_not_blocked(fp):
+    matches = check_file_path(fp)
+    assert not matches, f"Expected '{fp}' to be allowed but pattern(s) matched: {matches}"
+
+
+# ---------------------------------------------------------------------------
+# _FILE_HOOK_CMD
+# ---------------------------------------------------------------------------
+
+def test_file_hook_cmd_is_python3_invocation():
+    assert _FILE_HOOK_CMD.strip().startswith("python3 -c")
+
+
+def test_file_hook_cmd_checks_file_path():
+    assert "file_path" in _FILE_HOOK_CMD
+
+
+def test_file_hook_cmd_exits_2_on_block():
+    assert "sys.exit(2 if blocked else 0)" in _FILE_HOOK_CMD
+
+
+def test_file_hook_cmd_reads_stdin():
+    assert "sys.stdin" in _FILE_HOOK_CMD
+
+
+def test_file_hook_cmd_contains_env_pattern():
+    assert r"\.env" in _FILE_HOOK_CMD
+
+
+# ---------------------------------------------------------------------------
+# build_settings_payload — Write/Edit matchers
+# ---------------------------------------------------------------------------
+
+def test_payload_includes_write_matcher():
+    entries = build_settings_payload()["hooks"]["PreToolUse"]
+    matchers = [e.get("matcher") for e in entries]
+    assert "Write" in matchers
+
+
+def test_payload_includes_edit_matcher():
+    entries = build_settings_payload()["hooks"]["PreToolUse"]
+    matchers = [e.get("matcher") for e in entries]
+    assert "Edit" in matchers
+
+
+def test_write_and_edit_hooks_use_file_hook_cmd():
+    entries = build_settings_payload()["hooks"]["PreToolUse"]
+    file_cmd = _FILE_HOOK_CMD.strip()
+    for entry in entries:
+        if entry.get("matcher") in ("Write", "Edit"):
+            assert entry["hooks"][0]["command"] == file_cmd
+
+
+# ---------------------------------------------------------------------------
+# write_hooks — Write/Edit idempotency
+# ---------------------------------------------------------------------------
+
+def test_write_hooks_installs_write_and_edit_matchers(tmp_path):
+    write_hooks(tmp_path)
+    data = json.loads((tmp_path / ".claude" / "settings.json").read_text())
+    matchers = [e.get("matcher") for e in data["hooks"]["PreToolUse"]]
+    assert "Write" in matchers
+    assert "Edit" in matchers
+
+
+def test_write_hooks_idempotent_for_file_hooks(tmp_path):
+    write_hooks(tmp_path)
+    result2 = write_hooks(tmp_path)
+    assert result2["wrote"] is False
+    assert result2["merged"] is False
+
+
+def test_write_hooks_adds_missing_file_hooks_when_bash_already_present(tmp_path):
+    """Bash hook already installed; Write/Edit should still be added."""
+    settings_dir = tmp_path / ".claude"
+    settings_dir.mkdir()
+    bash_entry = build_settings_payload()["hooks"]["PreToolUse"][0]
+    existing = {"hooks": {"PreToolUse": [bash_entry]}}
+    (settings_dir / "settings.json").write_text(json.dumps(existing))
+
+    result = write_hooks(tmp_path)
+    assert result["wrote"] is True
+
+    data = json.loads((settings_dir / "settings.json").read_text())
+    matchers = [e.get("matcher") for e in data["hooks"]["PreToolUse"]]
+    assert "Write" in matchers
+    assert "Edit" in matchers
+
+
+# ---------------------------------------------------------------------------
+# validate_hooks — requires all three hooks
+# ---------------------------------------------------------------------------
+
+def test_validate_hooks_false_when_only_bash_present(tmp_path):
+    settings_dir = tmp_path / ".claude"
+    settings_dir.mkdir()
+    bash_entry = build_settings_payload()["hooks"]["PreToolUse"][0]
+    data = {"hooks": {"PreToolUse": [bash_entry]}}
+    (settings_dir / "settings.json").write_text(json.dumps(data))
+
+    result = validate_hooks(tmp_path)
+    assert result["valid"] is False
+
+
+def test_validate_hooks_true_after_full_write(tmp_path):
+    write_hooks(tmp_path)
+    result = validate_hooks(tmp_path)
+    assert result["valid"] is True
+    assert result["reason"] is None
