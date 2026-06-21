@@ -16,8 +16,13 @@ A task is considered high-risk when it carries an explicit ``high_risk: true``
 or ``risk_level: "high"`` field, or when its title/type/description mentions
 keywords associated with auth, payments, DB migrations, secrets, or security.
 
-When ``ANTHROPIC_API_KEY`` is not set the gate is silently skipped — it never
-blocks a run just because the API key is absent.
+Key/mode behaviour:
+- When ``ANTHROPIC_API_KEY`` is set, the gate always calls the Anthropic SDK.
+- When ``CLAUDE_AUTH_MODE=subscription`` and no API key is present, the gate
+  falls back to the ``claude`` CLI (which uses the subscription token), so the
+  review still runs instead of being silently skipped.
+- When neither an API key nor the CLI is available, the gate is silently
+  skipped rather than blocking a run.
 """
 import os
 import re
@@ -136,6 +141,74 @@ def call_claude_review(
         }
 
 
+def call_claude_cli_review(
+    prompt: str,
+    model: str = "claude-haiku-4-5-20251001",
+) -> dict:
+    """Run the review via the ``claude`` CLI (subscription mode fallback).
+
+    Used when ``CLAUDE_AUTH_MODE=subscription`` and no ``ANTHROPIC_API_KEY`` is
+    present. Strips the API key from the subprocess environment so the CLI uses
+    the subscription OAuth/keychain token instead.
+
+    Returns the same ``{verdict, response_text, error}`` shape as
+    ``call_claude_review``.
+    """
+    import shutil
+    import tempfile
+    from tools.shell_tools import run_command
+
+    if not shutil.which("claude"):
+        return {
+            "verdict": _VERDICT_NEEDS_REVIEW,
+            "response_text": "",
+            "error": "claude CLI not found",
+        }
+
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".txt", delete=False, prefix="hrr_review_"
+        ) as f:
+            f.write(prompt)
+            tmp_path = f.name
+
+        cmd = ["claude", "--print", "--dangerously-skip-permissions"]
+        if model:
+            cmd += ["--model", model]
+        cmd.append(f"@{tmp_path}")
+
+        # Strip ANTHROPIC_API_KEY so the CLI uses the subscription token.
+        env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
+
+        result = run_command(cmd, timeout=120, env=env)
+        if not result.success:
+            return {
+                "verdict": _VERDICT_NEEDS_REVIEW,
+                "response_text": "",
+                "error": result.error or "claude CLI returned a non-zero exit code",
+            }
+
+        response_text = result.output or ""
+        return {
+            "verdict": parse_verdict(response_text),
+            "response_text": response_text,
+            "error": None,
+        }
+    except Exception as exc:
+        return {
+            "verdict": _VERDICT_NEEDS_REVIEW,
+            "response_text": "",
+            "error": str(exc),
+        }
+    finally:
+        if tmp_path:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+
 def guard_high_risk_claude_review(
     diff_text: str,
     summary: dict,
@@ -145,6 +218,7 @@ def guard_high_risk_claude_review(
     strict_mode: bool = False,
     model: str = "claude-haiku-4-5-20251001",
     api_key: Optional[str] = None,
+    claude_auth_mode: str = "api_key",
 ) -> dict:
     """Run the High-Risk Claude review gate and log the result.
 
@@ -164,12 +238,88 @@ def guard_high_risk_claude_review(
         }
 
     resolved_key = api_key or os.getenv("ANTHROPIC_API_KEY")
+
     if not resolved_key:
-        log_event("high_risk_review_skipped", {
-            "task_id": task_id,
-            "context": context,
-            "reason": "no ANTHROPIC_API_KEY; skipping high-risk Claude review",
-        }, task_id=task_id)
+        # Subscription mode: fall back to the claude CLI so the gate still
+        # runs without an API key.
+        if claude_auth_mode == "subscription":
+            import shutil
+            if shutil.which("claude"):
+                prompt = build_review_prompt(diff_text, task, summary)
+                log_event("high_risk_review_cli_fallback", {
+                    "task_id": task_id,
+                    "context": context,
+                    "reason": "subscription mode; no ANTHROPIC_API_KEY; using claude CLI",
+                }, task_id=task_id)
+                result = call_claude_cli_review(prompt, model=model)
+                # Continue into verdict handling below (skip the SDK call).
+                verdict = result["verdict"]
+                error = result.get("error")
+                response_text = result.get("response_text", "")
+
+                if error:
+                    log_event("high_risk_review_error", {
+                        "task_id": task_id,
+                        "context": context,
+                        "error": error,
+                    }, task_id=task_id)
+                    return {
+                        "passed": True, "skipped": False,
+                        "verdict": _VERDICT_NEEDS_REVIEW,
+                        "issues": [f"review CLI error: {error}"],
+                        "strict_mode": strict_mode,
+                    }
+
+                if verdict == _VERDICT_APPROVED:
+                    log_event("high_risk_review_approved", {
+                        "task_id": task_id,
+                        "context": context,
+                        "verdict": verdict,
+                        "response": response_text[:200],
+                        "mode": "cli",
+                    }, task_id=task_id)
+                    return {
+                        "passed": True, "skipped": False,
+                        "verdict": verdict, "issues": [], "strict_mode": strict_mode,
+                    }
+
+                issue = f"high-risk review {verdict}: {response_text[:200]}"
+                if strict_mode:
+                    log_event("high_risk_review_rejected", {
+                        "task_id": task_id,
+                        "context": context,
+                        "verdict": verdict,
+                        "response": response_text[:200],
+                        "strict_mode": True,
+                        "mode": "cli",
+                    }, task_id=task_id)
+                else:
+                    log_event("high_risk_review_warned", {
+                        "task_id": task_id,
+                        "context": context,
+                        "verdict": verdict,
+                        "response": response_text[:200],
+                        "strict_mode": False,
+                        "mode": "cli",
+                    }, task_id=task_id)
+
+                return {
+                    "passed": False, "skipped": False,
+                    "verdict": verdict, "issues": [issue], "strict_mode": strict_mode,
+                }
+            else:
+                log_event("high_risk_review_skipped", {
+                    "task_id": task_id,
+                    "context": context,
+                    "reason": "subscription mode; no ANTHROPIC_API_KEY and no claude CLI found",
+                }, task_id=task_id)
+        else:
+            log_event("high_risk_review_skipped", {
+                "task_id": task_id,
+                "context": context,
+                "reason": "no ANTHROPIC_API_KEY; skipping high-risk Claude review",
+            }, task_id=task_id)
+
         return {
             "passed": True, "skipped": True,
             "verdict": "skipped", "issues": [], "strict_mode": strict_mode,

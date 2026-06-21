@@ -642,6 +642,7 @@ def check_high_risk_claude_review(state: RunnerState) -> RunnerState:
         context="check_high_risk_claude_review",
         strict_mode=cfg.high_risk_claude_review_strict_mode,
         model=cfg.high_risk_claude_review_model,
+        claude_auth_mode=cfg.claude_auth_mode,
     )
 
     if decision.get("skipped"):

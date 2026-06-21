@@ -21,6 +21,7 @@ from tools.high_risk_claude_review import (
     build_review_prompt,
     parse_verdict,
     call_claude_review,
+    call_claude_cli_review,
     guard_high_risk_claude_review,
 )
 
@@ -372,6 +373,166 @@ def test_state_has_high_risk_review_status_field():
 
 
 # ---------------------------------------------------------------------------
+# call_claude_cli_review
+# ---------------------------------------------------------------------------
+
+def test_cli_review_returns_needs_review_when_cli_missing():
+    with mock.patch("shutil.which", return_value=None):
+        result = call_claude_cli_review("prompt text")
+    assert result["verdict"] == "needs_review"
+    assert "not found" in result["error"]
+
+
+def test_cli_review_parses_approved_response():
+    from state import ToolResult
+    with mock.patch("shutil.which", return_value="/usr/bin/claude"), \
+         mock.patch("tools.shell_tools.run_command", return_value=ToolResult(
+             tool="shell", success=True, output="APPROVED: no issues found"
+         )):
+        result = call_claude_cli_review("prompt text")
+    assert result["verdict"] == "approved"
+    assert result["error"] is None
+
+
+def test_cli_review_parses_rejected_response():
+    from state import ToolResult
+    with mock.patch("shutil.which", return_value="/usr/bin/claude"), \
+         mock.patch("tools.shell_tools.run_command", return_value=ToolResult(
+             tool="shell", success=True, output="REJECTED: exposes credentials"
+         )):
+        result = call_claude_cli_review("prompt text")
+    assert result["verdict"] == "rejected"
+
+
+def test_cli_review_non_zero_exit_returns_needs_review():
+    from state import ToolResult
+    with mock.patch("shutil.which", return_value="/usr/bin/claude"), \
+         mock.patch("tools.shell_tools.run_command", return_value=ToolResult(
+             tool="shell", success=False, output="", error="timeout"
+         )):
+        result = call_claude_cli_review("prompt text")
+    assert result["verdict"] == "needs_review"
+    assert result["error"] is not None
+
+
+# ---------------------------------------------------------------------------
+# guard — subscription mode fallback paths
+# ---------------------------------------------------------------------------
+
+def test_guard_subscription_mode_uses_cli_when_no_api_key():
+    """In subscription mode without API key, the guard calls the CLI instead of skipping."""
+    with mock.patch.dict(os.environ, {}, clear=False):
+        os.environ.pop("ANTHROPIC_API_KEY", None)
+        with mock.patch.object(_hrr, "call_claude_cli_review", return_value={
+            "verdict": "approved", "response_text": "APPROVED: safe", "error": None,
+        }) as mock_cli, \
+             mock.patch("shutil.which", return_value="/usr/bin/claude"):
+            result = guard_high_risk_claude_review(
+                _CLEAN_DIFF, _summary(), _task(high_risk=True),
+                claude_auth_mode="subscription",
+                api_key=None,
+            )
+    mock_cli.assert_called_once()
+    assert result["passed"] is True
+    assert result["skipped"] is False
+    assert result["verdict"] == "approved"
+
+
+def test_guard_subscription_mode_no_cli_skips():
+    """In subscription mode without API key and no CLI, the guard skips gracefully."""
+    with mock.patch.dict(os.environ, {}, clear=False):
+        os.environ.pop("ANTHROPIC_API_KEY", None)
+        with mock.patch("shutil.which", return_value=None):
+            result = guard_high_risk_claude_review(
+                _CLEAN_DIFF, _summary(), _task(high_risk=True),
+                claude_auth_mode="subscription",
+                api_key=None,
+            )
+    assert result["passed"] is True
+    assert result["skipped"] is True
+
+
+def test_guard_api_key_mode_still_skips_without_key():
+    """In api_key mode (default) without a key the gate still skips — no regression."""
+    with mock.patch.dict(os.environ, {}, clear=False):
+        os.environ.pop("ANTHROPIC_API_KEY", None)
+        result = guard_high_risk_claude_review(
+            _CLEAN_DIFF, _summary(), _task(high_risk=True),
+            claude_auth_mode="api_key",
+            api_key=None,
+        )
+    assert result["passed"] is True
+    assert result["skipped"] is True
+
+
+def test_guard_subscription_mode_cli_rejected_non_strict_warns():
+    """CLI returns REJECTED in subscription mode, non-strict → warned, not blocking."""
+    with mock.patch.dict(os.environ, {}, clear=False):
+        os.environ.pop("ANTHROPIC_API_KEY", None)
+        with mock.patch.object(_hrr, "call_claude_cli_review", return_value={
+            "verdict": "rejected", "response_text": "REJECTED: auth bypass", "error": None,
+        }), mock.patch("shutil.which", return_value="/usr/bin/claude"):
+            result = guard_high_risk_claude_review(
+                _CLEAN_DIFF, _summary(), _task(high_risk=True),
+                claude_auth_mode="subscription",
+                strict_mode=False,
+                api_key=None,
+            )
+    assert result["passed"] is False
+    assert result["strict_mode"] is False
+    assert len(result["issues"]) == 1
+
+
+def test_guard_subscription_mode_cli_rejected_strict_fails():
+    """CLI returns REJECTED in subscription mode, strict → hard failure."""
+    with mock.patch.dict(os.environ, {}, clear=False):
+        os.environ.pop("ANTHROPIC_API_KEY", None)
+        with mock.patch.object(_hrr, "call_claude_cli_review", return_value={
+            "verdict": "rejected", "response_text": "REJECTED: secret leak", "error": None,
+        }), mock.patch("shutil.which", return_value="/usr/bin/claude"):
+            result = guard_high_risk_claude_review(
+                _CLEAN_DIFF, _summary(), _task(high_risk=True),
+                claude_auth_mode="subscription",
+                strict_mode=True,
+                api_key=None,
+            )
+    assert result["passed"] is False
+    assert result["strict_mode"] is True
+
+
+def test_guard_subscription_mode_cli_error_non_blocking():
+    """CLI error in subscription mode → non-blocking (same as SDK error path)."""
+    with mock.patch.dict(os.environ, {}, clear=False):
+        os.environ.pop("ANTHROPIC_API_KEY", None)
+        with mock.patch.object(_hrr, "call_claude_cli_review", return_value={
+            "verdict": "needs_review", "response_text": "", "error": "timeout",
+        }), mock.patch("shutil.which", return_value="/usr/bin/claude"):
+            result = guard_high_risk_claude_review(
+                _CLEAN_DIFF, _summary(), _task(high_risk=True),
+                claude_auth_mode="subscription",
+                api_key=None,
+            )
+    assert result["passed"] is True
+    assert "timeout" in result["issues"][0]
+
+
+def test_guard_subscription_mode_api_key_takes_precedence():
+    """When subscription mode AND an API key is present, the SDK path is used."""
+    with mock.patch.object(_hrr, "call_claude_review", return_value={
+        "verdict": "approved", "response_text": "APPROVED", "error": None,
+    }) as mock_sdk, \
+         mock.patch.object(_hrr, "call_claude_cli_review") as mock_cli:
+        result = guard_high_risk_claude_review(
+            _CLEAN_DIFF, _summary(), _task(high_risk=True),
+            claude_auth_mode="subscription",
+            api_key="sk-ant-test",
+        )
+    mock_sdk.assert_called_once()
+    mock_cli.assert_not_called()
+    assert result["passed"] is True
+
+
+# ---------------------------------------------------------------------------
 # Graph wiring
 # ---------------------------------------------------------------------------
 
@@ -423,6 +584,17 @@ if __name__ == "__main__":
         test_guard_needs_review_non_strict_warns,
         test_guard_needs_review_strict_fails,
         test_guard_api_error_is_non_blocking,
+        test_cli_review_returns_needs_review_when_cli_missing,
+        test_cli_review_parses_approved_response,
+        test_cli_review_parses_rejected_response,
+        test_cli_review_non_zero_exit_returns_needs_review,
+        test_guard_subscription_mode_uses_cli_when_no_api_key,
+        test_guard_subscription_mode_no_cli_skips,
+        test_guard_api_key_mode_still_skips_without_key,
+        test_guard_subscription_mode_cli_rejected_non_strict_warns,
+        test_guard_subscription_mode_cli_rejected_strict_fails,
+        test_guard_subscription_mode_cli_error_non_blocking,
+        test_guard_subscription_mode_api_key_takes_precedence,
         test_config_has_enabled_field,
         test_config_enabled_by_default,
         test_config_can_be_disabled,

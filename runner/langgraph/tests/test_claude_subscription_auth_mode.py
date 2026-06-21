@@ -180,6 +180,58 @@ def test_run_command_env_none_by_default():
         assert kwargs["env"] is None
 
 
+# ── High-risk review gate in subscription mode ────────────────────────────────
+
+def test_high_risk_review_uses_cli_in_subscription_mode_no_key():
+    """High-risk review gate calls CLI in subscription mode when no API key is set."""
+    import tools.high_risk_claude_review as hrr_mod
+    from tools.high_risk_claude_review import guard_high_risk_claude_review
+
+    original_log = hrr_mod.log_event
+    hrr_mod.log_event = lambda *a, **k: None
+    try:
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("ANTHROPIC_API_KEY", None)
+            with mock.patch.object(hrr_mod, "call_claude_cli_review", return_value={
+                "verdict": "approved", "response_text": "APPROVED: ok", "error": None,
+            }) as mock_cli, \
+                 mock.patch("shutil.which", return_value="/usr/bin/claude"):
+                result = guard_high_risk_claude_review(
+                    "+def foo(): pass",
+                    {"files_created": [], "files_modified": []},
+                    {"id": "t99", "title": "auth refactor", "high_risk": True},
+                    claude_auth_mode="subscription",
+                    api_key=None,
+                )
+        mock_cli.assert_called_once()
+        assert result["skipped"] is False
+        assert result["passed"] is True
+    finally:
+        hrr_mod.log_event = original_log
+
+
+def test_high_risk_review_skips_in_api_key_mode_no_key():
+    """High-risk review gate still skips in api_key mode when no key is configured."""
+    import tools.high_risk_claude_review as hrr_mod
+    from tools.high_risk_claude_review import guard_high_risk_claude_review
+
+    original_log = hrr_mod.log_event
+    hrr_mod.log_event = lambda *a, **k: None
+    try:
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("ANTHROPIC_API_KEY", None)
+            result = guard_high_risk_claude_review(
+                "+def foo(): pass",
+                {"files_created": [], "files_modified": []},
+                {"id": "t100", "title": "auth refactor", "high_risk": True},
+                claude_auth_mode="api_key",
+                api_key=None,
+            )
+        assert result["skipped"] is True
+    finally:
+        hrr_mod.log_event = original_log
+
+
 if __name__ == "__main__":
     tests = [
         test_default_auth_mode_is_api_key,
@@ -196,6 +248,8 @@ if __name__ == "__main__":
         test_subscription_mode_logged_in_worker_started,
         test_run_command_passes_env_to_subprocess,
         test_run_command_env_none_by_default,
+        test_high_risk_review_uses_cli_in_subscription_mode_no_key,
+        test_high_risk_review_skips_in_api_key_mode_no_key,
     ]
     passed = failed = 0
     for t in tests:
