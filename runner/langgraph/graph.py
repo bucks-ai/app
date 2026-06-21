@@ -53,6 +53,7 @@ from tools.claude_hooks_safety_pack import write_hooks
 from tools.acceptance_criteria_gate import guard_acceptance_criteria
 from tools.definition_of_done import guard_definition_of_done
 from tools.independent_code_review import guard_code_review, get_diff_text
+from tools.high_risk_claude_review import guard_high_risk_claude_review
 from tools.strategic_decision_gate import (
     evaluate_strategic_gate,
     format_review_file,
@@ -605,6 +606,62 @@ def check_independent_code_review(state: RunnerState) -> RunnerState:
     return _persist(state, "check_independent_code_review")
 
 
+def check_high_risk_claude_review(state: RunnerState) -> RunnerState:
+    """High-Risk Claude Review Gate.
+
+    After the static Independent Code Review Gate passes, runs an AI-powered
+    review for tasks that carry explicit ``high_risk: true`` / ``risk_level:
+    "high"`` fields or whose title/type/description contains keywords associated
+    with auth, payments, DB migrations, secrets, or infrastructure changes.
+
+    The gate calls the Anthropic API to get a verdict (APPROVED / NEEDS_REVIEW /
+    REJECTED). When ``HIGH_RISK_CLAUDE_REVIEW_STRICT_MODE=true`` (default: false),
+    a non-APPROVED verdict marks the task failed and halts the loop before any
+    commit. Otherwise the verdict is logged as a warning and the loop continues.
+
+    The gate is silently skipped when:
+    - ``HIGH_RISK_CLAUDE_REVIEW_ENABLED=false``
+    - The task is not high-risk
+    - ``ANTHROPIC_API_KEY`` is not configured
+    """
+    if not cfg.high_risk_claude_review_enabled:
+        return state
+
+    result = state.worker_result or {}
+    if not result.get("success") or not state.check_passed:
+        return state
+
+    task = state.current_task or {}
+    summary = state.worker_summary or {}
+    diff_text = get_diff_text(cfg.repo_path)
+
+    decision = guard_high_risk_claude_review(
+        diff_text=diff_text,
+        summary=summary,
+        task=task,
+        context="check_high_risk_claude_review",
+        strict_mode=cfg.high_risk_claude_review_strict_mode,
+        model=cfg.high_risk_claude_review_model,
+    )
+
+    if decision.get("skipped"):
+        state.high_risk_review_status = "skipped"
+    elif decision["passed"]:
+        state.high_risk_review_status = "passed"
+    elif cfg.high_risk_claude_review_strict_mode:
+        state.high_risk_review_status = "failed"
+        task_id = state.current_task_id or "unknown"
+        state.stop_reason = "high_risk_review_rejected"
+        mark_task_failed(
+            task_id,
+            "high-risk review rejected: " + "; ".join(decision["issues"]),
+        )
+    else:
+        state.high_risk_review_status = "warned"
+
+    return _persist(state, "check_high_risk_claude_review")
+
+
 def request_resources_if_needed(state: RunnerState) -> RunnerState:
     """Resource & credential request gate.
 
@@ -1116,6 +1173,7 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
     state.rollback_revert_plan = None
     state.resource_request_status = None
     state.code_review_status = None
+    state.high_risk_review_status = None
     state.resolved_model = None
     state.context_compression = None
     return _persist(state, "update_logs_and_state")
@@ -1297,6 +1355,12 @@ def _route_after_definition_of_done(state: RunnerState) -> str:
 def _route_after_code_review(state: RunnerState) -> str:
     if state.code_review_status == "failed":
         return "decide_continue_or_stop"
+    return "check_high_risk_claude_review"
+
+
+def _route_after_high_risk_review(state: RunnerState) -> str:
+    if state.high_risk_review_status == "failed":
+        return "decide_continue_or_stop"
     return "request_resources_if_needed"
 
 
@@ -1340,6 +1404,7 @@ def build_graph():
     builder.add_node("parse_worker_summary", parse_worker_summary_node)
     builder.add_node("check_definition_of_done", check_definition_of_done)
     builder.add_node("check_independent_code_review", check_independent_code_review)
+    builder.add_node("check_high_risk_claude_review", check_high_risk_claude_review)
     builder.add_node("request_resources_if_needed", request_resources_if_needed)
     builder.add_node("run_checks_if_needed", run_checks_if_needed)
     builder.add_node("commit_push_merge_if_needed", commit_push_merge_if_needed)
@@ -1386,6 +1451,10 @@ def build_graph():
         "request_resources_if_needed": "check_independent_code_review",
     })
     builder.add_conditional_edges("check_independent_code_review", _route_after_code_review, {
+        "decide_continue_or_stop": "decide_continue_or_stop",
+        "check_high_risk_claude_review": "check_high_risk_claude_review",
+    })
+    builder.add_conditional_edges("check_high_risk_claude_review", _route_after_high_risk_review, {
         "decide_continue_or_stop": "decide_continue_or_stop",
         "request_resources_if_needed": "request_resources_if_needed",
     })

@@ -86,6 +86,44 @@ An optional boolean field `acceptance_criteria.human_approval_required` is recog
 
 ---
 
+## High-Risk Claude Review Gate
+
+> **An AI-powered pre-commit review for tasks that touch sensitive code paths.**
+
+The gate runs after `check_independent_code_review` passes and before resources are checked. It detects "high-risk" tasks and asks Claude (via the Anthropic API) to review the diff before any commit.
+
+**High-risk detection** — a task is considered high-risk when it:
+- Carries an explicit `"high_risk": true` or `"risk_level": "high"` field, **or**
+- Has a title, type, or description mentioning keywords such as: `auth`, `payment`, `migration`, `sql`, `security`, `credential`, `secret`, `token`, `infrastructure`, `admin`, `delete`, `drop`, `truncate`, `encryption`, `password`, …
+
+**Review** — Claude is asked to return exactly one of `APPROVED`, `NEEDS_REVIEW`, or `REJECTED` with a one-sentence reason.
+
+| Verdict | Non-strict (default) | Strict mode |
+|---------|----------------------|-------------|
+| `APPROVED` | proceeds | proceeds |
+| `NEEDS_REVIEW` | logs warning, proceeds | marks task failed, stops loop |
+| `REJECTED` | logs warning, proceeds | marks task failed, stops loop |
+
+The gate is silently skipped when:
+- `HIGH_RISK_CLAUDE_REVIEW_ENABLED=false`
+- The task is not high-risk
+- `ANTHROPIC_API_KEY` is not configured
+- The Anthropic API call fails (treated as non-blocking warning)
+
+**Config:**
+- `HIGH_RISK_CLAUDE_REVIEW_ENABLED=true` (default) — enable the gate.
+- `HIGH_RISK_CLAUDE_REVIEW_STRICT_MODE=false` (default) — set to `true` to block commits on non-APPROVED verdicts.
+- `HIGH_RISK_CLAUDE_REVIEW_MODEL=claude-haiku-4-5-20251001` (default) — Anthropic model for the review call.
+
+**Logged events:**
+- `high_risk_review_approved` — Claude approved the diff.
+- `high_risk_review_warned` — non-APPROVED verdict in non-strict mode (loop continues).
+- `high_risk_review_rejected` — non-APPROVED verdict in strict mode (task marked failed, loop stops).
+- `high_risk_review_skipped` — gate skipped (not high-risk or no API key).
+- `high_risk_review_error` — Anthropic API call failed (non-blocking).
+
+---
+
 ## Independent Code Review Gate
 
 > **An autonomous second look at every diff before it is committed.**
@@ -179,6 +217,9 @@ Copy `.env.example` to `.env` and fill in:
 | `CLAUDE_HOOKS_SAFETY_PACK_AUTO_INSTALL` | Auto-write the safety hook when it is missing; false only validates and logs a warning (default: true) |
 | `INDEPENDENT_CODE_REVIEW_ENABLED` | Run an independent code review gate after check.sh passes, scanning the diff for scope creep, .env modifications, and secret leaks (default: true) |
 | `INDEPENDENT_CODE_REVIEW_STRICT_MODE` | Block the commit when the code review finds violations; false (default) logs a warning but proceeds |
+| `HIGH_RISK_CLAUDE_REVIEW_ENABLED` | Run a Claude-powered review for high-risk tasks after the static code review passes (default: true) |
+| `HIGH_RISK_CLAUDE_REVIEW_STRICT_MODE` | Block the commit when Claude returns REJECTED or NEEDS_REVIEW; false (default) logs a warning but proceeds |
+| `HIGH_RISK_CLAUDE_REVIEW_MODEL` | Anthropic model used for the high-risk review call (default: claude-haiku-4-5-20251001) |
 | `RESOURCE_GATE` | Pause the loop when a worker reports it needs a missing credential/resource (default: true) |
 | `FAILURE_GUARD` | Retry failed tasks and stop the loop on repeated failures (default: true) |
 | `MAX_TASK_RETRIES` | Times a failed task is requeued before giving up (default: 1) |
@@ -498,6 +539,7 @@ Allowed with warnings: `DROP TABLE IF EXISTS`, `DROP POLICY IF EXISTS`, `DROP TR
 8. `request_resources_if_needed` — resource/credential request gate; pauses the loop when the worker reports a missing credential/resource (see **Resource & Credential Gate**)
 9. `run_checks_if_needed` — run `./scripts/check.sh`
 9a. `check_independent_code_review` — independent diff review for scope creep, .env modifications, and secret leaks (runs after check.sh passes; see **Independent Code Review Gate**)
+9b. `check_high_risk_claude_review` — Claude-powered review for high-risk tasks (runs after static code review passes; see **High-Risk Claude Review Gate**)
 10. `commit_push_merge_if_needed` — git commit/push/merge flow; late guard blocks any remaining protected-branch attempts, and successful auto-merges clean up the local and remote feature branch when `AUTO_CLEANUP_BRANCHES=true`
 11. `apply_sql_if_needed` — scan and apply SQL migrations
 12. `deploy_if_needed` — trigger a Vercel deploy and poll it to a terminal state (only when a commit landed; see **Vercel Behavior**)

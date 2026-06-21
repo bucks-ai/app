@@ -223,6 +223,15 @@ class RunnerConfig:
     independent_code_review_strict_mode: bool = field(
         default_factory=lambda: os.getenv("INDEPENDENT_CODE_REVIEW_STRICT_MODE", "false").lower() == "true"
     )
+    high_risk_claude_review_enabled: bool = field(
+        default_factory=lambda: os.getenv("HIGH_RISK_CLAUDE_REVIEW_ENABLED", "true").lower() == "true"
+    )
+    high_risk_claude_review_strict_mode: bool = field(
+        default_factory=lambda: os.getenv("HIGH_RISK_CLAUDE_REVIEW_STRICT_MODE", "false").lower() == "true"
+    )
+    high_risk_claude_review_model: str = field(
+        default_factory=lambda: os.getenv("HIGH_RISK_CLAUDE_REVIEW_MODEL", "claude-haiku-4-5-20251001")
+    )
 
     @property
     def has_openai(self) -> bool:
@@ -315,6 +324,9 @@ class RunnerConfig:
             "claude_hooks_safety_pack_auto_install": self.claude_hooks_safety_pack_auto_install,
             "independent_code_review_enabled": self.independent_code_review_enabled,
             "independent_code_review_strict_mode": self.independent_code_review_strict_mode,
+            "high_risk_claude_review_enabled": self.high_risk_claude_review_enabled,
+            "high_risk_claude_review_strict_mode": self.high_risk_claude_review_strict_mode,
+            "high_risk_claude_review_model": self.high_risk_claude_review_model,
         }
 
 
