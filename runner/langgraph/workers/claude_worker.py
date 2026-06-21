@@ -6,6 +6,7 @@ from state import WorkerResult
 from tools.log_tools import log_event
 from tools.shell_tools import run_command
 from tools.claude_subagent_pack import select_subagent, build_subagent_prompt_prefix
+from tools.claude_hooks_safety_pack import write_hooks, validate_hooks
 from workers.base_worker import BaseWorker
 
 
@@ -52,6 +53,22 @@ class ClaudeWorker(BaseWorker):
         model: str | None = None,
         auth_mode: str = "api_key",
     ) -> WorkerResult:
+        cfg = get_config()
+        if cfg.claude_hooks_safety_pack_enabled:
+            repo_path = cfg.repo_path
+            if cfg.claude_hooks_safety_pack_auto_install:
+                result = write_hooks(repo_path)
+                if result["merged"]:
+                    log_event("claude_hooks_installed", {"path": result["path"], "task_id": task_id})
+            else:
+                v = validate_hooks(repo_path)
+                if not v["valid"]:
+                    log_event("claude_hooks_missing", {
+                        "task_id": task_id,
+                        "reason": v["reason"],
+                        "path": v["path"],
+                    })
+
         path = self._write_outbox(task_id, prompt)
         cmd = ["claude", "--print", "--dangerously-skip-permissions"]
         if model:

@@ -211,6 +211,12 @@ class RunnerConfig:
     claude_subagent_pack_enabled: bool = field(
         default_factory=lambda: os.getenv("CLAUDE_SUBAGENT_PACK_ENABLED", "true").lower() == "true"
     )
+    claude_hooks_safety_pack_enabled: bool = field(
+        default_factory=lambda: os.getenv("CLAUDE_HOOKS_SAFETY_PACK_ENABLED", "true").lower() == "true"
+    )
+    claude_hooks_safety_pack_auto_install: bool = field(
+        default_factory=lambda: os.getenv("CLAUDE_HOOKS_SAFETY_PACK_AUTO_INSTALL", "true").lower() == "true"
+    )
 
     @property
     def has_openai(self) -> bool:
@@ -299,6 +305,8 @@ class RunnerConfig:
             "definition_of_done_gate_enabled": self.definition_of_done_gate_enabled,
             "definition_of_done_strict_mode": self.definition_of_done_strict_mode,
             "claude_subagent_pack_enabled": self.claude_subagent_pack_enabled,
+            "claude_hooks_safety_pack_enabled": self.claude_hooks_safety_pack_enabled,
+            "claude_hooks_safety_pack_auto_install": self.claude_hooks_safety_pack_auto_install,
         }
 
 
