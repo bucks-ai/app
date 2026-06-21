@@ -249,6 +249,18 @@ class RunnerConfig:
     merge_approval_policy: str = field(
         default_factory=lambda: os.getenv("MERGE_APPROVAL_POLICY", "require_approval_on_high")
     )
+    e2e_enabled: bool = field(
+        default_factory=lambda: os.getenv("E2E_ENABLED", "false").lower() == "true"
+    )
+    e2e_base_url: Optional[str] = field(
+        default_factory=lambda: os.getenv("E2E_BASE_URL")
+    )
+    e2e_timeout_ms: int = field(
+        default_factory=lambda: int(os.getenv("E2E_TIMEOUT_MS", "15000"))
+    )
+    e2e_headless: bool = field(
+        default_factory=lambda: os.getenv("E2E_HEADLESS", "true").lower() == "true"
+    )
 
     @property
     def has_openai(self) -> bool:
@@ -349,6 +361,10 @@ class RunnerConfig:
             "max_auto_repair_attempts": self.max_auto_repair_attempts,
             "risk_based_merge_approval_enabled": self.risk_based_merge_approval_enabled,
             "merge_approval_policy": self.merge_approval_policy,
+            "e2e_enabled": self.e2e_enabled,
+            "e2e_base_url": self.e2e_base_url,
+            "e2e_timeout_ms": self.e2e_timeout_ms,
+            "e2e_headless": self.e2e_headless,
         }
 
 

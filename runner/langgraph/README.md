@@ -319,6 +319,10 @@ Copy `.env.example` to `.env` and fill in:
 | `MAX_AUTO_REPAIR_ATTEMPTS` | Maximum number of inline repair attempts per task before giving up and letting the failure guard handle it (default: 2) |
 | `RISK_BASED_MERGE_APPROVAL_ENABLED` | Classify merge risk and pause the loop for human approval when risk exceeds the policy threshold (default: true) |
 | `MERGE_APPROVAL_POLICY` | Controls when human approval is required before merging: `auto`, `require_approval_on_high` (default), `require_approval_on_medium_and_high`, `always_require` |
+| `E2E_ENABLED` | Run Playwright browser E2E smoke tests after each successful deployment (default: false — requires `python -m playwright install`) |
+| `E2E_BASE_URL` | Base URL for E2E tests (e.g. `https://my-app.vercel.app`); falls back to the URL from `deploy_result` when unset |
+| `E2E_TIMEOUT_MS` | Page navigation timeout in milliseconds for E2E tests (default: 15000) |
+| `E2E_HEADLESS` | Run the Playwright browser headless (default: true) |
 | `RESOURCE_GATE` | Pause the loop when a worker reports it needs a missing credential/resource (default: true) |
 | `FAILURE_GUARD` | Retry failed tasks and stop the loop on repeated failures (default: true) |
 | `MAX_TASK_RETRIES` | Times a failed task is requeued before giving up (default: 1) |
@@ -587,6 +591,48 @@ Without token, Vercel steps are skipped with a logged note.
 
 ---
 
+## Playwright Browser E2E Harness
+
+> **Automatic post-deploy browser verification: after each successful Vercel deployment the runner opens a real Chromium browser and visits the deployed URL to confirm the app is alive.**
+
+The harness runs in the `run_e2e_if_needed` node, immediately after `deploy_if_needed` and before GitHub issue updates. It is **advisory** — E2E failures are logged but never block the loop, so a flaky test or a scenario that hasn't been tuned yet doesn't prevent a good deploy from completing.
+
+**Skip conditions** — the harness does not run when:
+- `E2E_ENABLED=false` (the default — opt-in)
+- `state.deploy_ready` is falsy (the deployment wasn't confirmed ready)
+- Neither `E2E_BASE_URL` nor a URL extracted from `deploy_result` is available
+- `playwright` is not installed (`python -m playwright install` required)
+
+**Scenarios** — by default `tools/playwright_harness.build_default_scenarios` returns a minimal smoke suite (homepage loads). Pass custom scenarios by extending or replacing the list in `run_e2e_suite(scenarios=[...])`.
+
+Each scenario dict:
+```json
+{
+  "name": "homepage loads",
+  "path": "/",
+  "checks": [
+    {"type": "status",        "value": "ok"},
+    {"type": "title_contains","value": "my app"},
+    {"type": "text_contains", "value": "Welcome"}
+  ]
+}
+```
+
+**Logged events:**
+- `e2e_passed` — all scenarios passed.
+- `e2e_failed` — one or more scenarios failed (loop continues).
+- `e2e_skipped` — harness skipped (disabled / not ready / playwright missing).
+
+**Config:**
+- `E2E_ENABLED=false` (default) — opt-in to enable the harness.
+- `E2E_BASE_URL` — override the target URL; defaults to the URL from `deploy_result`.
+- `E2E_TIMEOUT_MS=15000` (default) — per-page navigation timeout in milliseconds.
+- `E2E_HEADLESS=true` (default) — run Chromium headless.
+
+**Pure helpers** (`tools/playwright_harness.py`) — `build_default_scenarios`, `evaluate_results`, and `format_report` are side-effect free and fully unit-tested in `tests/test_playwright_harness.py`. Browser execution (`run_e2e_suite`, `run_scenario`) requires a real Playwright install.
+
+---
+
 ## Slack Notifications
 
 The runner can push **notable** lifecycle events to a Slack channel via an
@@ -645,6 +691,7 @@ Allowed with warnings: `DROP TABLE IF EXISTS`, `DROP POLICY IF EXISTS`, `DROP TR
 10. `commit_push_merge_if_needed` — git commit/push/merge flow; late guard blocks any remaining protected-branch attempts, and successful auto-merges clean up the local and remote feature branch when `AUTO_CLEANUP_BRANCHES=true`
 11. `apply_sql_if_needed` — scan and apply SQL migrations
 12. `deploy_if_needed` — trigger a Vercel deploy and poll it to a terminal state (only when a commit landed; see **Vercel Behavior**)
+12a. `run_e2e_if_needed` — run Playwright browser E2E smoke tests against the deployed URL (only when `E2E_ENABLED=true` and the deployment is ready; see **Playwright Browser E2E Harness**)
 13. `update_github_if_needed` — comment/close GitHub issues
 14. `update_logs_and_state` — mark task complete/failed, log
 15. `ask_chatgpt_next_task` — send summary back to ChatGPT

@@ -56,6 +56,7 @@ from tools.independent_code_review import guard_code_review, get_diff_text
 from tools.high_risk_claude_review import guard_high_risk_claude_review
 from tools.codex_to_claude_escalation import should_escalate, build_repair_prompt
 from tools.auto_repair_loop import should_auto_repair, build_auto_repair_prompt
+from tools.playwright_harness import run_e2e_suite, is_playwright_available
 from tools.risk_based_merge_approval import (
     guard_merge_approval,
     format_approval_request,
@@ -1183,6 +1184,68 @@ def deploy_if_needed(state: RunnerState) -> RunnerState:
     return _persist(state, "deploy_if_needed")
 
 
+def run_e2e_if_needed(state: RunnerState) -> RunnerState:
+    """Playwright Browser E2E Harness.
+
+    Runs a browser-based E2E smoke suite against the deployed application URL
+    after a successful Vercel deployment.  Skipped when:
+    - ``E2E_ENABLED=false`` (default)
+    - The deployment was not ready (``state.deploy_ready`` is falsy)
+    - Neither ``E2E_BASE_URL`` nor a URL from ``deploy_result`` is available
+    - playwright is not installed
+
+    Results are stored on ``state.e2e_result`` and logged as ``e2e_passed`` or
+    ``e2e_failed``.  Failure never blocks the loop — the harness is advisory so
+    a flaky E2E suite doesn't prevent a good commit from landing.
+    """
+    if not cfg.e2e_enabled:
+        return state
+
+    if not state.deploy_ready:
+        log_event("e2e_skipped", {
+            "task_id": state.current_task_id,
+            "reason": "deploy not ready",
+        }, task_id=state.current_task_id)
+        return state
+
+    if not is_playwright_available():
+        log_event("e2e_skipped", {
+            "task_id": state.current_task_id,
+            "reason": "playwright not installed",
+        }, task_id=state.current_task_id)
+        return state
+
+    base_url = cfg.e2e_base_url
+    if not base_url:
+        deploy = state.deploy_result or {}
+        base_url = deploy.get("url") or deploy.get("deployment_url")
+    if not base_url:
+        log_event("e2e_skipped", {
+            "task_id": state.current_task_id,
+            "reason": "no E2E_BASE_URL and no URL in deploy_result",
+        }, task_id=state.current_task_id)
+        return state
+
+    result = run_e2e_suite(
+        base_url=base_url,
+        timeout_ms=cfg.e2e_timeout_ms,
+        headless=cfg.e2e_headless,
+    )
+    state.e2e_result = result
+
+    event_type = "e2e_passed" if result["success"] else "e2e_failed"
+    log_event(event_type, {
+        "task_id": state.current_task_id,
+        "base_url": base_url,
+        "total": len(result.get("results", [])),
+        "passed_count": sum(1 for r in result.get("results", []) if r.get("passed")),
+        "failed": [r["name"] for r in result.get("results", []) if not r.get("passed")],
+        "error": result.get("error"),
+    }, task_id=state.current_task_id)
+
+    return _persist(state, "run_e2e_if_needed")
+
+
 def update_github_if_needed(state: RunnerState) -> RunnerState:
     if not cfg.has_github or not cfg.github_repo:
         return state
@@ -1430,6 +1493,7 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
     state.context_compression = None
     state.merge_approval_status = None
     state.merge_risk_level = None
+    state.e2e_result = None
     return _persist(state, "update_logs_and_state")
 
 
@@ -1673,6 +1737,7 @@ def build_graph():
     builder.add_node("commit_push_merge_if_needed", commit_push_merge_if_needed)
     builder.add_node("apply_sql_if_needed", apply_sql_if_needed)
     builder.add_node("deploy_if_needed", deploy_if_needed)
+    builder.add_node("run_e2e_if_needed", run_e2e_if_needed)
     builder.add_node("update_github_if_needed", update_github_if_needed)
     builder.add_node("update_logs_and_state", update_logs_and_state)
     builder.add_node("run_strategic_gate", run_strategic_gate)
@@ -1734,7 +1799,8 @@ def build_graph():
     })
     builder.add_edge("commit_push_merge_if_needed", "apply_sql_if_needed")
     builder.add_edge("apply_sql_if_needed", "deploy_if_needed")
-    builder.add_edge("deploy_if_needed", "update_github_if_needed")
+    builder.add_edge("deploy_if_needed", "run_e2e_if_needed")
+    builder.add_edge("run_e2e_if_needed", "update_github_if_needed")
     builder.add_edge("update_github_if_needed", "update_logs_and_state")
     builder.add_edge("update_logs_and_state", "run_strategic_gate")
     builder.add_conditional_edges("run_strategic_gate", _route_after_strategic_gate, {

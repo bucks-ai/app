@@ -103,3 +103,4 @@ class RunnerState(BaseModel):
     check_output: Optional[str] = None             # last check.sh stdout (used by auto_repair_if_needed)
     merge_approval_status: Optional[str] = None   # approved | pending | skipped | None
     merge_risk_level: Optional[str] = None         # low | medium | high | None
+    e2e_result: Optional[dict] = None              # result dict from playwright_harness.run_e2e_suite
