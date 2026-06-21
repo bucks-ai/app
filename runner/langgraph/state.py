@@ -98,3 +98,6 @@ class RunnerState(BaseModel):
     code_review_status: Optional[str] = None  # passed | warned | failed | None
     high_risk_review_status: Optional[str] = None  # passed | warned | skipped | failed | None
     codex_escalation_status: Optional[str] = None  # attempted | succeeded | failed | skipped | None
+    auto_repair_attempt: int = 0                   # repair attempts made this task loop
+    auto_repair_status: Optional[str] = None       # attempted | succeeded | failed | None
+    check_output: Optional[str] = None             # last check.sh stdout (used by auto_repair_if_needed)

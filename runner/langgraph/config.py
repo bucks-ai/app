@@ -37,6 +37,7 @@ _DEFAULT_SLACK_EVENTS = frozenset({
     "loop_blocked_on_codex_usage_limit",
     "task_definition_of_done_rejected",
     "task_definition_of_done_warned",
+    "auto_repair_failed",
 })
 
 
@@ -235,6 +236,12 @@ class RunnerConfig:
     codex_to_claude_escalation_enabled: bool = field(
         default_factory=lambda: os.getenv("CODEX_TO_CLAUDE_ESCALATION_ENABLED", "true").lower() == "true"
     )
+    auto_repair_loop_enabled: bool = field(
+        default_factory=lambda: os.getenv("AUTO_REPAIR_LOOP_ENABLED", "true").lower() == "true"
+    )
+    max_auto_repair_attempts: int = field(
+        default_factory=lambda: int(os.getenv("MAX_AUTO_REPAIR_ATTEMPTS", "2"))
+    )
 
     @property
     def has_openai(self) -> bool:
@@ -331,6 +338,8 @@ class RunnerConfig:
             "high_risk_claude_review_strict_mode": self.high_risk_claude_review_strict_mode,
             "high_risk_claude_review_model": self.high_risk_claude_review_model,
             "codex_to_claude_escalation_enabled": self.codex_to_claude_escalation_enabled,
+            "auto_repair_loop_enabled": self.auto_repair_loop_enabled,
+            "max_auto_repair_attempts": self.max_auto_repair_attempts,
         }
 
 

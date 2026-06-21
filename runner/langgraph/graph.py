@@ -55,6 +55,7 @@ from tools.definition_of_done import guard_definition_of_done
 from tools.independent_code_review import guard_code_review, get_diff_text
 from tools.high_risk_claude_review import guard_high_risk_claude_review
 from tools.codex_to_claude_escalation import should_escalate, build_repair_prompt
+from tools.auto_repair_loop import should_auto_repair, build_auto_repair_prompt
 from tools.strategic_decision_gate import (
     evaluate_strategic_gate,
     format_review_file,
@@ -793,7 +794,113 @@ def run_checks_if_needed(state: RunnerState) -> RunnerState:
         return state
     check = run_check(cfg.repo_path)
     state.check_passed = check["success"]
+    state.check_output = check.get("output") or ""
     return _persist(state, "run_checks_if_needed")
+
+
+def auto_repair_if_needed(state: RunnerState) -> RunnerState:
+    """Auto-Repair Loop v2.
+
+    When check.sh fails after a successful worker run, re-dispatch the same
+    worker with the check failure output as context so it can fix the issues
+    in place.  Repeats inline up to MAX_AUTO_REPAIR_ATTEMPTS times.  If a
+    repair attempt causes check.sh to pass, ``check_passed`` is set True and
+    ``worker_result`` is updated so the pipeline continues to commit/deploy as
+    normal.  If all attempts are exhausted (or the worker itself fails during
+    repair), ``check_passed`` remains False and the normal failure-guard path
+    handles it.
+
+    Skipped when:
+    - ``AUTO_REPAIR_LOOP_ENABLED=false``
+    - The worker itself failed (failure guard handles those)
+    - check.sh passed on the first try
+    - All repair attempts have been used
+    """
+    if not cfg.auto_repair_loop_enabled:
+        return state
+
+    result = state.worker_result or {}
+    task = state.current_task or {}
+    task_id = state.current_task_id or "unknown"
+
+    while should_auto_repair(
+        result,
+        state.check_passed,
+        state.auto_repair_attempt,
+        cfg.max_auto_repair_attempts,
+    ):
+        attempt = state.auto_repair_attempt + 1
+        state.auto_repair_attempt = attempt
+
+        check_output = state.check_output or ""
+        original_prompt = next(
+            (m["content"] for m in reversed(state.messages) if m.get("role") == "user"),
+            "",
+        )
+        repair_prompt = build_auto_repair_prompt(
+            original_prompt, check_output, task, attempt, cfg.max_auto_repair_attempts
+        )
+
+        log_event("auto_repair_attempted", {
+            "task_id": task_id,
+            "attempt": attempt,
+            "max_attempts": cfg.max_auto_repair_attempts,
+            "worker": state.current_worker,
+        }, task_id=task_id)
+
+        repair_task = dict(task)
+        if state.resolved_model:
+            repair_task["resolved_model"] = state.resolved_model
+
+        if state.current_worker == "codex":
+            worker = CodexWorker()
+        else:
+            worker = ClaudeWorker()
+
+        _start = time.monotonic()
+        repair_result = worker.run_worker_prompt(repair_prompt, repair_task)
+        elapsed = round(time.monotonic() - _start, 2)
+
+        if repair_result.success:
+            check = run_check(cfg.repo_path)
+            state.check_passed = check["success"]
+            state.check_output = check.get("output") or ""
+
+            if check["success"]:
+                state.worker_result = repair_result.model_dump()
+                result = state.worker_result
+                state.auto_repair_status = "succeeded"
+                log_event("auto_repair_succeeded", {
+                    "task_id": task_id,
+                    "attempt": attempt,
+                    "elapsed_seconds": elapsed,
+                }, task_id=task_id)
+                break
+            else:
+                log_event("auto_repair_check_failed", {
+                    "task_id": task_id,
+                    "attempt": attempt,
+                    "elapsed_seconds": elapsed,
+                }, task_id=task_id)
+        else:
+            state.auto_repair_status = "failed"
+            log_event("auto_repair_worker_failed", {
+                "task_id": task_id,
+                "attempt": attempt,
+                "elapsed_seconds": elapsed,
+                "error": (repair_result.error or "")[:200],
+            }, task_id=task_id)
+            break
+
+    if state.auto_repair_attempt > 0 and state.auto_repair_status not in ("succeeded", "failed"):
+        state.auto_repair_status = "failed"
+        log_event("auto_repair_failed", {
+            "task_id": task_id,
+            "attempts": state.auto_repair_attempt,
+            "max_attempts": cfg.max_auto_repair_attempts,
+        }, task_id=task_id)
+
+    return _persist(state, "auto_repair_if_needed")
 
 
 def commit_push_merge_if_needed(state: RunnerState) -> RunnerState:
@@ -1237,6 +1344,9 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
     state.code_review_status = None
     state.high_risk_review_status = None
     state.codex_escalation_status = None
+    state.auto_repair_attempt = 0
+    state.auto_repair_status = None
+    state.check_output = None
     state.resolved_model = None
     state.context_compression = None
     return _persist(state, "update_logs_and_state")
@@ -1471,6 +1581,7 @@ def build_graph():
     builder.add_node("check_high_risk_claude_review", check_high_risk_claude_review)
     builder.add_node("request_resources_if_needed", request_resources_if_needed)
     builder.add_node("run_checks_if_needed", run_checks_if_needed)
+    builder.add_node("auto_repair_if_needed", auto_repair_if_needed)
     builder.add_node("commit_push_merge_if_needed", commit_push_merge_if_needed)
     builder.add_node("apply_sql_if_needed", apply_sql_if_needed)
     builder.add_node("deploy_if_needed", deploy_if_needed)
@@ -1527,7 +1638,8 @@ def build_graph():
         "decide_continue_or_stop": "decide_continue_or_stop",
         "run_checks_if_needed": "run_checks_if_needed",
     })
-    builder.add_edge("run_checks_if_needed", "commit_push_merge_if_needed")
+    builder.add_edge("run_checks_if_needed", "auto_repair_if_needed")
+    builder.add_edge("auto_repair_if_needed", "commit_push_merge_if_needed")
     builder.add_edge("commit_push_merge_if_needed", "apply_sql_if_needed")
     builder.add_edge("apply_sql_if_needed", "deploy_if_needed")
     builder.add_edge("deploy_if_needed", "update_github_if_needed")

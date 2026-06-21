@@ -86,6 +86,31 @@ An optional boolean field `acceptance_criteria.human_approval_required` is recog
 
 ---
 
+## Auto-Repair Loop v2
+
+> **Automatic self-repair: when check.sh fails after a successful worker run, the same worker is re-dispatched with the failure output so it can fix the issues in place.**
+
+The loop runs after `run_checks_if_needed` and before `commit_push_merge_if_needed`.  When check.sh fails but the worker itself succeeded, the runner re-dispatches the same worker (Claude or Codex) with the check failure output as context.  If the repair attempt causes checks to pass, `worker_result` is updated and the pipeline continues to commit/deploy normally.  If all attempts are exhausted (or the worker fails during repair), `check_passed` remains False and the normal failure-guard path handles the task.
+
+**Skip conditions** — the loop does not fire when:
+- `AUTO_REPAIR_LOOP_ENABLED=false`.
+- The worker itself failed (failure guard handles those; the check wasn't even run).
+- check.sh passed on the first attempt.
+- All repair attempts have been used (`auto_repair_attempt >= MAX_AUTO_REPAIR_ATTEMPTS`).
+
+**Logged events:**
+- `auto_repair_attempted` — a repair dispatch has started (includes attempt number).
+- `auto_repair_succeeded` — the repaired code passed check.sh; pipeline proceeds.
+- `auto_repair_check_failed` — the repair ran but check.sh still failed; may retry.
+- `auto_repair_worker_failed` — the worker itself failed during repair; loop stops.
+- `auto_repair_failed` — all attempts exhausted, check still failing.
+
+**Config:**
+- `AUTO_REPAIR_LOOP_ENABLED=true` (default) — enable the loop.
+- `MAX_AUTO_REPAIR_ATTEMPTS=2` (default) — maximum repair attempts per task.
+
+---
+
 ## Codex-to-Claude Repair Escalation
 
 > **Automatic fallback: when Codex fails, Claude tries to repair the task before the failure guard runs.**
@@ -243,6 +268,8 @@ Copy `.env.example` to `.env` and fill in:
 | `HIGH_RISK_CLAUDE_REVIEW_STRICT_MODE` | Block the commit when Claude returns REJECTED or NEEDS_REVIEW; false (default) logs a warning but proceeds |
 | `HIGH_RISK_CLAUDE_REVIEW_MODEL` | Anthropic model used for the high-risk review call (default: claude-haiku-4-5-20251001) |
 | `CODEX_TO_CLAUDE_ESCALATION_ENABLED` | When Codex fails with a non-quota error, re-attempt the task via Claude Code before the failure guard runs (default: true) |
+| `AUTO_REPAIR_LOOP_ENABLED` | When check.sh fails after a successful worker run, re-dispatch the same worker with the failure output so it can fix the issues (default: true) |
+| `MAX_AUTO_REPAIR_ATTEMPTS` | Maximum number of inline repair attempts per task before giving up and letting the failure guard handle it (default: 2) |
 | `RESOURCE_GATE` | Pause the loop when a worker reports it needs a missing credential/resource (default: true) |
 | `FAILURE_GUARD` | Retry failed tasks and stop the loop on repeated failures (default: true) |
 | `MAX_TASK_RETRIES` | Times a failed task is requeued before giving up (default: 1) |
@@ -562,7 +589,8 @@ Allowed with warnings: `DROP TABLE IF EXISTS`, `DROP POLICY IF EXISTS`, `DROP TR
 7. `parse_worker_summary` — extract structured summary from output
 8. `request_resources_if_needed` — resource/credential request gate; pauses the loop when the worker reports a missing credential/resource (see **Resource & Credential Gate**)
 9. `run_checks_if_needed` — run `./scripts/check.sh`
-9a. `check_independent_code_review` — independent diff review for scope creep, .env modifications, and secret leaks (runs after check.sh passes; see **Independent Code Review Gate**)
+9a. `auto_repair_if_needed` — when check.sh fails after a successful worker run, re-dispatch the worker with the failure output (up to MAX_AUTO_REPAIR_ATTEMPTS times; see **Auto-Repair Loop v2**)
+9b. `check_independent_code_review` — independent diff review for scope creep, .env modifications, and secret leaks (runs after check.sh passes; see **Independent Code Review Gate**)
 9b. `check_high_risk_claude_review` — Claude-powered review for high-risk tasks (runs after static code review passes; see **High-Risk Claude Review Gate**)
 10. `commit_push_merge_if_needed` — git commit/push/merge flow; late guard blocks any remaining protected-branch attempts, and successful auto-merges clean up the local and remote feature branch when `AUTO_CLEANUP_BRANCHES=true`
 11. `apply_sql_if_needed` — scan and apply SQL migrations
