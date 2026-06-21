@@ -171,6 +171,53 @@ The gate is silently skipped when:
 
 ---
 
+## Risk-Based Merge Approval Policy
+
+> **A configurable gate that classifies merge risk and pauses the loop for human approval when risk is too high.**
+
+The gate runs after `auto_repair_if_needed` and before `commit_push_merge_if_needed`. It classifies the risk level of the proposed merge (low / medium / high) based on several factors and then applies a configurable approval policy.
+
+**Risk classification** — score is accumulated from:
+
+| Factor | Score |
+|--------|-------|
+| Explicit `high_risk: true` or `risk_level: "high"` on the task | +3 |
+| Explicit `risk_level: "medium"` | +2 |
+| High-risk keywords in title/type/description (auth, payment, migration, sql, security, …) | +1 per keyword (cap: 3) |
+| More than 10 files changed | +1 |
+| Sensitive file patterns matched (`.sql`, `migration`, `.env`, `auth`, `admin`, `secret`, …) | +1 per pattern (cap: 2) |
+| Destructive SQL in the diff (`DROP TABLE`, `TRUNCATE`, `DELETE FROM`, …) | +2 |
+
+Risk level: score 0 → **low**, score 1–2 → **medium**, score ≥ 3 → **high**.
+
+**Approval policies** (`MERGE_APPROVAL_POLICY`):
+
+| Policy | Behaviour |
+|--------|-----------|
+| `auto` | Never pause; risk is assessed and logged only |
+| `require_approval_on_high` | Pause for human approval when risk is **high** (default) |
+| `require_approval_on_medium_and_high` | Pause for **medium** and **high** risk |
+| `always_require` | Always require human approval before merging |
+
+When a pause is required the gate writes a human-readable summary to `outbox/<task_id>_merge_approval_request.txt` and waits for a fulfillment file at `inbox/<task_id>_merge_approved.txt`. The loop sets `stop_reason = awaiting_merge_approval` and halts cleanly. Create the fulfillment file and re-run to proceed. Its contents are never read — existence is the unblock signal.
+
+The gate is silently skipped when:
+- `RISK_BASED_MERGE_APPROVAL_ENABLED=false`
+- The worker failed or checks did not pass
+- The policy does not require approval at the assessed risk level
+
+**Config:**
+- `RISK_BASED_MERGE_APPROVAL_ENABLED=true` (default) — enable the gate.
+- `MERGE_APPROVAL_POLICY=require_approval_on_high` (default) — policy controlling when human approval is required.
+
+**Logged events:**
+- `merge_approval_skipped` — policy does not require approval for this risk level.
+- `merge_approval_granted` — approval file found; merge proceeds.
+- `merge_approval_pending` — approval required but not yet provided.
+- `merge_approval_required` — gate blocked the loop (stop_reason set; outbox written).
+
+---
+
 ## Independent Code Review Gate
 
 > **An autonomous second look at every diff before it is committed.**
@@ -270,6 +317,8 @@ Copy `.env.example` to `.env` and fill in:
 | `CODEX_TO_CLAUDE_ESCALATION_ENABLED` | When Codex fails with a non-quota error, re-attempt the task via Claude Code before the failure guard runs (default: true) |
 | `AUTO_REPAIR_LOOP_ENABLED` | When check.sh fails after a successful worker run, re-dispatch the same worker with the failure output so it can fix the issues (default: true) |
 | `MAX_AUTO_REPAIR_ATTEMPTS` | Maximum number of inline repair attempts per task before giving up and letting the failure guard handle it (default: 2) |
+| `RISK_BASED_MERGE_APPROVAL_ENABLED` | Classify merge risk and pause the loop for human approval when risk exceeds the policy threshold (default: true) |
+| `MERGE_APPROVAL_POLICY` | Controls when human approval is required before merging: `auto`, `require_approval_on_high` (default), `require_approval_on_medium_and_high`, `always_require` |
 | `RESOURCE_GATE` | Pause the loop when a worker reports it needs a missing credential/resource (default: true) |
 | `FAILURE_GUARD` | Retry failed tasks and stop the loop on repeated failures (default: true) |
 | `MAX_TASK_RETRIES` | Times a failed task is requeued before giving up (default: 1) |
@@ -590,8 +639,9 @@ Allowed with warnings: `DROP TABLE IF EXISTS`, `DROP POLICY IF EXISTS`, `DROP TR
 8. `request_resources_if_needed` — resource/credential request gate; pauses the loop when the worker reports a missing credential/resource (see **Resource & Credential Gate**)
 9. `run_checks_if_needed` — run `./scripts/check.sh`
 9a. `auto_repair_if_needed` — when check.sh fails after a successful worker run, re-dispatch the worker with the failure output (up to MAX_AUTO_REPAIR_ATTEMPTS times; see **Auto-Repair Loop v2**)
-9b. `check_independent_code_review` — independent diff review for scope creep, .env modifications, and secret leaks (runs after check.sh passes; see **Independent Code Review Gate**)
-9b. `check_high_risk_claude_review` — Claude-powered review for high-risk tasks (runs after static code review passes; see **High-Risk Claude Review Gate**)
+9b. `check_merge_approval_if_needed` — classify merge risk and pause for human approval when the policy requires it (see **Risk-Based Merge Approval Policy**)
+9c. `check_independent_code_review` — independent diff review for scope creep, .env modifications, and secret leaks (runs after check.sh passes; see **Independent Code Review Gate**)
+9d. `check_high_risk_claude_review` — Claude-powered review for high-risk tasks (runs after static code review passes; see **High-Risk Claude Review Gate**)
 10. `commit_push_merge_if_needed` — git commit/push/merge flow; late guard blocks any remaining protected-branch attempts, and successful auto-merges clean up the local and remote feature branch when `AUTO_CLEANUP_BRANCHES=true`
 11. `apply_sql_if_needed` — scan and apply SQL migrations
 12. `deploy_if_needed` — trigger a Vercel deploy and poll it to a terminal state (only when a commit landed; see **Vercel Behavior**)

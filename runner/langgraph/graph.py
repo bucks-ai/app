@@ -56,6 +56,12 @@ from tools.independent_code_review import guard_code_review, get_diff_text
 from tools.high_risk_claude_review import guard_high_risk_claude_review
 from tools.codex_to_claude_escalation import should_escalate, build_repair_prompt
 from tools.auto_repair_loop import should_auto_repair, build_auto_repair_prompt
+from tools.risk_based_merge_approval import (
+    guard_merge_approval,
+    format_approval_request,
+    classify_merge_risk,
+    requires_approval,
+)
 from tools.strategic_decision_gate import (
     evaluate_strategic_gate,
     format_review_file,
@@ -903,6 +909,79 @@ def auto_repair_if_needed(state: RunnerState) -> RunnerState:
     return _persist(state, "auto_repair_if_needed")
 
 
+def check_merge_approval_if_needed(state: RunnerState) -> RunnerState:
+    """Risk-Based Merge Approval Policy Gate.
+
+    Classifies the risk level of the proposed merge and, when the configured
+    policy requires human approval for that risk level, writes an approval
+    request to outbox/ and pauses the loop until a fulfillment file lands in
+    inbox/. Runs after auto-repair (checks have passed) and before any
+    commit/push/merge step.
+
+    Skipped when RISK_BASED_MERGE_APPROVAL_ENABLED=false or when the policy
+    does not require approval for the assessed risk level ('auto' policy, or
+    low-risk task with 'require_approval_on_high').
+    """
+    if not cfg.risk_based_merge_approval_enabled:
+        return state
+
+    result = state.worker_result or {}
+    if not result.get("success") or not state.check_passed:
+        return state
+
+    task = state.current_task or {}
+    task_id = state.current_task_id or "unknown"
+    summary = state.worker_summary or {}
+    diff_text = get_diff_text(cfg.repo_path)
+
+    approval_path = _RUNNER_DIR / "outbox" / f"{task_id}_merge_approval_request.txt"
+    provided_path = _RUNNER_DIR / "inbox" / f"{task_id}_merge_approved.txt"
+    already_approved = provided_path.exists()
+
+    decision = guard_merge_approval(
+        task=task,
+        diff_text=diff_text,
+        summary=summary,
+        policy=cfg.merge_approval_policy,
+        approved=already_approved,
+        context="check_merge_approval_if_needed",
+    )
+
+    if decision["skipped"]:
+        state.merge_approval_status = "skipped"
+        state.merge_risk_level = decision["risk_level"]
+    elif decision["passed"]:
+        state.merge_approval_status = "approved"
+        state.merge_risk_level = decision["risk_level"]
+    else:
+        state.merge_approval_status = "pending"
+        state.merge_risk_level = decision["risk_level"]
+
+        if not approval_path.exists():
+            approval_path.write_text(format_approval_request(
+                task_id,
+                task.get("title", ""),
+                decision["classification"],
+                provided_path.name,
+            ))
+
+        state.stop_reason = "awaiting_merge_approval"
+        log_event("merge_approval_required", {
+            "task_id": task_id,
+            "risk_level": decision["risk_level"],
+            "policy": cfg.merge_approval_policy,
+            "reasons": decision["classification"]["reasons"],
+            "review_path": str(approval_path),
+            "approve_by": str(provided_path),
+            "message": (
+                f"Merge requires human approval (risk={decision['risk_level']}). "
+                f"See {approval_path.name}; create {provided_path.name} to unblock."
+            ),
+        }, task_id=task_id)
+
+    return _persist(state, "check_merge_approval_if_needed")
+
+
 def commit_push_merge_if_needed(state: RunnerState) -> RunnerState:
     task = state.current_task or {}
     result = state.worker_result or {}
@@ -1349,6 +1428,8 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
     state.check_output = None
     state.resolved_model = None
     state.context_compression = None
+    state.merge_approval_status = None
+    state.merge_risk_level = None
     return _persist(state, "update_logs_and_state")
 
 
@@ -1546,6 +1627,12 @@ def _route_after_resource_gate(state: RunnerState) -> str:
     return "run_checks_if_needed"
 
 
+def _route_after_merge_approval(state: RunnerState) -> str:
+    if state.merge_approval_status == "pending":
+        return "decide_continue_or_stop"
+    return "commit_push_merge_if_needed"
+
+
 def _route_after_strategic_gate(state: RunnerState) -> str:
     if state.strategic_gate_status == "pending":
         return "decide_continue_or_stop"
@@ -1582,6 +1669,7 @@ def build_graph():
     builder.add_node("request_resources_if_needed", request_resources_if_needed)
     builder.add_node("run_checks_if_needed", run_checks_if_needed)
     builder.add_node("auto_repair_if_needed", auto_repair_if_needed)
+    builder.add_node("check_merge_approval_if_needed", check_merge_approval_if_needed)
     builder.add_node("commit_push_merge_if_needed", commit_push_merge_if_needed)
     builder.add_node("apply_sql_if_needed", apply_sql_if_needed)
     builder.add_node("deploy_if_needed", deploy_if_needed)
@@ -1639,7 +1727,11 @@ def build_graph():
         "run_checks_if_needed": "run_checks_if_needed",
     })
     builder.add_edge("run_checks_if_needed", "auto_repair_if_needed")
-    builder.add_edge("auto_repair_if_needed", "commit_push_merge_if_needed")
+    builder.add_edge("auto_repair_if_needed", "check_merge_approval_if_needed")
+    builder.add_conditional_edges("check_merge_approval_if_needed", _route_after_merge_approval, {
+        "decide_continue_or_stop": "decide_continue_or_stop",
+        "commit_push_merge_if_needed": "commit_push_merge_if_needed",
+    })
     builder.add_edge("commit_push_merge_if_needed", "apply_sql_if_needed")
     builder.add_edge("apply_sql_if_needed", "deploy_if_needed")
     builder.add_edge("deploy_if_needed", "update_github_if_needed")

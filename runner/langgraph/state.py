@@ -101,3 +101,5 @@ class RunnerState(BaseModel):
     auto_repair_attempt: int = 0                   # repair attempts made this task loop
     auto_repair_status: Optional[str] = None       # attempted | succeeded | failed | None
     check_output: Optional[str] = None             # last check.sh stdout (used by auto_repair_if_needed)
+    merge_approval_status: Optional[str] = None   # approved | pending | skipped | None
+    merge_risk_level: Optional[str] = None         # low | medium | high | None

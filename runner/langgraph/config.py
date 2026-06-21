@@ -38,6 +38,7 @@ _DEFAULT_SLACK_EVENTS = frozenset({
     "task_definition_of_done_rejected",
     "task_definition_of_done_warned",
     "auto_repair_failed",
+    "merge_approval_required",
 })
 
 
@@ -242,6 +243,12 @@ class RunnerConfig:
     max_auto_repair_attempts: int = field(
         default_factory=lambda: int(os.getenv("MAX_AUTO_REPAIR_ATTEMPTS", "2"))
     )
+    risk_based_merge_approval_enabled: bool = field(
+        default_factory=lambda: os.getenv("RISK_BASED_MERGE_APPROVAL_ENABLED", "true").lower() == "true"
+    )
+    merge_approval_policy: str = field(
+        default_factory=lambda: os.getenv("MERGE_APPROVAL_POLICY", "require_approval_on_high")
+    )
 
     @property
     def has_openai(self) -> bool:
@@ -340,6 +347,8 @@ class RunnerConfig:
             "codex_to_claude_escalation_enabled": self.codex_to_claude_escalation_enabled,
             "auto_repair_loop_enabled": self.auto_repair_loop_enabled,
             "max_auto_repair_attempts": self.max_auto_repair_attempts,
+            "risk_based_merge_approval_enabled": self.risk_based_merge_approval_enabled,
+            "merge_approval_policy": self.merge_approval_policy,
         }
 
 
