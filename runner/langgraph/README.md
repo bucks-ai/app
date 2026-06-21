@@ -86,6 +86,28 @@ An optional boolean field `acceptance_criteria.human_approval_required` is recog
 
 ---
 
+## Codex-to-Claude Repair Escalation
+
+> **Automatic fallback: when Codex fails, Claude tries to repair the task before the failure guard runs.**
+
+When a Codex worker fails with a non-usage-limit error, the runner re-dispatches the same task to Claude Code as a repair attempt. If Claude succeeds, the successful output replaces the failed Codex result and the pipeline continues normally (checks, commit, deploy). If Claude also fails, state is unchanged and the normal failure-guard path handles it.
+
+**Skip conditions** — escalation does not fire when:
+- The worker was not Codex.
+- Codex succeeded.
+- The failure looks like an OpenAI quota / rate-limit error (`429`, `quota`, `monthly limit`, etc.) — those are tracked by `codex_usage_limit_guard` and should still accumulate so the loop can halt when Codex is persistently out of quota.
+- `CODEX_TO_CLAUDE_ESCALATION_ENABLED=false`.
+
+**Logged events:**
+- `codex_escalation_attempted` — Codex failed and Claude is being tried.
+- `codex_escalation_succeeded` — Claude repaired the task; pipeline proceeds with Claude's output.
+- `codex_escalation_failed` — Claude also failed; original Codex failure is preserved.
+
+**Config:**
+- `CODEX_TO_CLAUDE_ESCALATION_ENABLED=true` (default) — enable the escalation.
+
+---
+
 ## High-Risk Claude Review Gate
 
 > **An AI-powered pre-commit review for tasks that touch sensitive code paths.**
@@ -220,6 +242,7 @@ Copy `.env.example` to `.env` and fill in:
 | `HIGH_RISK_CLAUDE_REVIEW_ENABLED` | Run a Claude-powered review for high-risk tasks after the static code review passes (default: true) |
 | `HIGH_RISK_CLAUDE_REVIEW_STRICT_MODE` | Block the commit when Claude returns REJECTED or NEEDS_REVIEW; false (default) logs a warning but proceeds |
 | `HIGH_RISK_CLAUDE_REVIEW_MODEL` | Anthropic model used for the high-risk review call (default: claude-haiku-4-5-20251001) |
+| `CODEX_TO_CLAUDE_ESCALATION_ENABLED` | When Codex fails with a non-quota error, re-attempt the task via Claude Code before the failure guard runs (default: true) |
 | `RESOURCE_GATE` | Pause the loop when a worker reports it needs a missing credential/resource (default: true) |
 | `FAILURE_GUARD` | Retry failed tasks and stop the loop on repeated failures (default: true) |
 | `MAX_TASK_RETRIES` | Times a failed task is requeued before giving up (default: 1) |
@@ -535,6 +558,7 @@ Allowed with warnings: `DROP TABLE IF EXISTS`, `DROP POLICY IF EXISTS`, `DROP TR
 4. `generate_worker_prompt` — build structured prompt for worker
 5. `dispatch_worker` — send prompt to worker, capture result
 6. `capture_worker_result` — store output in state
+6a. `escalate_to_claude_if_needed` — when Codex fails (non-quota), re-attempt via Claude Code (see **Codex-to-Claude Repair Escalation**)
 7. `parse_worker_summary` — extract structured summary from output
 8. `request_resources_if_needed` — resource/credential request gate; pauses the loop when the worker reports a missing credential/resource (see **Resource & Credential Gate**)
 9. `run_checks_if_needed` — run `./scripts/check.sh`

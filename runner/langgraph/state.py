@@ -97,3 +97,4 @@ class RunnerState(BaseModel):
     definition_of_done_status: Optional[str] = None  # passed | warned | failed | None
     code_review_status: Optional[str] = None  # passed | warned | failed | None
     high_risk_review_status: Optional[str] = None  # passed | warned | skipped | failed | None
+    codex_escalation_status: Optional[str] = None  # attempted | succeeded | failed | skipped | None

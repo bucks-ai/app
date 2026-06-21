@@ -54,6 +54,7 @@ from tools.acceptance_criteria_gate import guard_acceptance_criteria
 from tools.definition_of_done import guard_definition_of_done
 from tools.independent_code_review import guard_code_review, get_diff_text
 from tools.high_risk_claude_review import guard_high_risk_claude_review
+from tools.codex_to_claude_escalation import should_escalate, build_repair_prompt
 from tools.strategic_decision_gate import (
     evaluate_strategic_gate,
     format_review_file,
@@ -495,6 +496,66 @@ def capture_worker_result(state: RunnerState) -> RunnerState:
         state.messages = state.messages + [{"role": "assistant", "content": output}]
     log_event("summary_captured", {"task_id": state.current_task_id, "output_len": len(output)})
     return _persist(state, "capture_worker_result")
+
+
+def escalate_to_claude_if_needed(state: RunnerState) -> RunnerState:
+    """Codex-to-Claude repair escalation.
+
+    When a Codex task fails with a non-usage-limit error, re-attempt it via
+    Claude Code. If Claude succeeds, ``state.worker_result`` and
+    ``state.current_worker`` are updated so the rest of the pipeline (checks,
+    commit, deploy) sees a successful run. If Claude also fails, state is
+    unchanged and the normal failure-guard path handles it.
+
+    Skipped when ``CODEX_TO_CLAUDE_ESCALATION_ENABLED=false`` or when the
+    worker was not Codex / did not fail / failed with a usage-limit error.
+    """
+    if not cfg.codex_to_claude_escalation_enabled:
+        return state
+
+    result = state.worker_result or {}
+    if not should_escalate(result, state.current_worker or ""):
+        return state
+
+    task = state.current_task or {}
+    task_id = state.current_task_id or "unknown"
+    original_prompt = state.messages[-1]["content"] if state.messages else ""
+
+    repair_prompt = build_repair_prompt(original_prompt, result, task)
+
+    log_event("codex_escalation_attempted", {
+        "task_id": task_id,
+        "codex_error": (result.get("error") or "")[:200],
+    }, task_id=task_id)
+    state.codex_escalation_status = "attempted"
+
+    repair_task = dict(task)
+    if state.resolved_model:
+        repair_task["resolved_model"] = state.resolved_model
+
+    worker = ClaudeWorker()
+    _start = time.monotonic()
+    repair_result = worker.run_worker_prompt(repair_prompt, repair_task)
+    elapsed = round(time.monotonic() - _start, 2)
+
+    if repair_result.success:
+        state.worker_result = repair_result.model_dump()
+        state.current_worker = "claude"
+        state.worker_elapsed_seconds = elapsed
+        state.codex_escalation_status = "succeeded"
+        log_event("codex_escalation_succeeded", {
+            "task_id": task_id,
+            "elapsed_seconds": elapsed,
+        }, task_id=task_id)
+    else:
+        state.codex_escalation_status = "failed"
+        log_event("codex_escalation_failed", {
+            "task_id": task_id,
+            "elapsed_seconds": elapsed,
+            "error": (repair_result.error or "")[:200],
+        }, task_id=task_id)
+
+    return _persist(state, "escalate_to_claude_if_needed")
 
 
 def parse_worker_summary_node(state: RunnerState) -> RunnerState:
@@ -1175,6 +1236,7 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
     state.resource_request_status = None
     state.code_review_status = None
     state.high_risk_review_status = None
+    state.codex_escalation_status = None
     state.resolved_model = None
     state.context_compression = None
     return _persist(state, "update_logs_and_state")
@@ -1402,6 +1464,7 @@ def build_graph():
     builder.add_node("generate_worker_prompt", generate_worker_prompt)
     builder.add_node("dispatch_worker", dispatch_worker)
     builder.add_node("capture_worker_result", capture_worker_result)
+    builder.add_node("escalate_to_claude_if_needed", escalate_to_claude_if_needed)
     builder.add_node("parse_worker_summary", parse_worker_summary_node)
     builder.add_node("check_definition_of_done", check_definition_of_done)
     builder.add_node("check_independent_code_review", check_independent_code_review)
@@ -1445,7 +1508,8 @@ def build_graph():
     builder.add_edge("resolve_model", "generate_worker_prompt")
     builder.add_edge("generate_worker_prompt", "dispatch_worker")
     builder.add_edge("dispatch_worker", "capture_worker_result")
-    builder.add_edge("capture_worker_result", "parse_worker_summary")
+    builder.add_edge("capture_worker_result", "escalate_to_claude_if_needed")
+    builder.add_edge("escalate_to_claude_if_needed", "parse_worker_summary")
     builder.add_edge("parse_worker_summary", "check_definition_of_done")
     builder.add_conditional_edges("check_definition_of_done", _route_after_definition_of_done, {
         "decide_continue_or_stop": "decide_continue_or_stop",

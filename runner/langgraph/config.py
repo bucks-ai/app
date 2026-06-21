@@ -232,6 +232,9 @@ class RunnerConfig:
     high_risk_claude_review_model: str = field(
         default_factory=lambda: os.getenv("HIGH_RISK_CLAUDE_REVIEW_MODEL", "claude-haiku-4-5-20251001")
     )
+    codex_to_claude_escalation_enabled: bool = field(
+        default_factory=lambda: os.getenv("CODEX_TO_CLAUDE_ESCALATION_ENABLED", "true").lower() == "true"
+    )
 
     @property
     def has_openai(self) -> bool:
@@ -327,6 +330,7 @@ class RunnerConfig:
             "high_risk_claude_review_enabled": self.high_risk_claude_review_enabled,
             "high_risk_claude_review_strict_mode": self.high_risk_claude_review_strict_mode,
             "high_risk_claude_review_model": self.high_risk_claude_review_model,
+            "codex_to_claude_escalation_enabled": self.codex_to_claude_escalation_enabled,
         }
 
 
