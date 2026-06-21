@@ -261,6 +261,18 @@ class RunnerConfig:
     e2e_headless: bool = field(
         default_factory=lambda: os.getenv("E2E_HEADLESS", "true").lower() == "true"
     )
+    ui_flow_validation_enabled: bool = field(
+        default_factory=lambda: os.getenv("UI_FLOW_VALIDATION_ENABLED", "false").lower() == "true"
+    )
+    ui_flow_config_path: Optional[str] = field(
+        default_factory=lambda: os.getenv("UI_FLOW_CONFIG_PATH")
+    )
+    ui_flow_timeout_ms: int = field(
+        default_factory=lambda: int(os.getenv("UI_FLOW_TIMEOUT_MS", "20000"))
+    )
+    ui_flow_strict: bool = field(
+        default_factory=lambda: os.getenv("UI_FLOW_STRICT", "false").lower() == "true"
+    )
 
     @property
     def has_openai(self) -> bool:
@@ -365,6 +377,10 @@ class RunnerConfig:
             "e2e_base_url": self.e2e_base_url,
             "e2e_timeout_ms": self.e2e_timeout_ms,
             "e2e_headless": self.e2e_headless,
+            "ui_flow_validation_enabled": self.ui_flow_validation_enabled,
+            "ui_flow_config_path": self.ui_flow_config_path,
+            "ui_flow_timeout_ms": self.ui_flow_timeout_ms,
+            "ui_flow_strict": self.ui_flow_strict,
         }
 
 

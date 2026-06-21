@@ -104,3 +104,4 @@ class RunnerState(BaseModel):
     merge_approval_status: Optional[str] = None   # approved | pending | skipped | None
     merge_risk_level: Optional[str] = None         # low | medium | high | None
     e2e_result: Optional[dict] = None              # result dict from playwright_harness.run_e2e_suite
+    ui_flow_result: Optional[dict] = None          # result dict from ui_flow_validator.run_ui_flow_validation

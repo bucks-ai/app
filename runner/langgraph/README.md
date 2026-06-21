@@ -323,6 +323,10 @@ Copy `.env.example` to `.env` and fill in:
 | `E2E_BASE_URL` | Base URL for E2E tests (e.g. `https://my-app.vercel.app`); falls back to the URL from `deploy_result` when unset |
 | `E2E_TIMEOUT_MS` | Page navigation timeout in milliseconds for E2E tests (default: 15000) |
 | `E2E_HEADLESS` | Run the Playwright browser headless (default: true) |
+| `UI_FLOW_VALIDATION_ENABLED` | Run multi-step interactive UI flow validation after each successful deployment (default: false — requires `python -m playwright install` and `UI_FLOW_CONFIG_PATH`) |
+| `UI_FLOW_CONFIG_PATH` | Path to a JSON file containing UI flow definitions (see **UI Flow Validation Runner** for format) |
+| `UI_FLOW_TIMEOUT_MS` | Per-navigation/action timeout in milliseconds for UI flow validation (default: 20000) |
+| `UI_FLOW_STRICT` | Block the loop when UI flow validation fails; false (default) logs a warning but proceeds |
 | `RESOURCE_GATE` | Pause the loop when a worker reports it needs a missing credential/resource (default: true) |
 | `FAILURE_GUARD` | Retry failed tasks and stop the loop on repeated failures (default: true) |
 | `MAX_TASK_RETRIES` | Times a failed task is requeued before giving up (default: 1) |
@@ -633,6 +637,73 @@ Each scenario dict:
 
 ---
 
+## UI Flow Validation Runner
+
+> **Multi-step interactive browser flow validation: after each successful deployment the runner executes configurable user flows (navigate → fill → click → assert) to confirm key journeys work end-to-end.**
+
+The validator runs in the `run_ui_flow_validation_if_needed` node, immediately after `run_e2e_if_needed` and before GitHub issue updates. Like the E2E harness it is **advisory** — flow failures are logged but never block the loop (unless `UI_FLOW_STRICT=true`).
+
+**Skip conditions** — the validator does not run when:
+- `UI_FLOW_VALIDATION_ENABLED=false` (the default — opt-in)
+- `state.deploy_ready` is falsy (the deployment wasn't confirmed ready)
+- Neither `E2E_BASE_URL` nor a URL from `deploy_result` is available
+- `playwright` is not installed (`python -m playwright install` required)
+- No flows are defined (`UI_FLOW_CONFIG_PATH` not set or the file contains an empty list)
+
+**Flow definitions** — create a JSON file (e.g. `ui_flows.json` at the repo root) and point `UI_FLOW_CONFIG_PATH` at it:
+
+```json
+[
+  {
+    "name": "login flow",
+    "steps": [
+      {"action": "navigate",   "value": "/login"},
+      {"action": "fill",       "selector": "#email",    "value": "user@example.com"},
+      {"action": "fill",       "selector": "#password", "value": "secret"},
+      {"action": "click",      "selector": "button[type=submit]"},
+      {"action": "assert_url", "value": "/dashboard"}
+    ]
+  },
+  {
+    "name": "homepage hero text",
+    "steps": [
+      {"action": "navigate",     "value": "/"},
+      {"action": "assert_text",  "value": "Welcome to bucks.ai"}
+    ]
+  }
+]
+```
+
+**Supported step actions:**
+
+| Action | Required fields | Description |
+|--------|----------------|-------------|
+| `navigate` | `value` (path or URL) | Go to path (relative to base URL) or absolute URL |
+| `click` | `selector` | Click element matching CSS selector |
+| `fill` | `selector`, `value` | Type value into input matching CSS selector |
+| `select` | `selector`, `value` | Select option in `<select>` matching CSS selector |
+| `wait_for_selector` | `selector` | Wait for element to be visible |
+| `assert_text` | `value` | Assert page body HTML contains text |
+| `assert_url` | `value` | Assert current URL contains value |
+| `assert_element` | `selector` | Assert element matching selector exists |
+
+**Logged events:**
+- `ui_flow_passed` — all flows passed.
+- `ui_flow_failed` — one or more flows failed (loop continues unless strict mode).
+- `ui_flow_skipped` — validator skipped (disabled / no URL / playwright missing / no flows).
+
+**Config:**
+- `UI_FLOW_VALIDATION_ENABLED=false` (default) — opt-in to enable the validator.
+- `UI_FLOW_CONFIG_PATH` — path to the JSON file containing flow definitions.
+- `UI_FLOW_TIMEOUT_MS=20000` (default) — per-navigation/action timeout in milliseconds.
+- `UI_FLOW_STRICT=false` (default) — set to `true` to block the loop when flows fail.
+- `E2E_BASE_URL` — shared with the E2E harness; overrides the URL from `deploy_result`.
+- `E2E_HEADLESS=true` (default) — shared with the E2E harness; run Chromium headless.
+
+**Pure helpers** (`tools/ui_flow_validator.py`) — `build_default_flows`, `evaluate_flow_results`, `format_flow_report`, and `load_flows_from_file` are side-effect free and fully unit-tested in `tests/test_ui_flow_validator.py`. Browser execution (`run_flow`, `run_ui_flow_validation`) requires a real Playwright install.
+
+---
+
 ## Slack Notifications
 
 The runner can push **notable** lifecycle events to a Slack channel via an
@@ -692,6 +763,7 @@ Allowed with warnings: `DROP TABLE IF EXISTS`, `DROP POLICY IF EXISTS`, `DROP TR
 11. `apply_sql_if_needed` — scan and apply SQL migrations
 12. `deploy_if_needed` — trigger a Vercel deploy and poll it to a terminal state (only when a commit landed; see **Vercel Behavior**)
 12a. `run_e2e_if_needed` — run Playwright browser E2E smoke tests against the deployed URL (only when `E2E_ENABLED=true` and the deployment is ready; see **Playwright Browser E2E Harness**)
+12b. `run_ui_flow_validation_if_needed` — execute multi-step interactive browser flows against the deployed URL (only when `UI_FLOW_VALIDATION_ENABLED=true` and `UI_FLOW_CONFIG_PATH` is set; see **UI Flow Validation Runner**)
 13. `update_github_if_needed` — comment/close GitHub issues
 14. `update_logs_and_state` — mark task complete/failed, log
 15. `ask_chatgpt_next_task` — send summary back to ChatGPT
