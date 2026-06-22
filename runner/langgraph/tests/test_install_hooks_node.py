@@ -119,10 +119,10 @@ def test_install_hooks_node_present_in_graph():
 
 
 def test_install_hooks_node_is_entry_point():
-    # Verify __start__ → install_hooks → load_next_task via the drawable graph edges
+    # Verify __start__ → install_hooks → check_launch_readiness_if_needed via the drawable graph edges
     edges = [(e.source, e.target) for e in graph.graph.get_graph().edges]
     assert ("__start__", "install_hooks") in edges
-    assert ("install_hooks", "load_next_task") in edges
+    assert ("install_hooks", "check_launch_readiness_if_needed") in edges
 
 
 if __name__ == "__main__":

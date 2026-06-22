@@ -77,6 +77,7 @@ from tools.strategic_decision_gate import (
     STRATEGIC_GATE_STOP,
 )
 from tools.model_routing_policy import evaluate_model_routing_policy
+from tools.launch_readiness_scorecard import guard_launch_readiness
 from tools.mission_compiler import (
     parse_mission_file,
     validate_mission,
@@ -181,6 +182,48 @@ def install_hooks(state: RunnerState) -> RunnerState:
         "merged": result["merged"],
     })
     return _persist(state, "install_hooks")
+
+
+def check_launch_readiness_if_needed(state: RunnerState) -> RunnerState:
+    """Launch Readiness Scorecard.
+
+    Scores the runner system across four dimensions (config completeness,
+    credentials available, safety gates active, operational health) before any
+    task is dispatched.  Runs once per loop start, immediately after hook
+    installation.
+
+    - Non-strict mode (default): logs a warning when the score is below
+      threshold but the loop continues.
+    - Strict mode (LAUNCH_READINESS_SCORECARD_STRICT_MODE=true): sets
+      stop_reason so decide_continue_or_stop halts the loop cleanly.
+
+    The scorecard report is written to outbox/launch_readiness_scorecard.txt
+    for human inspection.
+    """
+    if not cfg.launch_readiness_scorecard_enabled:
+        return state
+
+    config_snapshot = cfg.report()
+    state_snapshot = _state_dict(state)
+
+    result = guard_launch_readiness(
+        config_snapshot=config_snapshot,
+        state_snapshot=state_snapshot,
+        pass_threshold=cfg.launch_readiness_scorecard_pass_threshold,
+        strict_mode=cfg.launch_readiness_scorecard_strict_mode,
+        context="check_launch_readiness_if_needed",
+    )
+
+    state.launch_readiness_result = result
+
+    scorecard_path = _RUNNER_DIR / "outbox" / "launch_readiness_scorecard.txt"
+    scorecard_path.parent.mkdir(parents=True, exist_ok=True)
+    scorecard_path.write_text(result["report"])
+
+    if not result["passed"] and cfg.launch_readiness_scorecard_strict_mode:
+        state.stop_reason = "launch_readiness_failed"
+
+    return _persist(state, "check_launch_readiness_if_needed")
 
 
 def load_next_task(state: RunnerState) -> RunnerState:
@@ -1871,6 +1914,7 @@ def build_graph():
     builder = StateGraph(RunnerState)
 
     builder.add_node("install_hooks", install_hooks)
+    builder.add_node("check_launch_readiness_if_needed", check_launch_readiness_if_needed)
     builder.add_node("load_next_task", load_next_task)
     builder.add_node("compile_mission_if_needed", compile_mission_if_needed)
     builder.add_node("seed_mission_queue_if_needed", seed_mission_queue_if_needed)
@@ -1903,7 +1947,15 @@ def build_graph():
     builder.add_node("decide_continue_or_stop", decide_continue_or_stop)
 
     builder.set_entry_point("install_hooks")
-    builder.add_edge("install_hooks", "load_next_task")
+    builder.add_edge("install_hooks", "check_launch_readiness_if_needed")
+    builder.add_conditional_edges(
+        "check_launch_readiness_if_needed",
+        lambda s: "decide_continue_or_stop" if s.stop_reason == "launch_readiness_failed" else "load_next_task",
+        {
+            "load_next_task": "load_next_task",
+            "decide_continue_or_stop": "decide_continue_or_stop",
+        },
+    )
 
     builder.add_conditional_edges("load_next_task", _route_after_load, {
         "compile_mission_if_needed": "compile_mission_if_needed",

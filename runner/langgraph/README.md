@@ -334,6 +334,9 @@ Copy `.env.example` to `.env` and fill in:
 | `BUSINESS_OUTPUT_RUBRICS_ENABLED` | Score completed worker runs against business-quality rubrics (functional correctness, value alignment, completeness, risk awareness) (default: true) |
 | `BUSINESS_OUTPUT_RUBRICS_STRICT_MODE` | Block the loop when rubric score is below the pass threshold; false (default) logs a warning but proceeds |
 | `BUSINESS_OUTPUT_RUBRICS_PASS_THRESHOLD` | Minimum weighted rubric score (0.0–1.0) required to pass (default: 0.6) |
+| `LAUNCH_READINESS_SCORECARD_ENABLED` | Score the runner system's readiness to operate at each loop start (config completeness, credentials, safety gates, operational health) (default: true) |
+| `LAUNCH_READINESS_SCORECARD_STRICT_MODE` | Halt the loop when the launch readiness score is below the pass threshold; false (default) logs a warning but proceeds |
+| `LAUNCH_READINESS_SCORECARD_PASS_THRESHOLD` | Minimum weighted launch readiness score (0.0–1.0) required to proceed (default: 0.7) |
 | `RESOURCE_GATE` | Pause the loop when a worker reports it needs a missing credential/resource (default: true) |
 | `FAILURE_GUARD` | Retry failed tasks and stop the loop on repeated failures (default: true) |
 | `MAX_TASK_RETRIES` | Times a failed task is requeued before giving up (default: 1) |
@@ -752,6 +755,7 @@ Allowed with warnings: `DROP TABLE IF EXISTS`, `DROP POLICY IF EXISTS`, `DROP TR
 
 ## LangGraph Nodes
 
+0b. `check_launch_readiness_if_needed` — scores the runner system across four dimensions (config completeness, credentials available, safety gates active, operational health) immediately after hook installation; writes a human-readable report to `outbox/launch_readiness_scorecard.txt`; in strict mode a failing score halts the loop before any task is dispatched
 1. `load_next_task` — fetch next queued task from `.runtime/tasks.local.json`; rewrites protected branch names to `feature/<task-id>` and persists the rewritten branch back to the task queue before dispatch
 2. `ask_chatgpt_for_task_if_needed` — ask ChatGPT for next task if queue empty
 3. `choose_worker` — route to Claude or Codex based on task type

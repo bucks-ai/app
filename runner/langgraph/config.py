@@ -307,6 +307,15 @@ class RunnerConfig:
     business_output_rubrics_pass_threshold: float = field(
         default_factory=lambda: float(os.getenv("BUSINESS_OUTPUT_RUBRICS_PASS_THRESHOLD", "0.6"))
     )
+    launch_readiness_scorecard_enabled: bool = field(
+        default_factory=lambda: os.getenv("LAUNCH_READINESS_SCORECARD_ENABLED", "true").lower() == "true"
+    )
+    launch_readiness_scorecard_strict_mode: bool = field(
+        default_factory=lambda: os.getenv("LAUNCH_READINESS_SCORECARD_STRICT_MODE", "false").lower() == "true"
+    )
+    launch_readiness_scorecard_pass_threshold: float = field(
+        default_factory=lambda: float(os.getenv("LAUNCH_READINESS_SCORECARD_PASS_THRESHOLD", "0.7"))
+    )
 
     @property
     def has_openai(self) -> bool:
@@ -426,6 +435,9 @@ class RunnerConfig:
             "business_output_rubrics_enabled": self.business_output_rubrics_enabled,
             "business_output_rubrics_strict_mode": self.business_output_rubrics_strict_mode,
             "business_output_rubrics_pass_threshold": self.business_output_rubrics_pass_threshold,
+            "launch_readiness_scorecard_enabled": self.launch_readiness_scorecard_enabled,
+            "launch_readiness_scorecard_strict_mode": self.launch_readiness_scorecard_strict_mode,
+            "launch_readiness_scorecard_pass_threshold": self.launch_readiness_scorecard_pass_threshold,
         }
 
 
