@@ -11,10 +11,6 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-# Silence log_event during tests.
-import tools.log_tools as _lt
-_lt.log_event = lambda *a, **k: None
-
 from workers.chatgpt_worker import ChatGPTWorker, _NEXT_TASK_PROMPT
 from state import WorkerResult
 

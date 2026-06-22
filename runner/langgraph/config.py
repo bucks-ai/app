@@ -316,6 +316,9 @@ class RunnerConfig:
     launch_readiness_scorecard_pass_threshold: float = field(
         default_factory=lambda: float(os.getenv("LAUNCH_READINESS_SCORECARD_PASS_THRESHOLD", "0.7"))
     )
+    fast_engineering_mode_enabled: bool = field(
+        default_factory=lambda: os.getenv("FAST_ENGINEERING_MODE", "false").lower() == "true"
+    )
 
     @property
     def has_openai(self) -> bool:
@@ -438,6 +441,7 @@ class RunnerConfig:
             "launch_readiness_scorecard_enabled": self.launch_readiness_scorecard_enabled,
             "launch_readiness_scorecard_strict_mode": self.launch_readiness_scorecard_strict_mode,
             "launch_readiness_scorecard_pass_threshold": self.launch_readiness_scorecard_pass_threshold,
+            "fast_engineering_mode_enabled": self.fast_engineering_mode_enabled,
         }
 
 

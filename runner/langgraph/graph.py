@@ -532,6 +532,20 @@ def generate_worker_prompt(state: RunnerState) -> RunnerState:
         type=task.get("type", "general"),
         branch=task.get("branch", f"feature/{task.get('id', 'task')}"),
     )
+
+    if cfg.fast_engineering_mode_enabled:
+        from tools.fast_engineering_mode import build_engineering_context, format_engineering_injection
+        ctx = build_engineering_context(str(_RUNNER_DIR))
+        injection = format_engineering_injection(ctx)
+        if injection:
+            prompt = injection + prompt
+        log_event("fast_engineering_mode_injected", {
+            "task_id": state.current_task_id,
+            "nodes_count": len(ctx["nodes"]),
+            "tools_count": len(ctx["tools"]),
+            "tests_count": len(ctx["tests"]),
+        }, task_id=state.current_task_id)
+
     state.messages = state.messages + [{"role": "user", "content": prompt}]
     log_event("prompt_generated", {"task_id": state.current_task_id, "prompt_len": len(prompt)})
     return _persist(state, "generate_worker_prompt")
