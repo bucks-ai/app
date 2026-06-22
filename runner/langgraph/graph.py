@@ -180,8 +180,11 @@ def install_hooks(state: RunnerState) -> RunnerState:
 
     Runs once before any task is dispatched, ensuring all Claude Code
     PreToolUse guards are active for every worker in this session.
-    Skipped when the safety pack or auto-install is disabled.
+    Skipped when the safety pack or auto-install is disabled, or in dry-run mode.
     """
+    if cfg.runner_dry_run:
+        log_event("dry_run_skip", {"node": "install_hooks"})
+        return _persist(state, "install_hooks")
     if not cfg.claude_hooks_safety_pack_enabled or not cfg.claude_hooks_safety_pack_auto_install:
         return state
 
@@ -448,8 +451,8 @@ def ask_chatgpt_for_task_if_needed(state: RunnerState) -> RunnerState:
 
 def choose_worker(state: RunnerState) -> RunnerState:
     task = state.current_task or {}
-    preferred = task.get("preferred_worker", "").lower()
-    task_type = task.get("type", "").lower()
+    preferred = (task.get("preferred_worker") or "").lower()
+    task_type = (task.get("type") or "").lower()
 
     if preferred in ("claude", "codex"):
         state.current_worker = preferred
@@ -551,6 +554,23 @@ def generate_worker_prompt(state: RunnerState) -> RunnerState:
     return _persist(state, "generate_worker_prompt")
 
 
+_DRY_RUN_WORKER_OUTPUT = """\
+Synthetic dry-run task completed without dispatching a real worker.
+
+- Files Created: none
+- Files Modified: none
+- Check Result: pass
+- Commit Result: skipped
+- Push Result: skipped
+- SQL Required: no
+- SQL File Path: N/A
+- Credentials Needed: none
+- Resources Needed: none
+- Known Limitations: dry-run mode — no worker dispatched
+- Next Task: none
+"""
+
+
 def dispatch_worker(state: RunnerState) -> RunnerState:
     task = state.current_task or {}
     if state.resolved_model:
@@ -558,6 +578,23 @@ def dispatch_worker(state: RunnerState) -> RunnerState:
         task["resolved_model"] = state.resolved_model
     prompt = (state.messages[-1]["content"] if state.messages else "")
     mark_task_running(task.get("id", ""))
+
+    if cfg.runner_dry_run:
+        state.worker_elapsed_seconds = 0.0
+        state.worker_result = {
+            "worker": state.current_worker or "claude",
+            "mode": "dry_run",
+            "success": True,
+            "output": _DRY_RUN_WORKER_OUTPUT,
+            "error": None,
+            "prompt_written": False,
+            "prompt_path": None,
+            "response_path": None,
+            "api_cost": 0.0,
+            "tokens_used": 0,
+        }
+        log_event("dry_run_skip", {"node": "dispatch_worker", "task_id": state.current_task_id})
+        return _persist(state, "dispatch_worker")
 
     if state.current_worker == "codex":
         worker = CodexWorker()
@@ -874,6 +911,11 @@ def run_checks_if_needed(state: RunnerState) -> RunnerState:
     result = state.worker_result or {}
     if not result.get("success"):
         return state
+    if cfg.runner_dry_run:
+        state.check_passed = True
+        state.check_output = "[dry-run: check skipped]"
+        log_event("dry_run_skip", {"node": "run_checks_if_needed", "task_id": state.current_task_id})
+        return _persist(state, "run_checks_if_needed")
     check = run_check(cfg.repo_path)
     state.check_passed = check["success"]
     state.check_output = check.get("output") or ""
@@ -1063,6 +1105,10 @@ def commit_push_merge_if_needed(state: RunnerState) -> RunnerState:
     result = state.worker_result or {}
     if not result.get("success") or not state.check_passed:
         return state
+
+    if cfg.runner_dry_run:
+        log_event("dry_run_skip", {"node": "commit_push_merge_if_needed", "task_id": state.current_task_id})
+        return _persist(state, "commit_push_merge_if_needed")
 
     branch = task.get("branch", f"feature/{task.get('id', 'task')}")
 

@@ -202,6 +202,122 @@ def cmd_reset_state(args):
             print("No log file to clear.")
 
 
+def cmd_soak(args):
+    from tools.soak_harness import run_soak, format_soak_report, SoakConfig
+
+    n = getattr(args, "tasks", 100) or 100
+    seed = getattr(args, "seed", None)
+    failure_rate = getattr(args, "failure_rate", 0.15)
+    timeout_rate = getattr(args, "timeout_rate", 0.05)
+
+    cfg = SoakConfig(
+        worker_failure_rate=failure_rate,
+        timeout_rate=timeout_rate,
+        seed=seed,
+    )
+    print(f"Running soak harness: {n} tasks, failure_rate={failure_rate}, seed={seed}")
+    result = run_soak(n, cfg)
+    print(format_soak_report(result))
+    if not result["completed"]:
+        sys.exit(1)
+
+
+def cmd_dry_run(args):
+    """Run the LangGraph graph in dry-run mode using synthetic soak tasks.
+
+    Workers, git operations, and deploys are all skipped.  The graph's full
+    node traversal (guards, gates, reviews) runs normally so the topology can
+    be validated without any real side effects.
+    """
+    import os
+    import json
+    import shutil
+    import tempfile
+
+    n = getattr(args, "tasks", 3) or 3
+    seed = getattr(args, "seed", 42)
+
+    # Must be set before importing graph/config (config singleton reads env at init time).
+    os.environ["RUNNER_DRY_RUN"] = "true"
+    os.environ["MAX_LOOP_TASKS"] = str(n)
+    # Disable optional integrations so the dry run needs no credentials.
+    os.environ.setdefault("LAUNCH_READINESS_SCORECARD_ENABLED", "false")
+    os.environ.setdefault("STRATEGIC_GATE", "false")
+    os.environ.setdefault("CLAUDE_HOOKS_SAFETY_PACK_ENABLED", "false")
+    os.environ.setdefault("INDEPENDENT_CODE_REVIEW_ENABLED", "false")
+    os.environ.setdefault("HIGH_RISK_CLAUDE_REVIEW_ENABLED", "false")
+    os.environ.setdefault("CODEX_TO_CLAUDE_ESCALATION_ENABLED", "false")
+    os.environ.setdefault("AUTO_REPAIR_LOOP_ENABLED", "false")
+
+    from tools.soak_harness import generate_soak_tasks
+    from tools.task_tools import _tasks_path, _ensure_tasks_file
+
+    # Build synthetic task dicts in the format task_tools expects.
+    soak_tasks = generate_soak_tasks(n, seed=seed)
+    task_queue = [
+        {
+            "id": t["id"],
+            "title": t["title"],
+            "type": t["type"],
+            "branch": t["branch"],
+            "status": "queued",
+            "retry_count": 0,
+            "preferred_worker": t.get("preferred_worker"),
+            "dry_run": True,
+        }
+        for t in soak_tasks
+    ]
+
+    _ensure_tasks_file()
+    # Back up existing task queue and replace with synthetic tasks.
+    original_content = _tasks_path.read_text() if _tasks_path.exists() else "[]"
+    _tasks_path.write_text(json.dumps(task_queue, indent=2))
+
+    print(f"Dry-run: {n} synthetic tasks, seed={seed}")
+    print("(Workers, git, SQL, and deploy are all skipped)")
+
+    try:
+        from graph import graph
+        from state import RunnerState
+        from tools.log_tools import read_state, update_state
+
+        saved = read_state()
+        init = RunnerState(**{k: v for k, v in saved.items() if k in RunnerState.model_fields})
+        init.status = "running"
+        init.started_at = datetime.utcnow().isoformat()
+
+        def _get(s, key, default=None):
+            return s.get(key, default) if isinstance(s, dict) else getattr(s, key, default)
+
+        state = init
+        loops_run = 0
+        stopped = False
+        while _get(state, "status") != "stopped" and loops_run < n:
+            state = graph.invoke(state)
+            loops_run += 1
+            lc = _get(state, "loop_count", 0)
+            step = _get(state, "last_completed_step")
+            st = _get(state, "status")
+            task_id = _get(state, "current_task_id") or "-"
+            print(f"  Loop {lc} [{task_id}]: {step} — {st}")
+            stop_reason = _get(state, "stop_reason")
+            if stop_reason:
+                _expected = {"no_more_tasks", "no_queued_tasks", "max_loop_tasks"}
+                if stop_reason in _expected:
+                    print(f"Dry-run complete: {lc} task cycle(s) processed ({stop_reason}).")
+                else:
+                    print(f"Dry-run stopped unexpectedly: {stop_reason}")
+                stopped = True
+                break
+
+        if not stopped:
+            print(f"Dry-run complete: {loops_run} invocation(s) processed without errors.")
+    finally:
+        # Always restore the original task queue.
+        _tasks_path.write_text(original_content)
+        print("Task queue restored.")
+
+
 def cmd_scan_sql(args):
     from tools.sql_guard import scan_sql_file
     path = args.path
@@ -242,6 +358,18 @@ def main():
     sub.add_parser("run-once", help="Run one LangGraph cycle")
     sub.add_parser("run-loop", help="Run continuous autonomous loop")
 
+    p_soak = sub.add_parser("soak", help="Run the 100-task in-memory soak harness")
+    p_soak.add_argument("--tasks", type=int, default=100, help="Number of tasks to simulate (default 100)")
+    p_soak.add_argument("--seed", type=int, default=None, help="Random seed for reproducibility")
+    p_soak.add_argument("--failure-rate", type=float, default=0.15, dest="failure_rate",
+                        help="Worker failure injection rate 0.0–1.0 (default 0.15)")
+    p_soak.add_argument("--timeout-rate", type=float, default=0.05, dest="timeout_rate",
+                        help="Worker timeout injection rate 0.0–1.0 (default 0.05)")
+
+    p_dry = sub.add_parser("dry-run", help="Run the graph in dry-run mode with synthetic tasks (no workers, git, or deploy)")
+    p_dry.add_argument("--tasks", type=int, default=3, help="Number of synthetic tasks to run (default 3)")
+    p_dry.add_argument("--seed", type=int, default=42, help="Random seed for task generation (default 42)")
+
     p_sync = sub.add_parser("sync-github-issues", help="Import open GitHub issues into the local task queue")
     p_sync.add_argument("repo", nargs="?", help="GitHub repo in owner/name form")
 
@@ -270,6 +398,8 @@ def main():
         "scan-sql": cmd_scan_sql,
         "logs": cmd_logs,
         "reset-state": cmd_reset_state,
+        "soak": cmd_soak,
+        "dry-run": cmd_dry_run,
     }
 
     fn = dispatch.get(args.command)
