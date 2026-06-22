@@ -286,6 +286,18 @@ class RunnerConfig:
     product_eval_strict: bool = field(
         default_factory=lambda: os.getenv("PRODUCT_EVAL_STRICT", "false").lower() == "true"
     )
+    http_retry_enabled: bool = field(
+        default_factory=lambda: os.getenv("HTTP_RETRY_ENABLED", "true").lower() == "true"
+    )
+    http_retry_attempts: int = field(
+        default_factory=lambda: int(os.getenv("HTTP_RETRY_ATTEMPTS", "3"))
+    )
+    http_retry_initial_wait_s: float = field(
+        default_factory=lambda: float(os.getenv("HTTP_RETRY_INITIAL_WAIT_S", "1.0"))
+    )
+    http_retry_max_wait_s: float = field(
+        default_factory=lambda: float(os.getenv("HTTP_RETRY_MAX_WAIT_S", "10.0"))
+    )
 
     @property
     def has_openai(self) -> bool:
@@ -398,6 +410,10 @@ class RunnerConfig:
             "product_eval_config_path": self.product_eval_config_path,
             "product_eval_timeout_ms": self.product_eval_timeout_ms,
             "product_eval_strict": self.product_eval_strict,
+            "http_retry_enabled": self.http_retry_enabled,
+            "http_retry_attempts": self.http_retry_attempts,
+            "http_retry_initial_wait_s": self.http_retry_initial_wait_s,
+            "http_retry_max_wait_s": self.http_retry_max_wait_s,
         }
 
 

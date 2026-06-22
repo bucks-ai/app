@@ -14,6 +14,7 @@ notifications stay in sync with the event stream automatically.
 import requests
 
 from config import get_config
+from tools.http_retry import retry_request
 from tools.log_tools import log_event
 
 _TIMEOUT = 10
@@ -100,7 +101,7 @@ def post_message(text: str, blocks: list = None) -> dict:
     if blocks:
         payload["blocks"] = blocks
     try:
-        r = requests.post(cfg.slack_webhook_url, json=payload, timeout=_TIMEOUT)
+        r = retry_request(requests.post, cfg.slack_webhook_url, json=payload, timeout=_TIMEOUT)
         r.raise_for_status()
         return {"available": True, "ok": True, "status_code": r.status_code}
     except Exception as e:

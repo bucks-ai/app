@@ -10,6 +10,7 @@ import time
 import requests
 
 from config import get_config
+from tools.http_retry import retry_request
 from tools.log_tools import log_event
 
 _BASE = "https://api.vercel.com"
@@ -52,7 +53,7 @@ def get_deployment_status(project_id: str = None) -> dict:
     try:
         url = f"{_BASE}/v6/deployments"
         params = {"projectId": project_id} if project_id else {}
-        r = requests.get(url, headers=_headers(), params=params, timeout=15)
+        r = retry_request(requests.get, url, headers=_headers(), params=params, timeout=15)
         r.raise_for_status()
         deployments = r.json().get("deployments", [])
         latest = deployments[0] if deployments else None
@@ -72,7 +73,7 @@ def get_deployment_by_id(deployment_id: str) -> dict:
         return {"available": False, "error": "no deployment_id"}
     try:
         url = f"{_BASE}/v13/deployments/{deployment_id}"
-        r = requests.get(url, headers=_headers(), timeout=15)
+        r = retry_request(requests.get, url, headers=_headers(), timeout=15)
         r.raise_for_status()
         return {"available": True, "deployment": r.json()}
     except Exception as e:

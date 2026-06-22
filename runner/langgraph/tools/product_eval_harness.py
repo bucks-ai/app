@@ -39,6 +39,8 @@ import urllib.error
 from pathlib import Path
 from typing import Optional
 
+from tools.http_retry import retry_request
+
 
 def build_default_evals(base_url: str) -> list[dict]:  # noqa: ARG001
     """Return an empty default eval list.
@@ -154,6 +156,31 @@ def _run_check(check: dict, status: int, body: str, headers: dict) -> Optional[s
     return None
 
 
+def _fetch_url(url: str, timeout_s: float) -> tuple:
+    """Fetch ``url`` and return ``(status, body, headers)``.
+
+    Non-transient HTTP errors (4xx other than 429) are returned as a normal
+    result so the eval can inspect the status code. Transient errors (5xx, 429,
+    network failures) are re-raised so ``retry_request`` can retry them.
+    """
+    req = urllib.request.Request(url)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout_s) as resp:
+            return (
+                resp.status,
+                resp.read().decode("utf-8", errors="replace"),
+                {k.lower(): v for k, v in resp.headers.items()},
+            )
+    except urllib.error.HTTPError as exc:
+        if exc.code >= 500 or exc.code == 429:
+            raise  # transient — let retry_request handle
+        return (
+            exc.code,
+            exc.read().decode("utf-8", errors="replace") if exc.fp else "",
+            {k.lower(): v for k, v in (exc.headers or {}).items()},
+        )
+
+
 def run_eval(base_url: str, eval_def: dict, timeout_s: float = 15.0) -> dict:
     """Execute a single product eval (one HTTP request + N checks).
 
@@ -172,15 +199,7 @@ def run_eval(base_url: str, eval_def: dict, timeout_s: float = 15.0) -> dict:
     url = path if path.startswith("http") else base_url.rstrip("/") + path
 
     try:
-        req = urllib.request.Request(url)
-        with urllib.request.urlopen(req, timeout=timeout_s) as resp:
-            status = resp.status
-            body = resp.read().decode("utf-8", errors="replace")
-            headers = {k.lower(): v for k, v in resp.headers.items()}
-    except urllib.error.HTTPError as exc:
-        status = exc.code
-        body = exc.read().decode("utf-8", errors="replace") if exc.fp else ""
-        headers = {k.lower(): v for k, v in (exc.headers or {}).items()}
+        status, body, headers = retry_request(_fetch_url, url, timeout_s)
     except Exception as exc:
         return {
             "name": name,

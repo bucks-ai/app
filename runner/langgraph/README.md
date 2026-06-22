@@ -327,6 +327,10 @@ Copy `.env.example` to `.env` and fill in:
 | `UI_FLOW_CONFIG_PATH` | Path to a JSON file containing UI flow definitions (see **UI Flow Validation Runner** for format) |
 | `UI_FLOW_TIMEOUT_MS` | Per-navigation/action timeout in milliseconds for UI flow validation (default: 20000) |
 | `UI_FLOW_STRICT` | Block the loop when UI flow validation fails; false (default) logs a warning but proceeds |
+| `HTTP_RETRY_ENABLED` | Retry transient HTTP failures (connection errors, timeouts, 5xx, 429) with exponential backoff (default: true) |
+| `HTTP_RETRY_ATTEMPTS` | Maximum number of attempts per HTTP call including the first try (default: 3) |
+| `HTTP_RETRY_INITIAL_WAIT_S` | Initial backoff wait in seconds; doubles with each retry (default: 1.0) |
+| `HTTP_RETRY_MAX_WAIT_S` | Maximum backoff wait in seconds (default: 10.0) |
 | `RESOURCE_GATE` | Pause the loop when a worker reports it needs a missing credential/resource (default: true) |
 | `FAILURE_GUARD` | Retry failed tasks and stop the loop on repeated failures (default: true) |
 | `MAX_TASK_RETRIES` | Times a failed task is requeued before giving up (default: 1) |
