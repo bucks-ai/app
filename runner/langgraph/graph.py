@@ -61,6 +61,10 @@ from tools.ui_flow_validator import (
     run_ui_flow_validation,
     load_flows_from_file,
 )
+from tools.product_eval_harness import (
+    run_product_eval_suite,
+    load_evals_from_file,
+)
 from tools.risk_based_merge_approval import (
     guard_merge_approval,
     format_approval_request,
@@ -1327,6 +1331,75 @@ def run_ui_flow_validation_if_needed(state: RunnerState) -> RunnerState:
     return _persist(state, "run_ui_flow_validation_if_needed")
 
 
+def run_product_eval_if_needed(state: RunnerState) -> RunnerState:
+    """Product Evaluation Harness.
+
+    Runs HTTP-based product assertions against the deployed application URL
+    after a successful Vercel deployment.  Skipped when:
+    - ``PRODUCT_EVAL_ENABLED=false`` (default — opt-in)
+    - The deployment was not ready (``state.deploy_ready`` is falsy)
+    - Neither ``E2E_BASE_URL`` nor a URL from ``deploy_result`` is available
+    - No evals are defined (``PRODUCT_EVAL_CONFIG_PATH`` not set or file empty)
+
+    Results are stored on ``state.product_eval_result`` and logged as
+    ``product_eval_passed`` or ``product_eval_failed``.  Failure never blocks
+    the loop unless ``PRODUCT_EVAL_STRICT=true``.
+    """
+    if not cfg.product_eval_enabled:
+        return state
+
+    if not state.deploy_ready:
+        log_event("product_eval_skipped", {
+            "task_id": state.current_task_id,
+            "reason": "deploy not ready",
+        }, task_id=state.current_task_id)
+        return state
+
+    base_url = cfg.e2e_base_url
+    if not base_url:
+        deploy = state.deploy_result or {}
+        base_url = deploy.get("url") or deploy.get("deployment_url")
+    if not base_url:
+        log_event("product_eval_skipped", {
+            "task_id": state.current_task_id,
+            "reason": "no E2E_BASE_URL and no URL in deploy_result",
+        }, task_id=state.current_task_id)
+        return state
+
+    evals: list[dict] = []
+    if cfg.product_eval_config_path:
+        evals = load_evals_from_file(cfg.product_eval_config_path)
+
+    if not evals:
+        log_event("product_eval_skipped", {
+            "task_id": state.current_task_id,
+            "reason": "no evals defined (set PRODUCT_EVAL_CONFIG_PATH to a product_evals.json file)",
+        }, task_id=state.current_task_id)
+        return state
+
+    result = run_product_eval_suite(
+        base_url=base_url,
+        evals=evals,
+        timeout_ms=cfg.product_eval_timeout_ms,
+    )
+    state.product_eval_result = result
+
+    event_type = "product_eval_passed" if result["success"] else "product_eval_failed"
+    log_event(event_type, {
+        "task_id": state.current_task_id,
+        "base_url": base_url,
+        "total": len(result.get("results", [])),
+        "passed_count": sum(1 for r in result.get("results", []) if r.get("passed")),
+        "failed": [r["name"] for r in result.get("results", []) if not r.get("passed")],
+        "error": result.get("error"),
+    }, task_id=state.current_task_id)
+
+    if not result["success"] and cfg.product_eval_strict:
+        state.stop_reason = "product_eval_failed"
+
+    return _persist(state, "run_product_eval_if_needed")
+
+
 def update_github_if_needed(state: RunnerState) -> RunnerState:
     if not cfg.has_github or not cfg.github_repo:
         return state
@@ -1576,6 +1649,7 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
     state.merge_risk_level = None
     state.e2e_result = None
     state.ui_flow_result = None
+    state.product_eval_result = None
     return _persist(state, "update_logs_and_state")
 
 
@@ -1821,6 +1895,7 @@ def build_graph():
     builder.add_node("deploy_if_needed", deploy_if_needed)
     builder.add_node("run_e2e_if_needed", run_e2e_if_needed)
     builder.add_node("run_ui_flow_validation_if_needed", run_ui_flow_validation_if_needed)
+    builder.add_node("run_product_eval_if_needed", run_product_eval_if_needed)
     builder.add_node("update_github_if_needed", update_github_if_needed)
     builder.add_node("update_logs_and_state", update_logs_and_state)
     builder.add_node("run_strategic_gate", run_strategic_gate)
@@ -1884,7 +1959,8 @@ def build_graph():
     builder.add_edge("apply_sql_if_needed", "deploy_if_needed")
     builder.add_edge("deploy_if_needed", "run_e2e_if_needed")
     builder.add_edge("run_e2e_if_needed", "run_ui_flow_validation_if_needed")
-    builder.add_edge("run_ui_flow_validation_if_needed", "update_github_if_needed")
+    builder.add_edge("run_ui_flow_validation_if_needed", "run_product_eval_if_needed")
+    builder.add_edge("run_product_eval_if_needed", "update_github_if_needed")
     builder.add_edge("update_github_if_needed", "update_logs_and_state")
     builder.add_edge("update_logs_and_state", "run_strategic_gate")
     builder.add_conditional_edges("run_strategic_gate", _route_after_strategic_gate, {

@@ -39,6 +39,7 @@ _DEFAULT_SLACK_EVENTS = frozenset({
     "task_definition_of_done_warned",
     "auto_repair_failed",
     "merge_approval_required",
+    "product_eval_failed",
 })
 
 
@@ -273,6 +274,18 @@ class RunnerConfig:
     ui_flow_strict: bool = field(
         default_factory=lambda: os.getenv("UI_FLOW_STRICT", "false").lower() == "true"
     )
+    product_eval_enabled: bool = field(
+        default_factory=lambda: os.getenv("PRODUCT_EVAL_ENABLED", "false").lower() == "true"
+    )
+    product_eval_config_path: Optional[str] = field(
+        default_factory=lambda: os.getenv("PRODUCT_EVAL_CONFIG_PATH")
+    )
+    product_eval_timeout_ms: int = field(
+        default_factory=lambda: int(os.getenv("PRODUCT_EVAL_TIMEOUT_MS", "15000"))
+    )
+    product_eval_strict: bool = field(
+        default_factory=lambda: os.getenv("PRODUCT_EVAL_STRICT", "false").lower() == "true"
+    )
 
     @property
     def has_openai(self) -> bool:
@@ -381,6 +394,10 @@ class RunnerConfig:
             "ui_flow_config_path": self.ui_flow_config_path,
             "ui_flow_timeout_ms": self.ui_flow_timeout_ms,
             "ui_flow_strict": self.ui_flow_strict,
+            "product_eval_enabled": self.product_eval_enabled,
+            "product_eval_config_path": self.product_eval_config_path,
+            "product_eval_timeout_ms": self.product_eval_timeout_ms,
+            "product_eval_strict": self.product_eval_strict,
         }
 
 
