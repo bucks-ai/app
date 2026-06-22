@@ -298,6 +298,15 @@ class RunnerConfig:
     http_retry_max_wait_s: float = field(
         default_factory=lambda: float(os.getenv("HTTP_RETRY_MAX_WAIT_S", "10.0"))
     )
+    business_output_rubrics_enabled: bool = field(
+        default_factory=lambda: os.getenv("BUSINESS_OUTPUT_RUBRICS_ENABLED", "true").lower() == "true"
+    )
+    business_output_rubrics_strict_mode: bool = field(
+        default_factory=lambda: os.getenv("BUSINESS_OUTPUT_RUBRICS_STRICT_MODE", "false").lower() == "true"
+    )
+    business_output_rubrics_pass_threshold: float = field(
+        default_factory=lambda: float(os.getenv("BUSINESS_OUTPUT_RUBRICS_PASS_THRESHOLD", "0.6"))
+    )
 
     @property
     def has_openai(self) -> bool:
@@ -414,6 +423,9 @@ class RunnerConfig:
             "http_retry_attempts": self.http_retry_attempts,
             "http_retry_initial_wait_s": self.http_retry_initial_wait_s,
             "http_retry_max_wait_s": self.http_retry_max_wait_s,
+            "business_output_rubrics_enabled": self.business_output_rubrics_enabled,
+            "business_output_rubrics_strict_mode": self.business_output_rubrics_strict_mode,
+            "business_output_rubrics_pass_threshold": self.business_output_rubrics_pass_threshold,
         }
 
 
