@@ -41,7 +41,9 @@ _HIGH_RISK_KEYWORDS = frozenset({
     "security", "credential", "secret", "token",
     "infrastructure", "production",
     "permission", "rbac", "role", "admin",
-    "delete", "drop", "truncate", "purge",
+    # "delete", "drop", "truncate", "purge" are intentionally omitted — they are
+    # common in routine task descriptions (delete endpoint, dropdown, purge cache)
+    # and destructive SQL variants are already caught by _DESTRUCTIVE_SQL_RE below.
     "encryption", "crypto", "hash", "password",
 })
 

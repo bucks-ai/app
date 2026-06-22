@@ -17,7 +17,7 @@ Always return valid JSON."""
 
 _NEXT_TASK_PROMPT = """Here is the current project state and latest worker summary:
 
-{summary}
+{summary}{completed_context}
 
 Based on this, what is the next development task? Return a JSON task object."""
 
@@ -70,8 +70,20 @@ class ChatGPTWorker(BaseWorker):
             prompt_path=path,
         )
 
-    def ask_for_next_task(self, summary: str) -> dict | None:
-        prompt = _NEXT_TASK_PROMPT.format(summary=summary)
+    def ask_for_next_task(
+        self, summary: str, completed_tasks: list[dict] | None = None
+    ) -> dict | None:
+        completed_context = ""
+        if completed_tasks:
+            recent = completed_tasks[-10:]  # cap to last 10 to avoid prompt bloat
+            lines = "\n".join(
+                f"  - {t.get('id', '?')}: {t.get('title', '(no title)')}"
+                for t in recent
+            )
+            completed_context = (
+                f"\n\nAlready completed tasks (do NOT re-propose these):\n{lines}"
+            )
+        prompt = _NEXT_TASK_PROMPT.format(summary=summary, completed_context=completed_context)
         result = self.run_worker_prompt(prompt, {"id": "planner-next"})
         if not result.success or not result.output:
             return None

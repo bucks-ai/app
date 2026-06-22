@@ -13,6 +13,7 @@ from config import get_config
 from tools.log_tools import log_event, update_state
 from tools.task_tools import (
     get_next_queued_task,
+    load_tasks,
     mark_task_running,
     mark_task_complete,
     mark_task_failed,
@@ -124,6 +125,15 @@ Complete this task fully. When done, output a structured summary including:
 - Known Limitations: (bullet list)
 - Next Task: (suggestions)
 """
+
+
+def _completed_tasks() -> list[dict]:
+    """Return a compact list of completed tasks for planner context."""
+    return [
+        {"id": t["id"], "title": t.get("title", "")}
+        for t in load_tasks()
+        if t.get("status") == "complete"
+    ]
 
 
 def _state_dict(state: RunnerState) -> dict:
@@ -417,7 +427,7 @@ def ask_chatgpt_for_task_if_needed(state: RunnerState) -> RunnerState:
     summary_text = state.worker_summary_digest or build_run_summary_digest(state.worker_summary)
     log_event("next_task_requested", {"summary_preview": summary_text[:200]})
     planner = ChatGPTWorker()
-    new_task = planner.ask_for_next_task(summary_text)
+    new_task = planner.ask_for_next_task(summary_text, completed_tasks=_completed_tasks())
     if new_task:
         new_task = guard_planner_task(
             new_task,
@@ -1672,14 +1682,20 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
 
     state.loop_count += 1
     state.current_task = None
+    state.current_task_id = None
+    state.current_worker = None
+    state.current_branch = None
     state.worker_result = None
     state.worker_elapsed_seconds = None
+    state.worker_summary = None
     state.check_passed = None
     state.deploy_result = None
     state.deploy_ready = None
     state.rollback_revert_status = None
     state.rollback_revert_plan = None
     state.resource_request_status = None
+    state.acceptance_criteria_status = None
+    state.definition_of_done_status = None
     state.code_review_status = None
     state.high_risk_review_status = None
     state.codex_escalation_status = None
@@ -1784,9 +1800,15 @@ def ask_chatgpt_next_task(state: RunnerState) -> RunnerState:
     # rather than piling a fresh planner task on top of it.
     if state.retry_pending:
         return state
+    # Don't ask the planner for a new task when the queue already has work. Tasks
+    # in the queue came from a seeded mission or mission compiler batch — injecting
+    # planner tasks on top disrupts batch ordering and can push the run past
+    # MAX_LOOP_TASKS before the batch completes.
+    if get_next_queued_task():
+        return state
     summary_text = state.worker_summary_digest or build_run_summary_digest(state.worker_summary)
     planner = ChatGPTWorker()
-    new_task = planner.ask_for_next_task(summary_text)
+    new_task = planner.ask_for_next_task(summary_text, completed_tasks=_completed_tasks())
     if new_task:
         new_task = guard_planner_task(
             new_task,

@@ -119,6 +119,48 @@ def test_classify_multiple_keywords_capped_at_3():
 
 
 # ---------------------------------------------------------------------------
+# classify_merge_risk — removed keywords (false-positive prevention)
+# ---------------------------------------------------------------------------
+
+def test_classify_delete_word_not_in_keywords():
+    """'delete' must not raise score on its own — destructive SQL is caught by diff."""
+    result = classify_merge_risk(_task(title="Add delete endpoint for admin users"))
+    # "admin" still scores; "delete" alone must not add an extra keyword hit
+    hits = result["factors"].get("keyword_hits", [])
+    assert "delete" not in hits
+
+
+def test_classify_drop_word_not_in_keywords():
+    result = classify_merge_risk(_task(title="Implement dropdown component", type="ui"))
+    hits = result["factors"].get("keyword_hits", [])
+    assert "drop" not in hits
+
+
+def test_classify_truncate_word_not_in_keywords():
+    result = classify_merge_risk(_task(title="Truncate long text in card component"))
+    hits = result["factors"].get("keyword_hits", [])
+    assert "truncate" not in hits
+
+
+def test_classify_purge_word_not_in_keywords():
+    result = classify_merge_risk(_task(title="Purge stale cache entries on deploy"))
+    hits = result["factors"].get("keyword_hits", [])
+    assert "purge" not in hits
+
+
+def test_classify_routine_delete_endpoint_stays_low_without_other_triggers():
+    """A plain delete-endpoint task must not reach HIGH on keyword scan alone."""
+    result = classify_merge_risk(_task(
+        title="Add delete endpoint for posts",
+        type="backend",
+        description="Simple REST DELETE /posts/:id endpoint.",
+    ))
+    # No auth/payment/migration/etc. keywords → must not be HIGH from keywords alone
+    kw_hits = result["factors"].get("keyword_hits", [])
+    assert "delete" not in kw_hits
+
+
+# ---------------------------------------------------------------------------
 # classify_merge_risk — file patterns
 # ---------------------------------------------------------------------------
 
