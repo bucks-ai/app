@@ -359,6 +359,37 @@ Copy `.env.example` to `.env` and fill in:
 
 ---
 
+## Overnight Settings Profile
+
+`profiles/overnight.env` is a curated `.env` preset for launching the runner
+unattended for an extended period (up to 8 hours). Copy it to `.env`, fill in
+credentials, and run `python main.py run`.
+
+Key differences from the standard defaults:
+
+| Setting | Overnight | Default | Reason |
+|---------|-----------|---------|--------|
+| `MAX_LOOP_TASKS` | 50 | 10 | More tasks in an 8-hour window |
+| `SEEDED_MISSION_QUEUE_STRICT` | true | false | Clean stop when queue is exhausted |
+| `MERGE_APPROVAL_POLICY` | auto | require_approval_on_high | Fully autonomous merges |
+| `MAX_CONSECUTIVE_FAILURES` | 2 | 3 | Fail fast to avoid wasting the night |
+| `MAX_TASK_RETRIES` | 2 | 1 | Extra retry for transient failures |
+| `FAILURE_RETRY_BACKOFF_MAX_S` | 600 | 300 | Up to 10 min between retries |
+| `WORKER_HEALTH_LIVE_PING` | true | false | Catch broken environments immediately |
+| `STALE_RUN_WARN_MINUTES` | 45 | 30 | Earlier Slack warning |
+| `MAX_STALE_TASK_MINUTES` | 90 | 60 | Allow longer individual tasks |
+| `MAX_SESSION_COST_DOLLARS` | 25.0 | 0 | Overnight cost ceiling |
+| `STRATEGIC_PAUSE_INTERVAL` | 5 | 0 | Re-evaluate direction every 5 tasks |
+| `HTTP_RETRY_ATTEMPTS` | 5 | 3 | Ride out overnight network blips |
+| `CONTEXT_COMPRESSION_MAX_TOKENS` | 8000 | 12000 | Keep prompts lean over a long session |
+| all `*_STRICT_MODE` vars | false | false | Gates warn, not block (unchanged) |
+
+`SLACK_NOTIFY=true` is mandatory in the overnight profile — it is the morning audit trail.
+
+See `docs/overnight-settings-profile.md` for the full design rationale.
+
+---
+
 ## CLI Commands
 
 ```bash
