@@ -51,6 +51,9 @@ def test_ask_next_calls_planner_when_queue_empty(monkeypatch):
     monkeypatch.setattr(graph, "get_next_queued_task", lambda: None)
     monkeypatch.setattr(graph, "_completed_tasks", lambda: [])
     monkeypatch.setattr(graph, "add_task", lambda t: None)
+    # Ensure strict seeded-queue mode does not short-circuit the planner call,
+    # regardless of what the runtime env has configured.
+    monkeypatch.setattr(graph.cfg, "seeded_mission_queue_strict", False)
 
     class _FakePlanner:
         def ask_for_next_task(self, *a, **kw):

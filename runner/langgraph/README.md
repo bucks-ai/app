@@ -344,6 +344,10 @@ Copy `.env.example` to `.env` and fill in:
 | `FAILURE_GUARD` | Retry failed tasks and stop the loop on repeated failures (default: true) |
 | `MAX_TASK_RETRIES` | Times a failed task is requeued before giving up (default: 1) |
 | `MAX_CONSECUTIVE_FAILURES` | Consecutive failures that trip the circuit breaker and halt the loop (default: 3) |
+| `FAILURE_RETRY_BACKOFF` | Apply exponential backoff before retrying under degraded worker conditions (timeout, health-probe failure, or sustained consecutive failures) (default: true) |
+| `FAILURE_RETRY_BACKOFF_BASE_S` | Base backoff delay in seconds for the first degraded retry (default: 30.0) |
+| `FAILURE_RETRY_BACKOFF_MULTIPLIER` | Exponential multiplier applied per retry attempt (default: 2.0) |
+| `FAILURE_RETRY_BACKOFF_MAX_S` | Maximum backoff delay cap in seconds (default: 300.0) |
 | `WORKER_HEALTH_PROBE` | Check that the chosen worker's CLI binary and credentials are available before each dispatch; halts the loop immediately if the worker cannot start (default: true) |
 | `STALE_RUN_WATCHDOG` | Halt the loop when no task has completed within `MAX_STALE_TASK_MINUTES` of the previous completion, preventing infinite spin during overnight runs (default: true) |
 | `MAX_STALE_TASK_MINUTES` | Minutes of task-completion inactivity before the stale run watchdog trips; 0 disables the watchdog (default: 60) |

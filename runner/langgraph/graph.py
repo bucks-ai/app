@@ -23,6 +23,7 @@ from tools.task_tools import (
     update_task_branch,
 )
 from tools.failure_guard import evaluate_failure
+from tools.failure_retry_backoff import is_degraded_failure, compute_retry_not_before
 from tools.repeated_error_guard import evaluate_error_repetition, evaluate_task_repetition
 from tools.worker_timeout_guard import evaluate_worker_timeout
 from tools.worker_health_probe import probe_worker_health
@@ -1722,16 +1723,36 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
             state.consecutive_failures = decision["consecutive_failures"]
 
             if decision["action"] == "retry":
-                # Transient failure: requeue the task for another attempt instead
-                # of abandoning it. It keeps its place in the queue, so
-                # load_next_task picks it up again next loop.
-                requeue_task(task_id, decision["retry_count"])
+                # Transient failure: requeue the task for another attempt.
+                # Under degraded conditions (timeout, health-probe failure,
+                # sustained consecutive failures) apply exponential backoff so
+                # the runner doesn't immediately hammer the same broken wall.
+                retry_not_before = None
+                degraded = (
+                    cfg.failure_retry_backoff_enabled
+                    and is_degraded_failure(
+                        err,
+                        state.worker_elapsed_seconds,
+                        cfg.worker_timeout_threshold,
+                        state.consecutive_failures,
+                    )
+                )
+                if degraded:
+                    retry_not_before = compute_retry_not_before(
+                        decision["retry_count"],
+                        cfg.failure_retry_backoff_base_s,
+                        cfg.failure_retry_backoff_multiplier,
+                        cfg.failure_retry_backoff_max_s,
+                    )
+                requeue_task(task_id, decision["retry_count"], retry_not_before)
                 state.retry_pending = True
                 log_event("task_retry_scheduled", {
                     "task_id": task_id,
                     "error": err,
                     "attempt": decision["retry_count"],
                     "max_retries": cfg.max_task_retries,
+                    "degraded": degraded,
+                    "retry_not_before": retry_not_before,
                 }, task_id=task_id)
             else:
                 # Retries exhausted (or disabled): record a permanent failure.

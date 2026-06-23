@@ -337,6 +337,18 @@ class RunnerConfig:
     max_stale_task_minutes: int = field(
         default_factory=lambda: int(os.getenv("MAX_STALE_TASK_MINUTES", "60"))
     )
+    failure_retry_backoff_enabled: bool = field(
+        default_factory=lambda: os.getenv("FAILURE_RETRY_BACKOFF", "true").lower() == "true"
+    )
+    failure_retry_backoff_base_s: float = field(
+        default_factory=lambda: float(os.getenv("FAILURE_RETRY_BACKOFF_BASE_S", "30.0"))
+    )
+    failure_retry_backoff_multiplier: float = field(
+        default_factory=lambda: float(os.getenv("FAILURE_RETRY_BACKOFF_MULTIPLIER", "2.0"))
+    )
+    failure_retry_backoff_max_s: float = field(
+        default_factory=lambda: float(os.getenv("FAILURE_RETRY_BACKOFF_MAX_S", "300.0"))
+    )
 
     @property
     def has_openai(self) -> bool:
@@ -465,6 +477,10 @@ class RunnerConfig:
             "worker_health_probe_enabled": self.worker_health_probe_enabled,
             "stale_run_watchdog_enabled": self.stale_run_watchdog_enabled,
             "max_stale_task_minutes": self.max_stale_task_minutes,
+            "failure_retry_backoff_enabled": self.failure_retry_backoff_enabled,
+            "failure_retry_backoff_base_s": self.failure_retry_backoff_base_s,
+            "failure_retry_backoff_multiplier": self.failure_retry_backoff_multiplier,
+            "failure_retry_backoff_max_s": self.failure_retry_backoff_max_s,
         }
 
 

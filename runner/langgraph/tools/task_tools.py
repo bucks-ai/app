@@ -5,6 +5,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+_BACKOFF_SKIPPED_STATUS = "queued"  # only queued tasks participate in backoff
+
 _tasks_path = Path(__file__).parent.parent / ".runtime" / "tasks.local.json"
 _tasks_path_legacy = Path(__file__).parent.parent / "tasks.json"
 
@@ -59,10 +61,21 @@ def find_task_by_github_issue(issue_number: int) -> Optional[dict]:
 
 
 def get_next_queued_task() -> Optional[dict]:
+    """Return the first queued task whose retry backoff window has expired.
+
+    Tasks with a ``retry_not_before`` timestamp that is still in the future
+    are skipped so the runner waits out the backoff rather than immediately
+    hitting the same degraded condition again.
+    """
+    now_iso = _now()
     tasks = load_tasks()
     for task in tasks:
-        if task.get("status") == "queued":
-            return task
+        if task.get("status") != "queued":
+            continue
+        retry_not_before = task.get("retry_not_before")
+        if retry_not_before and retry_not_before > now_iso:
+            continue
+        return task
     return None
 
 
@@ -110,13 +123,13 @@ def mark_task_blocked(task_id: str, reason: str):
     save_tasks(tasks)
 
 
-def requeue_task(task_id: str, retry_count: int):
+def requeue_task(task_id: str, retry_count: int, retry_not_before: Optional[str] = None):
     """Requeue a failed task for another attempt (status → ``queued``).
 
     Records ``retry_count`` so the failure guard can cap how many times a task is
-    retried before it is marked permanently ``failed``. Distinct from
-    ``mark_task_failed``: a requeued task stays alive in the queue and is picked
-    up again by ``get_next_queued_task`` on the next loop.
+    retried before it is marked permanently ``failed``.  When ``retry_not_before``
+    is supplied (an ISO-8601 UTC timestamp), ``get_next_queued_task`` skips this
+    task until that time has passed — implementing backoff for degraded workers.
     """
     tasks = load_tasks()
     for task in tasks:
@@ -124,6 +137,10 @@ def requeue_task(task_id: str, retry_count: int):
             task["status"] = "queued"
             task["retry_count"] = retry_count
             task["updated_at"] = _now()
+            if retry_not_before:
+                task["retry_not_before"] = retry_not_before
+            else:
+                task.pop("retry_not_before", None)
     save_tasks(tasks)
 
 

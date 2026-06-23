@@ -99,7 +99,7 @@ def _with_stubbed_task_io(fn):
     """Run fn(calls) with task-queue mutations captured instead of hitting disk."""
     calls = {"requeue": [], "failed": [], "complete": []}
     orig = (graph.requeue_task, graph.mark_task_failed, graph.mark_task_complete)
-    graph.requeue_task = lambda task_id, rc: calls["requeue"].append((task_id, rc))
+    graph.requeue_task = lambda task_id, rc, retry_not_before=None: calls["requeue"].append((task_id, rc))
     graph.mark_task_failed = lambda task_id, err: calls["failed"].append((task_id, err))
     graph.mark_task_complete = lambda task_id, summary: calls["complete"].append((task_id, summary))
     try:
