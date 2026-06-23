@@ -349,6 +349,8 @@ Copy `.env.example` to `.env` and fill in:
 | `FAILURE_RETRY_BACKOFF_MULTIPLIER` | Exponential multiplier applied per retry attempt (default: 2.0) |
 | `FAILURE_RETRY_BACKOFF_MAX_S` | Maximum backoff delay cap in seconds (default: 300.0) |
 | `WORKER_HEALTH_PROBE` | Check that the chosen worker's CLI binary and credentials are available before each dispatch; halts the loop immediately if the worker cannot start (default: true) |
+| `WORKER_HEALTH_LIVE_PING` | After the static binary/credential check passes, run the worker CLI with `--version` in a subprocess to confirm it actually starts; adds ~100–500 ms per dispatch; default off — enable when diagnosing flaky worker startups (default: false) |
+| `WORKER_HEALTH_LIVE_PING_TIMEOUT_S` | Seconds before the live-ping subprocess is forcibly killed; applies only when `WORKER_HEALTH_LIVE_PING=true` (default: 10.0) |
 | `STALE_RUN_WATCHDOG` | Halt the loop when no task has completed within `MAX_STALE_TASK_MINUTES` of the previous completion, preventing infinite spin during overnight runs (default: true) |
 | `MAX_STALE_TASK_MINUTES` | Minutes of task-completion inactivity before the stale run watchdog trips; 0 disables the watchdog (default: 60) |
 | `STALE_RUN_WARN_MINUTES` | Minutes of inactivity before a Slack warning fires ahead of the hard stop; 0 disables the warning (default: 30) |

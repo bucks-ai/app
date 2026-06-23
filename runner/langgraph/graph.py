@@ -614,6 +614,8 @@ def dispatch_worker(state: RunnerState) -> RunnerState:
             has_anthropic=cfg.has_anthropic,
             has_openai=cfg.has_openai,
             health_probe_enabled=True,
+            live_ping_enabled=cfg.worker_health_live_ping_enabled,
+            live_ping_timeout_s=cfg.worker_health_live_ping_timeout_s,
         )
         if not hp["available"]:
             log_event("worker_health_probe_failed", {
@@ -642,6 +644,12 @@ def dispatch_worker(state: RunnerState) -> RunnerState:
                 "tokens_used": None,
             }
             return _persist(state, "dispatch_worker")
+        if hp.get("live_ping_latency_ms") is not None:
+            log_event("worker_health_live_ping_ok", {
+                "worker": worker_type,
+                "latency_ms": hp["live_ping_latency_ms"],
+                "task_id": state.current_task_id,
+            }, task_id=state.current_task_id)
 
     if worker_type == "codex":
         worker = CodexWorker()

@@ -332,6 +332,12 @@ class RunnerConfig:
     worker_health_probe_enabled: bool = field(
         default_factory=lambda: os.getenv("WORKER_HEALTH_PROBE", "true").lower() == "true"
     )
+    worker_health_live_ping_enabled: bool = field(
+        default_factory=lambda: os.getenv("WORKER_HEALTH_LIVE_PING", "false").lower() == "true"
+    )
+    worker_health_live_ping_timeout_s: float = field(
+        default_factory=lambda: float(os.getenv("WORKER_HEALTH_LIVE_PING_TIMEOUT_S", "10.0"))
+    )
     stale_run_watchdog_enabled: bool = field(
         default_factory=lambda: os.getenv("STALE_RUN_WATCHDOG", "true").lower() == "true"
     )
@@ -479,6 +485,8 @@ class RunnerConfig:
             "fast_engineering_mode_enabled": self.fast_engineering_mode_enabled,
             "runner_dry_run": self.runner_dry_run,
             "worker_health_probe_enabled": self.worker_health_probe_enabled,
+            "worker_health_live_ping_enabled": self.worker_health_live_ping_enabled,
+            "worker_health_live_ping_timeout_s": self.worker_health_live_ping_timeout_s,
             "stale_run_watchdog_enabled": self.stale_run_watchdog_enabled,
             "max_stale_task_minutes": self.max_stale_task_minutes,
             "stale_run_warn_minutes": self.stale_run_warn_minutes,
