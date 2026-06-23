@@ -354,6 +354,7 @@ Copy `.env.example` to `.env` and fill in:
 | `STALE_RUN_WATCHDOG` | Halt the loop when no task has completed within `MAX_STALE_TASK_MINUTES` of the previous completion, preventing infinite spin during overnight runs (default: true) |
 | `MAX_STALE_TASK_MINUTES` | Minutes of task-completion inactivity before the stale run watchdog trips; 0 disables the watchdog (default: 60) |
 | `STALE_RUN_WARN_MINUTES` | Minutes of inactivity before a Slack warning fires ahead of the hard stop; 0 disables the warning (default: 30) |
+| `LIVE_BATCH_VALIDATION_REPORT` | Emit a final structured report (task outcomes, session metrics, per-task digest) to outbox/ when the loop stops; logged as `live_batch_validation_complete` and forwarded to Slack when enabled (default: true) |
 | `CONTEXT_COMPRESSION_MAX_TOKENS` | Soft token ceiling for persisted runner messages before older context is compressed (default: 12000) |
 | `CONTEXT_COMPRESSION_KEEP_RECENT` | Number of newest messages to preserve verbatim during compression (default: 4) |
 

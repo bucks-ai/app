@@ -109,3 +109,4 @@ class RunnerState(BaseModel):
     launch_readiness_result: Optional[dict] = None  # result dict from launch_readiness_scorecard
     last_task_completed_at: Optional[str] = None    # ISO-8601 UTC timestamp of the last completed task loop
     stale_run_warning_sent: bool = False             # True once the stale-run Slack warning has fired this episode
+    live_batch_validation_result: Optional[dict] = None  # result dict from live_batch_validation_report

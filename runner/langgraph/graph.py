@@ -82,6 +82,7 @@ from tools.strategic_decision_gate import (
 )
 from tools.model_routing_policy import evaluate_model_routing_policy
 from tools.launch_readiness_scorecard import guard_launch_readiness
+from tools.live_batch_validation_report import generate_live_batch_report
 from tools.mission_compiler import (
     parse_mission_file,
     validate_mission,
@@ -2021,6 +2022,46 @@ def ask_chatgpt_next_task(state: RunnerState) -> RunnerState:
     return _persist(state, "ask_chatgpt_next_task")
 
 
+def generate_live_batch_validation_report(state: RunnerState) -> RunnerState:
+    """Final Live-Batch Validation Report.
+
+    Runs once, immediately after the loop decides to stop, and emits a
+    structured summary of the completed batch: task outcomes (complete /
+    failed / blocked / queued), session health metrics (cost, loop count,
+    stop reason, elapsed time), and a per-task digest of up to 50 entries.
+
+    The report is written to outbox/live_batch_validation_report.txt and
+    logged as ``live_batch_validation_complete`` (which also fires a Slack
+    notification when that event is in the notify set).
+
+    Skipped when ``LIVE_BATCH_VALIDATION_REPORT=false``.
+    """
+    if not cfg.live_batch_validation_report_enabled:
+        return state
+
+    session_state = {
+        "stop_reason": state.stop_reason,
+        "loop_count": state.loop_count,
+        "session_cost": state.session_cost,
+        "started_at": state.started_at,
+        "consecutive_failures": state.consecutive_failures,
+        "worker_timeout_count": state.worker_timeout_count,
+    }
+
+    result = generate_live_batch_report(
+        session_state,
+        context="generate_live_batch_validation_report",
+    )
+
+    state.live_batch_validation_result = result
+
+    report_path = _RUNNER_DIR / "outbox" / "live_batch_validation_report.txt"
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(result["report"])
+
+    return _persist(state, "generate_live_batch_validation_report")
+
+
 def decide_continue_or_stop(state: RunnerState) -> RunnerState:
     if state.stop_reason:
         state.status = "stopped"
@@ -2121,7 +2162,7 @@ def _route_after_strategic_gate(state: RunnerState) -> str:
 
 def _route_after_decide(state: RunnerState) -> str:
     if state.status == "stopped":
-        return END
+        return "generate_live_batch_validation_report"
     return "load_next_task"
 
 
@@ -2162,6 +2203,7 @@ def build_graph():
     builder.add_node("run_strategic_gate", run_strategic_gate)
     builder.add_node("ask_chatgpt_next_task", ask_chatgpt_next_task)
     builder.add_node("decide_continue_or_stop", decide_continue_or_stop)
+    builder.add_node("generate_live_batch_validation_report", generate_live_batch_validation_report)
 
     builder.set_entry_point("install_hooks")
     builder.add_edge("install_hooks", "check_launch_readiness_if_needed")
@@ -2239,9 +2281,10 @@ def build_graph():
     builder.add_edge("ask_chatgpt_next_task", "decide_continue_or_stop")
 
     builder.add_conditional_edges("decide_continue_or_stop", _route_after_decide, {
-        END: END,
+        "generate_live_batch_validation_report": "generate_live_batch_validation_report",
         "load_next_task": "load_next_task",
     })
+    builder.add_edge("generate_live_batch_validation_report", END)
 
     return builder.compile()
 

@@ -44,6 +44,7 @@ _DEFAULT_SLACK_EVENTS = frozenset({
     "loop_blocked_on_stale_run",
     "loop_blocked_on_worker_health",
     "stale_run_warning",
+    "live_batch_validation_complete",
 })
 
 
@@ -359,6 +360,9 @@ class RunnerConfig:
     failure_retry_backoff_max_s: float = field(
         default_factory=lambda: float(os.getenv("FAILURE_RETRY_BACKOFF_MAX_S", "300.0"))
     )
+    live_batch_validation_report_enabled: bool = field(
+        default_factory=lambda: os.getenv("LIVE_BATCH_VALIDATION_REPORT", "true").lower() == "true"
+    )
 
     @property
     def has_openai(self) -> bool:
@@ -494,6 +498,7 @@ class RunnerConfig:
             "failure_retry_backoff_base_s": self.failure_retry_backoff_base_s,
             "failure_retry_backoff_multiplier": self.failure_retry_backoff_multiplier,
             "failure_retry_backoff_max_s": self.failure_retry_backoff_max_s,
+            "live_batch_validation_report_enabled": self.live_batch_validation_report_enabled,
         }
 
 
