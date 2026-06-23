@@ -146,6 +146,79 @@ def test_stale_one_second_short_does_not_trigger():
 
 
 # ---------------------------------------------------------------------------
+# Warning threshold
+# ---------------------------------------------------------------------------
+
+def test_warn_fires_before_hard_stop():
+    now = _BASE
+    _set_now(now)
+    last = now - timedelta(minutes=35)
+    r = evaluate_stale_run(
+        last_task_completed_at=_ts(last),
+        loop_count=3,
+        max_stale_task_minutes=60,
+        warn_threshold_minutes=30,
+    )
+    assert r["warn"] is True
+    assert r["stale"] is False
+    assert r["blocked"] is False
+    assert r["stop_reason"] is None
+
+
+def test_warn_not_set_below_warn_threshold():
+    now = _BASE
+    _set_now(now)
+    last = now - timedelta(minutes=20)
+    r = evaluate_stale_run(
+        last_task_completed_at=_ts(last),
+        loop_count=3,
+        max_stale_task_minutes=60,
+        warn_threshold_minutes=30,
+    )
+    assert r["warn"] is False
+    assert r["stale"] is False
+
+
+def test_warn_false_when_stale_also_tripped():
+    now = _BASE
+    _set_now(now)
+    last = now - timedelta(minutes=70)
+    r = evaluate_stale_run(
+        last_task_completed_at=_ts(last),
+        loop_count=3,
+        max_stale_task_minutes=60,
+        warn_threshold_minutes=30,
+    )
+    assert r["stale"] is True
+    assert r["warn"] is False  # hard stop takes precedence
+
+
+def test_warn_disabled_when_zero():
+    now = _BASE
+    _set_now(now)
+    last = now - timedelta(minutes=45)
+    r = evaluate_stale_run(
+        last_task_completed_at=_ts(last),
+        loop_count=3,
+        max_stale_task_minutes=60,
+        warn_threshold_minutes=0,
+    )
+    assert r["warn"] is False
+
+
+def test_warn_field_present_when_no_warn_configured():
+    now = _BASE
+    _set_now(now)
+    r = evaluate_stale_run(
+        last_task_completed_at=_ts(now - timedelta(minutes=5)),
+        loop_count=1,
+        max_stale_task_minutes=60,
+    )
+    assert "warn" in r
+    assert r["warn"] is False
+
+
+# ---------------------------------------------------------------------------
 # Malformed timestamp — should not crash
 # ---------------------------------------------------------------------------
 
@@ -186,6 +259,11 @@ if __name__ == "__main__":
         test_stale_one_second_short_does_not_trigger,
         test_malformed_timestamp_does_not_crash,
         test_empty_string_timestamp,
+        test_warn_fires_before_hard_stop,
+        test_warn_not_set_below_warn_threshold,
+        test_warn_false_when_stale_also_tripped,
+        test_warn_disabled_when_zero,
+        test_warn_field_present_when_no_warn_configured,
     ]
     passed = failed = 0
     for t in tests:

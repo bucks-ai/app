@@ -43,6 +43,7 @@ _DEFAULT_SLACK_EVENTS = frozenset({
     "worker_dispatch_crash",
     "loop_blocked_on_stale_run",
     "loop_blocked_on_worker_health",
+    "stale_run_warning",
 })
 
 
@@ -337,6 +338,9 @@ class RunnerConfig:
     max_stale_task_minutes: int = field(
         default_factory=lambda: int(os.getenv("MAX_STALE_TASK_MINUTES", "60"))
     )
+    stale_run_warn_minutes: int = field(
+        default_factory=lambda: int(os.getenv("STALE_RUN_WARN_MINUTES", "30"))
+    )
     failure_retry_backoff_enabled: bool = field(
         default_factory=lambda: os.getenv("FAILURE_RETRY_BACKOFF", "true").lower() == "true"
     )
@@ -477,6 +481,7 @@ class RunnerConfig:
             "worker_health_probe_enabled": self.worker_health_probe_enabled,
             "stale_run_watchdog_enabled": self.stale_run_watchdog_enabled,
             "max_stale_task_minutes": self.max_stale_task_minutes,
+            "stale_run_warn_minutes": self.stale_run_warn_minutes,
             "failure_retry_backoff_enabled": self.failure_retry_backoff_enabled,
             "failure_retry_backoff_base_s": self.failure_retry_backoff_base_s,
             "failure_retry_backoff_multiplier": self.failure_retry_backoff_multiplier,

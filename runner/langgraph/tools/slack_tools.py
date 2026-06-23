@@ -30,6 +30,7 @@ _EVENT_EMOJI = {
     "sql_scan_blocked": ":shield:",
     "sql_approval_pending": ":hourglass_flowing_sand:",
     "check_failed": ":warning:",
+    "stale_run_warning": ":sleeping:",
 }
 
 
@@ -67,6 +68,13 @@ def _detail_for(event_type: str, payload: dict) -> str:
         return str(p.get("message") or p.get("review_path") or "SQL awaiting approval")
     if event_type == "check_failed":
         return str(p.get("error") or "checks failed")
+    if event_type == "stale_run_warning":
+        bits = [f"idle: {p.get('stale_minutes', '?')} min"]
+        if p.get("warn_threshold_minutes") is not None:
+            bits.append(f"warn threshold: {p['warn_threshold_minutes']} min")
+        if p.get("hard_stop_minutes") is not None:
+            bits.append(f"hard stop: {p['hard_stop_minutes']} min")
+        return "  ".join(bits)
 
     # Generic fallback: a few payload keys, compactly rendered.
     interesting = {k: v for k, v in p.items() if not isinstance(v, (dict, list))}

@@ -48,55 +48,59 @@ def evaluate_stale_run(
     loop_count: int,
     max_stale_task_minutes: int,
     enabled: bool = True,
+    warn_threshold_minutes: int = 0,
 ) -> dict:
     """Decide whether the runner is stuck without making forward progress.
 
     Args:
-        last_task_completed_at: ISO-8601 UTC timestamp of the last completed
-                                task loop, or None if no task has finished yet.
-        loop_count:             Total task loops executed so far this session.
-        max_stale_task_minutes: Minutes of inactivity that trip the watchdog.
-                                ``<= 0`` disables the guard.
-        enabled:                Master enable flag; False means no-op.
+        last_task_completed_at:  ISO-8601 UTC timestamp of the last completed
+                                 task loop, or None if no task has finished yet.
+        loop_count:              Total task loops executed so far this session.
+        max_stale_task_minutes:  Minutes of inactivity that trip the watchdog.
+                                 ``<= 0`` disables the guard.
+        enabled:                 Master enable flag; False means no-op.
+        warn_threshold_minutes:  Minutes of inactivity before a warning fires.
+                                 ``<= 0`` disables the warning (no-op).
 
     Returns a dict with:
-        - ``stale``                 — True when inactivity exceeds the threshold.
+        - ``stale``                 — True when inactivity exceeds the hard-stop threshold.
+        - ``warn``                  — True when inactivity exceeds the warning threshold
+                                      but has not yet hit the hard-stop threshold.
         - ``stale_minutes``         — Minutes since the last completed task
                                       (``None`` when not computable).
         - ``blocked``               — True when the guard should halt the loop.
         - ``stop_reason``           — ``STALE_RUN_STOP`` when blocked, else None.
     """
+    _empty = {
+        "stale": False,
+        "warn": False,
+        "stale_minutes": None,
+        "blocked": False,
+        "stop_reason": None,
+    }
+
     if not enabled or max_stale_task_minutes <= 0:
-        return {
-            "stale": False,
-            "stale_minutes": None,
-            "blocked": False,
-            "stop_reason": None,
-        }
+        return _empty
 
     # Don't trip on a brand-new run that hasn't completed any task yet.
     if not last_task_completed_at or loop_count == 0:
-        return {
-            "stale": False,
-            "stale_minutes": None,
-            "blocked": False,
-            "stop_reason": None,
-        }
+        return _empty
 
     last_dt = _parse_iso(last_task_completed_at)
     if last_dt is None:
-        return {
-            "stale": False,
-            "stale_minutes": None,
-            "blocked": False,
-            "stop_reason": None,
-        }
+        return _empty
 
     elapsed_minutes = (_utcnow() - last_dt).total_seconds() / 60.0
     stale = elapsed_minutes >= max_stale_task_minutes
+    warn = (
+        warn_threshold_minutes > 0
+        and elapsed_minutes >= warn_threshold_minutes
+        and not stale
+    )
 
     return {
         "stale": stale,
+        "warn": warn,
         "stale_minutes": round(elapsed_minutes, 1),
         "blocked": stale,
         "stop_reason": STALE_RUN_STOP if stale else None,

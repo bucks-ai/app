@@ -1647,6 +1647,7 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
         state.consecutive_failures = 0
         state.retry_pending = False
         state.last_task_completed_at = datetime.utcnow().isoformat()
+        state.stale_run_warning_sent = False
     else:
         err = result.get("error") or "worker returned no output"
         state.retry_pending = False
@@ -1842,6 +1843,7 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
             last_task_completed_at=state.last_task_completed_at,
             loop_count=state.loop_count,
             max_stale_task_minutes=cfg.max_stale_task_minutes,
+            warn_threshold_minutes=cfg.stale_run_warn_minutes,
         )
         if sw["stale"] and not state.stop_reason:
             state.stop_reason = sw["stop_reason"]
@@ -1849,6 +1851,15 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
                 "task_id": task_id,
                 "stale_minutes": sw["stale_minutes"],
                 "max_stale_task_minutes": cfg.max_stale_task_minutes,
+                "last_task_completed_at": state.last_task_completed_at,
+            }, task_id=task_id)
+        elif sw["warn"] and not state.stale_run_warning_sent:
+            state.stale_run_warning_sent = True
+            log_event("stale_run_warning", {
+                "task_id": task_id,
+                "stale_minutes": sw["stale_minutes"],
+                "warn_threshold_minutes": cfg.stale_run_warn_minutes,
+                "hard_stop_minutes": cfg.max_stale_task_minutes,
                 "last_task_completed_at": state.last_task_completed_at,
             }, task_id=task_id)
 
