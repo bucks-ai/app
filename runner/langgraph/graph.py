@@ -382,6 +382,11 @@ def seed_mission_queue_if_needed(state: RunnerState) -> RunnerState:
 
     mission = fetch_next_queued_mission()
     if not mission:
+        if cfg.seeded_mission_queue_strict:
+            state.stop_reason = "seeded_queue_exhausted"
+            log_event("seeded_queue_exhausted", {
+                "message": "No queued missions remain and SEEDED_MISSION_QUEUE_STRICT=true; halting loop.",
+            })
         return state
 
     mission_id = str(mission.get("id", ""))
@@ -1945,6 +1950,10 @@ def ask_chatgpt_next_task(state: RunnerState) -> RunnerState:
     # A failed task was just requeued for retry; let that retry run next loop
     # rather than piling a fresh planner task on top of it.
     if state.retry_pending:
+        return state
+    # In strict seeded queue mode the planner is never consulted: all tasks come
+    # from Supabase missions and the loop stops when the queue is exhausted.
+    if cfg.seeded_mission_queue_enabled and cfg.seeded_mission_queue_strict:
         return state
     # Don't ask the planner for a new task when the queue already has work. Tasks
     # in the queue came from a seeded mission or mission compiler batch — injecting

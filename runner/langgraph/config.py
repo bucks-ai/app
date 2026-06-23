@@ -196,6 +196,9 @@ class RunnerConfig:
     seeded_mission_queue_enabled: bool = field(
         default_factory=lambda: os.getenv("SEEDED_MISSION_QUEUE", "true").lower() == "true"
     )
+    seeded_mission_queue_strict: bool = field(
+        default_factory=lambda: os.getenv("SEEDED_MISSION_QUEUE_STRICT", "false").lower() == "true"
+    )
     planner_quality_gate_v2_enabled: bool = field(
         default_factory=lambda: os.getenv("PLANNER_QUALITY_GATE_V2", "true").lower() == "true"
     )
@@ -415,6 +418,7 @@ class RunnerConfig:
             "context_compression_keep_recent": self.context_compression_keep_recent,
             "mission_compiler_enabled": self.mission_compiler_enabled,
             "seeded_mission_queue_enabled": self.seeded_mission_queue_enabled,
+            "seeded_mission_queue_strict": self.seeded_mission_queue_strict,
             "planner_quality_gate_v2_enabled": self.planner_quality_gate_v2_enabled,
             "planner_scope_guard_enabled": self.planner_scope_guard_enabled,
             "acceptance_criteria_gate_enabled": self.acceptance_criteria_gate_enabled,

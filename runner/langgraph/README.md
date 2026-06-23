@@ -337,6 +337,8 @@ Copy `.env.example` to `.env` and fill in:
 | `LAUNCH_READINESS_SCORECARD_ENABLED` | Score the runner system's readiness to operate at each loop start (config completeness, credentials, safety gates, operational health) (default: true) |
 | `LAUNCH_READINESS_SCORECARD_STRICT_MODE` | Halt the loop when the launch readiness score is below the pass threshold; false (default) logs a warning but proceeds |
 | `LAUNCH_READINESS_SCORECARD_PASS_THRESHOLD` | Minimum weighted launch readiness score (0.0–1.0) required to proceed (default: 0.7) |
+| `SEEDED_MISSION_QUEUE` | Poll Supabase for queued missions and seed the local task queue when empty (default: true) |
+| `SEEDED_MISSION_QUEUE_STRICT` | Hard-stop the loop when the seeded mission queue is exhausted instead of falling through to the ChatGPT planner; also suppresses the post-task ChatGPT call (default: false) |
 | `FAST_ENGINEERING_MODE` | Pre-inject a runner workspace snapshot (LangGraph nodes, tools, tests, architecture invariants) into worker prompts for reliable runner development; skips exploratory reads and orients Claude immediately (default: false) |
 | `RESOURCE_GATE` | Pause the loop when a worker reports it needs a missing credential/resource (default: true) |
 | `FAILURE_GUARD` | Retry failed tasks and stop the loop on repeated failures (default: true) |

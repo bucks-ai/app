@@ -407,6 +407,131 @@ def test_compile_still_routes_to_chatgpt_via_seed_node():
 
 
 # ---------------------------------------------------------------------------
+# Strict mode: seeded_mission_queue_strict
+# ---------------------------------------------------------------------------
+
+def test_strict_mode_sets_stop_reason_when_no_mission():
+    """In strict mode, no queued missions → stop_reason = seeded_queue_exhausted."""
+    captured = _stub_graph_seeded(mission=None, task_rows=[])
+    try:
+        graph.cfg.seeded_mission_queue_enabled = True
+        graph.cfg.seeded_mission_queue_strict = True
+        type(graph.cfg).has_supabase = property(lambda self: True)
+        state = _make_state()
+        out = graph.seed_mission_queue_if_needed(state)
+        assert out.stop_reason == "seeded_queue_exhausted"
+        assert out.current_task is None
+        assert captured == []
+    finally:
+        graph.cfg.seeded_mission_queue_enabled = True
+        graph.cfg.seeded_mission_queue_strict = False
+        original_has_supabase = property(
+            lambda self: bool(graph.cfg.supabase_url and graph.cfg.supabase_service_role_key)
+        )
+        type(graph.cfg).has_supabase = original_has_supabase
+        _restore_graph_seeded()
+
+
+def test_non_strict_mode_no_stop_reason_when_no_mission():
+    """In non-strict mode, no queued missions → falls through without stop_reason."""
+    captured = _stub_graph_seeded(mission=None, task_rows=[])
+    try:
+        graph.cfg.seeded_mission_queue_enabled = True
+        graph.cfg.seeded_mission_queue_strict = False
+        type(graph.cfg).has_supabase = property(lambda self: True)
+        state = _make_state()
+        out = graph.seed_mission_queue_if_needed(state)
+        assert out.stop_reason is None
+        assert out.current_task is None
+        assert captured == []
+    finally:
+        graph.cfg.seeded_mission_queue_enabled = True
+        graph.cfg.seeded_mission_queue_strict = False
+        original_has_supabase = property(
+            lambda self: bool(graph.cfg.supabase_url and graph.cfg.supabase_service_role_key)
+        )
+        type(graph.cfg).has_supabase = original_has_supabase
+        _restore_graph_seeded()
+
+
+def test_strict_mode_does_not_stop_when_mission_exists():
+    """In strict mode, a queued mission is found → seeds tasks normally, no stop_reason."""
+    captured = _stub_graph_seeded(mission=_SAMPLE_MISSION, task_rows=_SAMPLE_TASK_ROWS)
+    try:
+        graph.cfg.seeded_mission_queue_enabled = True
+        graph.cfg.seeded_mission_queue_strict = True
+        type(graph.cfg).has_supabase = property(lambda self: True)
+        out = graph.seed_mission_queue_if_needed(_make_state(stop_reason="no_queued_tasks"))
+        assert len(captured) == 2
+        assert out.current_task is not None
+        assert out.stop_reason is None
+    finally:
+        graph.cfg.seeded_mission_queue_enabled = True
+        graph.cfg.seeded_mission_queue_strict = False
+        original_has_supabase = property(
+            lambda self: bool(graph.cfg.supabase_url and graph.cfg.supabase_service_role_key)
+        )
+        type(graph.cfg).has_supabase = original_has_supabase
+        _restore_graph_seeded()
+
+
+def test_ask_chatgpt_next_task_skipped_in_strict_mode():
+    """ask_chatgpt_next_task returns immediately when strict seeded queue is active."""
+    original_enabled = graph.cfg.seeded_mission_queue_enabled
+    original_strict = graph.cfg.seeded_mission_queue_strict
+    try:
+        graph.cfg.seeded_mission_queue_enabled = True
+        graph.cfg.seeded_mission_queue_strict = True
+        state = _make_state()
+        out = graph.ask_chatgpt_next_task(state)
+        # State should be unchanged — the node exits early without calling the planner.
+        assert out.stop_reason is None
+        assert out.current_task is None
+    finally:
+        graph.cfg.seeded_mission_queue_enabled = original_enabled
+        graph.cfg.seeded_mission_queue_strict = original_strict
+
+
+def test_ask_chatgpt_next_task_not_skipped_when_strict_disabled():
+    """ask_chatgpt_next_task does not skip due to strict flag when it is False."""
+    original_enabled = graph.cfg.seeded_mission_queue_enabled
+    original_strict = graph.cfg.seeded_mission_queue_strict
+    # Stub the planner so it returns None → no task added → no_more_tasks stop_reason.
+    original_planner = None
+    try:
+        graph.cfg.seeded_mission_queue_enabled = True
+        graph.cfg.seeded_mission_queue_strict = False
+        # Stub get_next_queued_task so queue is empty (planner path is reached)
+        original_get_next = graph.get_next_queued_task
+        graph.get_next_queued_task = lambda: None
+
+        # Stub ChatGPTWorker to avoid real API calls
+        import workers.chatgpt_worker as cw_mod
+        original_cls = cw_mod.ChatGPTWorker
+
+        class _FakePlanner:
+            def ask_for_next_task(self, *a, **k):
+                return None
+
+        cw_mod.ChatGPTWorker = _FakePlanner
+        # Also patch graph's reference
+        original_graph_chatgpt = getattr(graph, "ChatGPTWorker", None)
+        graph.ChatGPTWorker = _FakePlanner
+
+        state = _make_state()
+        out = graph.ask_chatgpt_next_task(state)
+        # Should have tried the planner (got None) and set no_more_tasks
+        assert out.stop_reason == "no_more_tasks"
+    finally:
+        graph.cfg.seeded_mission_queue_enabled = original_enabled
+        graph.cfg.seeded_mission_queue_strict = original_strict
+        graph.get_next_queued_task = original_get_next
+        cw_mod.ChatGPTWorker = original_cls
+        if original_graph_chatgpt is not None:
+            graph.ChatGPTWorker = original_graph_chatgpt
+
+
+# ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
 
@@ -444,6 +569,11 @@ if __name__ == "__main__":
         test_route_seed_queue_with_task_to_choose_worker,
         test_node_is_wired_into_graph,
         test_compile_still_routes_to_chatgpt_via_seed_node,
+        test_strict_mode_sets_stop_reason_when_no_mission,
+        test_non_strict_mode_no_stop_reason_when_no_mission,
+        test_strict_mode_does_not_stop_when_mission_exists,
+        test_ask_chatgpt_next_task_skipped_in_strict_mode,
+        test_ask_chatgpt_next_task_not_skipped_when_strict_disabled,
     ]
     passed = failed = 0
     for t in tests:
