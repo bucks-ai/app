@@ -342,6 +342,9 @@ Copy `.env.example` to `.env` and fill in:
 | `FAILURE_GUARD` | Retry failed tasks and stop the loop on repeated failures (default: true) |
 | `MAX_TASK_RETRIES` | Times a failed task is requeued before giving up (default: 1) |
 | `MAX_CONSECUTIVE_FAILURES` | Consecutive failures that trip the circuit breaker and halt the loop (default: 3) |
+| `WORKER_HEALTH_PROBE` | Check that the chosen worker's CLI binary and credentials are available before each dispatch; halts the loop immediately if the worker cannot start (default: true) |
+| `STALE_RUN_WATCHDOG` | Halt the loop when no task has completed within `MAX_STALE_TASK_MINUTES` of the previous completion, preventing infinite spin during overnight runs (default: true) |
+| `MAX_STALE_TASK_MINUTES` | Minutes of task-completion inactivity before the stale run watchdog trips; 0 disables the watchdog (default: 60) |
 | `CONTEXT_COMPRESSION_MAX_TOKENS` | Soft token ceiling for persisted runner messages before older context is compressed (default: 12000) |
 | `CONTEXT_COMPRESSION_KEEP_RECENT` | Number of newest messages to preserve verbatim during compression (default: 4) |
 

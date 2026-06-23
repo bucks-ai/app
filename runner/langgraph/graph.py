@@ -25,6 +25,8 @@ from tools.task_tools import (
 from tools.failure_guard import evaluate_failure
 from tools.repeated_error_guard import evaluate_error_repetition, evaluate_task_repetition
 from tools.worker_timeout_guard import evaluate_worker_timeout
+from tools.worker_health_probe import probe_worker_health
+from tools.stale_run_watchdog import evaluate_stale_run
 from tools.codex_usage_limit_guard import evaluate_codex_usage_limit
 from tools.cost_budget_guard import evaluate_cost_budget
 from tools.summary_tools import build_run_summary_digest, parse_worker_summary
@@ -596,16 +598,83 @@ def dispatch_worker(state: RunnerState) -> RunnerState:
         log_event("dry_run_skip", {"node": "dispatch_worker", "task_id": state.current_task_id})
         return _persist(state, "dispatch_worker")
 
-    if state.current_worker == "codex":
+    worker_type = state.current_worker or "claude"
+
+    # ── Worker health probe ──────────────────────────────────────────────────
+    if cfg.worker_health_probe_enabled:
+        hp = probe_worker_health(
+            worker_type=worker_type,
+            claude_auth_mode=cfg.claude_auth_mode,
+            has_anthropic=cfg.has_anthropic,
+            has_openai=cfg.has_openai,
+            health_probe_enabled=True,
+        )
+        if not hp["available"]:
+            log_event("worker_health_probe_failed", {
+                "worker": worker_type,
+                "reason": hp["reason"],
+                "task_id": state.current_task_id,
+            }, task_id=state.current_task_id)
+            if not state.stop_reason:
+                state.stop_reason = hp["stop_reason"]
+                log_event("loop_blocked_on_worker_health", {
+                    "worker": worker_type,
+                    "reason": hp["reason"],
+                    "task_id": state.current_task_id,
+                }, task_id=state.current_task_id)
+            state.worker_elapsed_seconds = 0.0
+            state.worker_result = {
+                "worker": worker_type,
+                "mode": "cli",
+                "success": False,
+                "output": None,
+                "error": hp["reason"],
+                "prompt_written": False,
+                "prompt_path": None,
+                "response_path": None,
+                "api_cost": None,
+                "tokens_used": None,
+            }
+            return _persist(state, "dispatch_worker")
+
+    if worker_type == "codex":
         worker = CodexWorker()
     else:
         worker = ClaudeWorker()
 
     _start = time.monotonic()
-    result = worker.run_worker_prompt(prompt, task)
-    state.worker_elapsed_seconds = round(time.monotonic() - _start, 2)
-    state.worker_result = result.model_dump()
-    log_event("worker_finished", {"worker": state.current_worker, "success": result.success, "elapsed_seconds": state.worker_elapsed_seconds, "task_id": state.current_task_id})
+    try:
+        result = worker.run_worker_prompt(prompt, task)
+        state.worker_elapsed_seconds = round(time.monotonic() - _start, 2)
+        state.worker_result = result.model_dump()
+        log_event("worker_finished", {
+            "worker": worker_type,
+            "success": result.success,
+            "elapsed_seconds": state.worker_elapsed_seconds,
+            "task_id": state.current_task_id,
+        })
+    except Exception as exc:
+        elapsed = round(time.monotonic() - _start, 2)
+        state.worker_elapsed_seconds = elapsed
+        err_msg = f"worker dispatch crashed: {type(exc).__name__}: {exc}"
+        state.worker_result = {
+            "worker": worker_type,
+            "mode": "cli",
+            "success": False,
+            "output": None,
+            "error": err_msg,
+            "prompt_written": False,
+            "prompt_path": None,
+            "response_path": None,
+            "api_cost": None,
+            "tokens_used": None,
+        }
+        log_event("worker_dispatch_crash", {
+            "worker": worker_type,
+            "error": err_msg,
+            "elapsed_seconds": elapsed,
+            "task_id": state.current_task_id,
+        }, task_id=state.current_task_id)
     return _persist(state, "dispatch_worker")
 
 
@@ -1571,6 +1640,7 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
         # A success breaks any failure streak and clears the retry signal.
         state.consecutive_failures = 0
         state.retry_pending = False
+        state.last_task_completed_at = datetime.utcnow().isoformat()
     else:
         err = result.get("error") or "worker returned no output"
         state.retry_pending = False
@@ -1739,6 +1809,22 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
             "success": bool(result.get("success")),
             "mission_status": completion.get("status"),
         }, task_id=task_id)
+
+    # ── Stale run watchdog ───────────────────────────────────────────────────
+    if cfg.stale_run_watchdog_enabled:
+        sw = evaluate_stale_run(
+            last_task_completed_at=state.last_task_completed_at,
+            loop_count=state.loop_count,
+            max_stale_task_minutes=cfg.max_stale_task_minutes,
+        )
+        if sw["stale"] and not state.stop_reason:
+            state.stop_reason = sw["stop_reason"]
+            log_event("loop_blocked_on_stale_run", {
+                "task_id": task_id,
+                "stale_minutes": sw["stale_minutes"],
+                "max_stale_task_minutes": cfg.max_stale_task_minutes,
+                "last_task_completed_at": state.last_task_completed_at,
+            }, task_id=task_id)
 
     state.loop_count += 1
     state.current_task = None

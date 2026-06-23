@@ -40,6 +40,9 @@ _DEFAULT_SLACK_EVENTS = frozenset({
     "auto_repair_failed",
     "merge_approval_required",
     "product_eval_failed",
+    "worker_dispatch_crash",
+    "loop_blocked_on_stale_run",
+    "loop_blocked_on_worker_health",
 })
 
 
@@ -322,6 +325,15 @@ class RunnerConfig:
     runner_dry_run: bool = field(
         default_factory=lambda: os.getenv("RUNNER_DRY_RUN", "false").lower() == "true"
     )
+    worker_health_probe_enabled: bool = field(
+        default_factory=lambda: os.getenv("WORKER_HEALTH_PROBE", "true").lower() == "true"
+    )
+    stale_run_watchdog_enabled: bool = field(
+        default_factory=lambda: os.getenv("STALE_RUN_WATCHDOG", "true").lower() == "true"
+    )
+    max_stale_task_minutes: int = field(
+        default_factory=lambda: int(os.getenv("MAX_STALE_TASK_MINUTES", "60"))
+    )
 
     @property
     def has_openai(self) -> bool:
@@ -446,6 +458,9 @@ class RunnerConfig:
             "launch_readiness_scorecard_pass_threshold": self.launch_readiness_scorecard_pass_threshold,
             "fast_engineering_mode_enabled": self.fast_engineering_mode_enabled,
             "runner_dry_run": self.runner_dry_run,
+            "worker_health_probe_enabled": self.worker_health_probe_enabled,
+            "stale_run_watchdog_enabled": self.stale_run_watchdog_enabled,
+            "max_stale_task_minutes": self.max_stale_task_minutes,
         }
 
 

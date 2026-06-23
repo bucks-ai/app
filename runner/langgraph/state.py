@@ -107,3 +107,4 @@ class RunnerState(BaseModel):
     ui_flow_result: Optional[dict] = None          # result dict from ui_flow_validator.run_ui_flow_validation
     product_eval_result: Optional[dict] = None     # result dict from product_eval_harness.run_product_eval_suite
     launch_readiness_result: Optional[dict] = None  # result dict from launch_readiness_scorecard
+    last_task_completed_at: Optional[str] = None    # ISO-8601 UTC timestamp of the last completed task loop
