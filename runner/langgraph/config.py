@@ -120,6 +120,12 @@ class RunnerConfig:
     require_sql_approval: bool = field(
         default_factory=lambda: os.getenv("REQUIRE_SQL_APPROVAL", "false").lower() == "true"
     )
+    sql_environment: str = field(
+        default_factory=lambda: os.getenv("SQL_ENVIRONMENT", "")
+    )
+    sql_approval_policy: str = field(
+        default_factory=lambda: os.getenv("SQL_APPROVAL_POLICY", "require_on_production")
+    )
     resource_gate_enabled: bool = field(
         default_factory=lambda: os.getenv("RESOURCE_GATE", "true").lower() == "true"
     )
@@ -419,6 +425,8 @@ class RunnerConfig:
             "vercel_poll_interval": self.vercel_poll_interval,
             "auto_apply_sql": self.auto_apply_sql,
             "require_sql_approval": self.require_sql_approval,
+            "sql_environment": self.sql_environment,
+            "sql_approval_policy": self.sql_approval_policy,
             "resource_gate_enabled": self.resource_gate_enabled,
             "failure_guard_enabled": self.failure_guard_enabled,
             "max_task_retries": self.max_task_retries,

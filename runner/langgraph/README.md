@@ -304,6 +304,8 @@ Copy `.env.example` to `.env` and fill in:
 | `VERCEL_POLL_TIMEOUT` | Max seconds to poll a deployment before giving up (default: 180) |
 | `VERCEL_POLL_INTERVAL` | Seconds between deployment status reads (default: 5) |
 | `AUTO_APPLY_SQL` | Auto-apply scanned SQL (default: true) — **keep false until SQL parsing is verified** |
+| `SQL_ENVIRONMENT` | Target deployment environment used by the SQL approval gate: `production`, `staging`, `development`, or `preview`. When unset, inferred from `SUPABASE_URL` (URL containing "prod" → production, "stag" → staging, otherwise development). |
+| `SQL_APPROVAL_POLICY` | Controls when SQL approval is required: `auto` (defer to legacy `REQUIRE_SQL_APPROVAL`), `require_on_production` (default — require approval only when `SQL_ENVIRONMENT=production`), `require_on_warning` (require approval when the SQL scan has warnings or blocked terms), `always_require` (require approval in all environments). |
 | `ACCEPTANCE_CRITERIA_GATE_ENABLED` | Validate that tasks include concrete acceptance criteria before executing the worker (default: true) |
 | `ACCEPTANCE_CRITERIA_STRICT_MODE` | Block task execution when criteria are missing; false (default) logs a warning but proceeds |
 | `CLAUDE_SUBAGENT_PACK_ENABLED` | Inject specialised subagent context into Claude worker prompts based on task type/title (default: true) |
@@ -527,8 +529,10 @@ Before any SQL execution:
 1. SQL is scanned by `sql_guard.py`.
 2. Blocked terms (`DROP TABLE`, `TRUNCATE`, `DELETE FROM` without WHERE, etc.) halt execution.
 3. Warnings are logged for safe operations (`DROP POLICY IF EXISTS`, `ALTER TABLE`, etc.).
-4. If scan passes and `AUTO_APPLY_SQL=true`, SQL is applied via Supabase client RPC.
-5. If Supabase is not configured, SQL is written to a log with manual execution instructions.
+4. The **SQL environment gate** (`sql_environment_gate.py`) evaluates whether human approval is required based on `SQL_APPROVAL_POLICY` and the effective `SQL_ENVIRONMENT` (explicit or inferred from `SUPABASE_URL`). The legacy `REQUIRE_SQL_APPROVAL` flag is honoured when `SQL_APPROVAL_POLICY=auto`.
+5. If approval is required, the SQL is written to `outbox/<task_id>_sql_approval.sql` and the loop waits for a human to create `inbox/<task_id>_sql_approved.txt`.
+6. If scan passes and `AUTO_APPLY_SQL=true`, SQL is applied via Supabase client RPC.
+7. If Supabase is not configured, SQL is written to a log with manual execution instructions.
 
 ---
 

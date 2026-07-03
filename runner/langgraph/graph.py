@@ -49,6 +49,7 @@ from tools.git_tools import (
     current_branch,
 )
 from tools.sql_guard import scan_sql_text
+from tools.sql_environment_gate import evaluate_sql_approval_policy, infer_environment
 from tools.supabase_tools import apply_sql_file
 from tools.vercel_tools import trigger_deploy
 from tools.github_tools import sync_open_issues_to_tasks
@@ -1243,9 +1244,34 @@ def apply_sql_if_needed(state: RunnerState) -> RunnerState:
     if not sql_required or not sql_file:
         return state
 
-    # SQL approval gate: when REQUIRE_SQL_APPROVAL=true, write SQL to outbox for
-    # human review and only proceed once the human writes an approval file to inbox.
-    if cfg.require_sql_approval:
+    # SQL environment-aware approval gate.
+    # Determine effective environment (explicit config or inferred from Supabase URL).
+    effective_env = cfg.sql_environment or infer_environment(cfg.supabase_url)
+    # Pre-scan so the policy gate can inspect warnings/blocked terms when needed.
+    try:
+        pre_scan = scan_sql_text(Path(sql_file).read_text()) if cfg.sql_approval_policy == "require_on_warning" else {}
+    except FileNotFoundError:
+        pre_scan = {}
+    gate = evaluate_sql_approval_policy(
+        scan_result=pre_scan,
+        sql_environment=effective_env,
+        policy=cfg.sql_approval_policy,
+    )
+    log_event("sql_environment_gate_evaluated", {
+        "policy": cfg.sql_approval_policy,
+        "environment": effective_env,
+        "approval_required": gate["approval_required"],
+        "reason": gate["reason"],
+        "task_id": state.current_task_id,
+    }, task_id=state.current_task_id)
+
+    # Approval is required when either the environment gate demands it OR the legacy
+    # REQUIRE_SQL_APPROVAL flag is set and the gate defers to it (policy=auto).
+    needs_approval = gate["approval_required"] or (
+        cfg.sql_approval_policy == "auto" and cfg.require_sql_approval
+    )
+
+    if needs_approval:
         task_id = state.current_task_id or "unknown"
         outbox_sql = _RUNNER_DIR / "outbox" / f"{task_id}_sql_approval.sql"
         inbox_approved = _RUNNER_DIR / "inbox" / f"{task_id}_sql_approved.txt"
