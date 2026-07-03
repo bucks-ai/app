@@ -359,6 +359,9 @@ Copy `.env.example` to `.env` and fill in:
 | `LIVE_BATCH_VALIDATION_REPORT` | Emit a final structured report (task outcomes, session metrics, per-task digest) to outbox/ when the loop stops; logged as `live_batch_validation_complete` and forwarded to Slack when enabled (default: true) |
 | `CONTEXT_COMPRESSION_MAX_TOKENS` | Soft token ceiling for persisted runner messages before older context is compressed (default: 12000) |
 | `CONTEXT_COMPRESSION_KEEP_RECENT` | Number of newest messages to preserve verbatim during compression (default: 4) |
+| `CLAUDE_SUBSCRIPTION_COOLDOWN` | When Claude in subscription mode returns a rate-limit/cooldown response, automatically wait until the cooldown expires and resume rather than failing the task (default: true) |
+| `CLAUDE_SUBSCRIPTION_COOLDOWN_WAIT_S` | Default cooldown wait in seconds when the reset time cannot be parsed from the Claude response (default: 3600) |
+| `CLAUDE_SUBSCRIPTION_COOLDOWN_MAX_WAITS` | Maximum number of auto-resume cooldown waits per session before halting the loop; 0 disables the limit (default: 3) |
 
 ---
 

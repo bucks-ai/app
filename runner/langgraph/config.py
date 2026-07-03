@@ -45,6 +45,9 @@ _DEFAULT_SLACK_EVENTS = frozenset({
     "loop_blocked_on_worker_health",
     "stale_run_warning",
     "live_batch_validation_complete",
+    "claude_subscription_cooldown_detected",
+    "claude_subscription_cooldown_resumed",
+    "loop_blocked_on_claude_subscription_cooldown",
 })
 
 
@@ -369,6 +372,15 @@ class RunnerConfig:
     live_batch_validation_report_enabled: bool = field(
         default_factory=lambda: os.getenv("LIVE_BATCH_VALIDATION_REPORT", "true").lower() == "true"
     )
+    claude_subscription_cooldown_enabled: bool = field(
+        default_factory=lambda: os.getenv("CLAUDE_SUBSCRIPTION_COOLDOWN", "true").lower() == "true"
+    )
+    claude_subscription_cooldown_wait_s: int = field(
+        default_factory=lambda: int(os.getenv("CLAUDE_SUBSCRIPTION_COOLDOWN_WAIT_S", "3600"))
+    )
+    claude_subscription_cooldown_max_waits: int = field(
+        default_factory=lambda: int(os.getenv("CLAUDE_SUBSCRIPTION_COOLDOWN_MAX_WAITS", "3"))
+    )
 
     @property
     def has_openai(self) -> bool:
@@ -507,6 +519,9 @@ class RunnerConfig:
             "failure_retry_backoff_multiplier": self.failure_retry_backoff_multiplier,
             "failure_retry_backoff_max_s": self.failure_retry_backoff_max_s,
             "live_batch_validation_report_enabled": self.live_batch_validation_report_enabled,
+            "claude_subscription_cooldown_enabled": self.claude_subscription_cooldown_enabled,
+            "claude_subscription_cooldown_wait_s": self.claude_subscription_cooldown_wait_s,
+            "claude_subscription_cooldown_max_waits": self.claude_subscription_cooldown_max_waits,
         }
 
 

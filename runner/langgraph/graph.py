@@ -29,6 +29,7 @@ from tools.worker_timeout_guard import evaluate_worker_timeout
 from tools.worker_health_probe import probe_worker_health
 from tools.stale_run_watchdog import evaluate_stale_run
 from tools.codex_usage_limit_guard import evaluate_codex_usage_limit
+from tools.claude_subscription_cooldown import evaluate_subscription_cooldown
 from tools.cost_budget_guard import evaluate_cost_budget
 from tools.summary_tools import build_run_summary_digest, parse_worker_summary
 from tools.context_compression import compress_messages
@@ -1749,70 +1750,113 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
                     "max_codex_usage_limit_errors": cfg.max_codex_usage_limit_errors,
                 }, task_id=task_id)
 
-        if cfg.failure_guard_enabled:
-            decision = evaluate_failure(
-                task,
-                state.consecutive_failures,
-                max_task_retries=cfg.max_task_retries,
-                max_consecutive_failures=cfg.max_consecutive_failures,
+        # ── Claude subscription cooldown guard ───────────────────────────────
+        # Detect Claude.ai subscription rate-limit responses and schedule
+        # an auto-resume instead of counting this as a task failure.  When
+        # detected the task is requeued with a future retry_not_before
+        # timestamp and the failure guard is bypassed for this iteration.
+        _cooldown_detected = False
+        if cfg.claude_subscription_cooldown_enabled:
+            csc = evaluate_subscription_cooldown(
+                result.get("output"),
+                err,
+                result.get("worker"),
+                cfg.claude_auth_mode,
+                enabled=True,
+                default_wait_s=cfg.claude_subscription_cooldown_wait_s,
+                cooldown_count=state.claude_subscription_cooldown_count,
+                max_cooldown_waits=cfg.claude_subscription_cooldown_max_waits,
             )
-            state.consecutive_failures = decision["consecutive_failures"]
+            state.claude_subscription_cooldown_count = csc["cooldown_count"]
+            if csc["detected"]:
+                _cooldown_detected = True
+                state.claude_subscription_cooldown_until = csc["resume_at_iso"]
+                log_event("claude_subscription_cooldown_detected", {
+                    "task_id": task_id,
+                    "wait_seconds": csc["wait_seconds"],
+                    "resume_at": csc["resume_at_iso"],
+                    "cooldown_count": csc["cooldown_count"],
+                    "max_cooldown_waits": cfg.claude_subscription_cooldown_max_waits,
+                }, task_id=task_id)
+                if csc["blocked"] and not state.stop_reason:
+                    state.stop_reason = csc["stop_reason"]
+                    log_event("loop_blocked_on_claude_subscription_cooldown", {
+                        "task_id": task_id,
+                        "cooldown_count": csc["cooldown_count"],
+                        "max_cooldown_waits": cfg.claude_subscription_cooldown_max_waits,
+                    }, task_id=task_id)
+                else:
+                    # Requeue the task for when the cooldown expires (no retry
+                    # count increment — this is not a task failure).
+                    current_retry_count = task.get("retry_count", 0)
+                    requeue_task(task_id, current_retry_count, csc["resume_at_iso"])
+                    state.retry_pending = True
 
-            if decision["action"] == "retry":
-                # Transient failure: requeue the task for another attempt.
-                # Under degraded conditions (timeout, health-probe failure,
-                # sustained consecutive failures) apply exponential backoff so
-                # the runner doesn't immediately hammer the same broken wall.
-                retry_not_before = None
-                degraded = (
-                    cfg.failure_retry_backoff_enabled
-                    and is_degraded_failure(
-                        err,
-                        state.worker_elapsed_seconds,
-                        cfg.worker_timeout_threshold,
-                        state.consecutive_failures,
-                    )
+        if not _cooldown_detected:
+            if cfg.failure_guard_enabled:
+                decision = evaluate_failure(
+                    task,
+                    state.consecutive_failures,
+                    max_task_retries=cfg.max_task_retries,
+                    max_consecutive_failures=cfg.max_consecutive_failures,
                 )
-                if degraded:
-                    retry_not_before = compute_retry_not_before(
-                        decision["retry_count"],
-                        cfg.failure_retry_backoff_base_s,
-                        cfg.failure_retry_backoff_multiplier,
-                        cfg.failure_retry_backoff_max_s,
-                    )
-                requeue_task(task_id, decision["retry_count"], retry_not_before)
-                state.retry_pending = True
-                log_event("task_retry_scheduled", {
-                    "task_id": task_id,
-                    "error": err,
-                    "attempt": decision["retry_count"],
-                    "max_retries": cfg.max_task_retries,
-                    "degraded": degraded,
-                    "retry_not_before": retry_not_before,
-                }, task_id=task_id)
-            else:
-                # Retries exhausted (or disabled): record a permanent failure.
-                mark_task_failed(task_id, err)
-                log_event("error", {
-                    "task_id": task_id,
-                    "error": err,
-                    "retries_exhausted": cfg.max_task_retries > 0,
-                })
+                state.consecutive_failures = decision["consecutive_failures"]
 
-            # Circuit breaker: too many back-to-back failures halts the loop so the
-            # runner stops piling tasks onto a run that's clearly going sideways.
-            # Independent of the retry decision — the requeued task is preserved
-            # for the next run while this run stops cleanly.
-            if decision["circuit_open"]:
-                state.stop_reason = decision["stop_reason"]
-                log_event("loop_blocked_on_failures", {
-                    "task_id": task_id,
-                    "consecutive_failures": state.consecutive_failures,
-                    "max_consecutive_failures": cfg.max_consecutive_failures,
-                }, task_id=task_id)
-        else:
-            mark_task_failed(task_id, err)
-            log_event("error", {"task_id": task_id, "error": err})
+                if decision["action"] == "retry":
+                    # Transient failure: requeue the task for another attempt.
+                    # Under degraded conditions (timeout, health-probe failure,
+                    # sustained consecutive failures) apply exponential backoff so
+                    # the runner doesn't immediately hammer the same broken wall.
+                    retry_not_before = None
+                    degraded = (
+                        cfg.failure_retry_backoff_enabled
+                        and is_degraded_failure(
+                            err,
+                            state.worker_elapsed_seconds,
+                            cfg.worker_timeout_threshold,
+                            state.consecutive_failures,
+                        )
+                    )
+                    if degraded:
+                        retry_not_before = compute_retry_not_before(
+                            decision["retry_count"],
+                            cfg.failure_retry_backoff_base_s,
+                            cfg.failure_retry_backoff_multiplier,
+                            cfg.failure_retry_backoff_max_s,
+                        )
+                    requeue_task(task_id, decision["retry_count"], retry_not_before)
+                    state.retry_pending = True
+                    log_event("task_retry_scheduled", {
+                        "task_id": task_id,
+                        "error": err,
+                        "attempt": decision["retry_count"],
+                        "max_retries": cfg.max_task_retries,
+                        "degraded": degraded,
+                        "retry_not_before": retry_not_before,
+                    }, task_id=task_id)
+                else:
+                    # Retries exhausted (or disabled): record a permanent failure.
+                    mark_task_failed(task_id, err)
+                    log_event("error", {
+                        "task_id": task_id,
+                        "error": err,
+                        "retries_exhausted": cfg.max_task_retries > 0,
+                    })
+
+                # Circuit breaker: too many back-to-back failures halts the loop so the
+                # runner stops piling tasks onto a run that's clearly going sideways.
+                # Independent of the retry decision — the requeued task is preserved
+                # for the next run while this run stops cleanly.
+                if decision["circuit_open"]:
+                    state.stop_reason = decision["stop_reason"]
+                    log_event("loop_blocked_on_failures", {
+                        "task_id": task_id,
+                        "consecutive_failures": state.consecutive_failures,
+                        "max_consecutive_failures": cfg.max_consecutive_failures,
+                    }, task_id=task_id)
+            else:
+                mark_task_failed(task_id, err)
+                log_event("error", {"task_id": task_id, "error": err})
 
     # ── Cost & budget guard ──────────────────────────────────────────────────
     if cfg.cost_budget_guard_enabled:
@@ -2089,6 +2133,29 @@ def generate_live_batch_validation_report(state: RunnerState) -> RunnerState:
 
 
 def decide_continue_or_stop(state: RunnerState) -> RunnerState:
+    # ── Claude subscription cooldown auto-resume ─────────────────────────────
+    # When the Claude subscription rate-limiter fired this iteration, sleep
+    # until the cooldown expires before the next loop iteration so that
+    # load_next_task finds the requeued task ready.  This check runs before the
+    # stop_reason gate so a cooldown doesn't inadvertently stop the loop.
+    cooldown_until = state.claude_subscription_cooldown_until
+    if cooldown_until and not state.stop_reason:
+        try:
+            resume_dt = datetime.fromisoformat(cooldown_until)
+            remaining = (resume_dt - datetime.utcnow()).total_seconds()
+            if remaining > 0:
+                log_event("claude_subscription_cooldown_waiting", {
+                    "resume_at": cooldown_until,
+                    "remaining_seconds": round(remaining, 1),
+                })
+                time.sleep(remaining)
+        except (ValueError, TypeError):
+            pass
+        state.claude_subscription_cooldown_until = None
+        log_event("claude_subscription_cooldown_resumed", {
+            "cooldown_count": state.claude_subscription_cooldown_count,
+        })
+
     if state.stop_reason:
         state.status = "stopped"
         log_event("loop_stopped", {"reason": state.stop_reason})
