@@ -60,3 +60,4 @@ runner/langgraph/inbox/*
 runner/langgraph/.runtime/
 runner/langgraph/state.json
 runner/langgraph/tasks.json
+.env.local
