@@ -1,0 +1,232 @@
+# bucks.ai — Master Analysis & Handoff Document
+
+**Date:** 2026-07-05
+**Purpose:** Complete, self-contained analysis of bucks.ai. Written so a fresh AI chat (or collaborator) can pick up with zero prior context. Covers: company concept, goals, history, verified codebase state, vulnerabilities, gap analysis, the M0–M9 mission plan, operating model, immediate next actions, and long-term scaling bottlenecks.
+**Repo:** https://github.com/bucks-ai/app (org: bucks-ai; repo was private, made public July 2026)
+**Local folder:** `~/bucks-ai` (WSL Ubuntu on founder's machine, `/home/arnav/bucks-ai`)
+**Founder:** Arnav (arnav144193@gmail.com) + one co-founder. Young founders; elite AI-assisted production speed, self-identified weak spot is business-side execution and personal work ethic (by design — the product exists to replace founder grunt work).
+
+**Verification status:** This analysis is based on (a) the complete repo file tree (~400 files), (b) full reads of: `package.json`, `README.md`, `PROJECT_STATE.md`, `AGENTS.md`, `DECISIONS.md`, `TASKS.md`, `next.config.ts`, `middleware.ts`, `scripts/check.sh`, `.env.example` (both), `src/app/api/generate-blueprint/route.ts`, `src/app/api/github/create-repo/route.ts`, `runner/langgraph/config.py`, `main.py`, `state.py`, `tools/claude_subscription_cooldown.py`, `profiles/overnight.env`, `requirements.txt`, and (c) the founder's ChatGPT session logs (5 uploaded files). **Not read line-by-line:** `graph.py` (100KB — semantics inferred from state.py, config flags, tool docstrings, and 49 test files), `src/lib/research.ts` (55KB), `src/lib/agents/registry.ts` (28KB), `AI_CHANGELOG.md`, runner `README.md` (51KB). Claims about unread files are marked (inferred).
+
+---
+
+## 1. THE COMPANY
+
+### 1.1 One-liner
+**bucks.ai is a self-driving startup operator for AI/software businesses.** A founder gives it an idea, goal, budget, and boundaries. It selects the stack, requests missing permissions, sets up tools, builds and deploys the MVP, launches outreach, manages the CRM, tracks traction, and continuously improves the business until it reaches its target — escalating only for legal, financial, identity, contract, or live-human actions.
+
+### 1.2 Core ideas (founder's own words, from notes)
+- "This whole company is 99% AI; don't be afraid to give AI power."
+- "Restricting AI is restricting AI. Safeguards and restrictions should be bare minimum."
+- "If AI can do it instead of man, AI should do it. If a task can be automated, it should be automated."
+- "Target version FINAL, not v1→v2→v3. v1 → v-final. Takes longer per task but completeness is guaranteed."
+- Refined philosophy (post-ChatGPT-discussion): **"Default execute; the AI acts until it hits a wall you defined."** Restrictions are enforced EXTERNALLY (capped API keys, sandboxed repos, scoped tokens, disposable projects) rather than internally (constant approval prompts). This "external containment" model is the product's control philosophy and is architecturally correct.
+- Human-only actions: signing contracts, accepting ToS, identity/payment verification, entity filing, live client calls. Everything else digital should be automated.
+
+### 1.3 Goals & timeline
+1. **Get into YC** — target Winter batch, application deadline ~Nov 2026 (≈4 months from now).
+2. **$300k/yr revenue business by next year** (path: ~$25k MRR; realistic YC-application bar: a few paying clients + $10–50k traction + proof the system works).
+3. **Stanford admission** (pillared on 1 and 2).
+- YC assessment (from ChatGPT sessions, still accurate): as idea only ~1–3% odds; with working demo 5–8%; with one real launched revenue business 10–15%; with multiple repeatable launches 20%+ interview odds. **The entire strategy compresses to: produce proof the system launches real businesses.**
+
+### 1.4 Business model (planned, not yet implemented)
+- Phase 1: Paid launch sprints ($1k–$2.5k) — system + founders launch a customer's AI micro-SaaS.
+- Phase 2: Monthly autonomous operator subscription ($99–$799/mo tiers).
+- Phase 3: Usage-based credits (agent hours, leads, deploys).
+- Phase 4 (later, careful): success fee / revenue share.
+- First ICP: **AI automation agency owners + serious solo/indie founders** building AI software products (18–35, many ideas, some money, hate repetitive execution). Explicitly NOT first: nontechnical idea people, broke students, enterprises, regulated industries.
+- First wedge positioning: "Autonomous launch operator for AI micro-SaaS founders." Acquisition = public proof (build-in-public demos of the system launching businesses), cold DMs to founders posting "building my SaaS," founder communities, short-form video demos, AI-agency partnerships.
+
+### 1.5 The meta-strategy (critical to understand)
+Two-layer system:
+- **bucks.ai (the app):** Next.js product — intake → blueprint → tool permissions → repo → deploy → execution command center. This is what customers will use.
+- **LangGraph runner (`runner/langgraph/`):** Python autonomous dev loop — planner (ChatGPT) + workers (Claude Code, Codex CLIs) + gates. **Built to replace the founder in development**: it runs missions of 25–100 tasks, writing code, checking, merging, deploying. It has been building bucks.ai itself.
+- **Endgame:** the runner stops being a dev-side tool and becomes bucks.ai's production execution engine (see M4). Then bucks.ai uses the same engine both to improve itself and to build customer businesses in per-business sandboxes.
+
+---
+
+## 2. HISTORY (condensed from ChatGPT session logs — the founder's uploaded chat files)
+
+1. **Idea genesis:** Founder wanted "AI builds my whole company while I barely work." ChatGPT reframed to "AI execution layer for founders" — turning founder intent into executed work (product, outreach, CRM, iteration), with permission levels. Scored it founder's best idea (fit 9/10, difficulty 9-10/10, vaporware risk 10/10 if unfocused).
+2. **Refinements agreed:** hyper-focus on 100% software/AI businesses only; dynamic stack selection from a preferred ~15-tool registry (GitHub, Vercel, Supabase, Stripe, PostHog, Gmail/Workspace, Airtable/Notion, Resend, OpenAI, Anthropic, Firecrawl, Apollo/Clay, Sentry, Cloudflare, Clerk) with a broader top-30 tier and ask-once for external tools; Permission Acquisition Agent + capability memory ("autonomy ramp": each run needs fewer approvals); OAuth-first, credentials in an encrypted vault, never raw passwords in chat; AI sets up accounts where APIs allow, pauses for ToS/identity/payment (statuses: fully completed / awaiting human legal step / prepared / blocked / rejected by policy).
+3. **Agent architecture agreed:** 11 "brains" (Command Center, Business, Product, Engineering, Growth, Marketing, Sales, Analytics, Ops, Finance, Risk) that spawn specialist micro-agents from templates per business type (B2B → outreach agents; B2C → content/ads agents). Marketing Brain decides GTM motion (B2B=outbound, B2C=content/ads) — ads only with strict external budget caps. Quality Bar System: launch blocked until product/marketing/sales/analytics/business scores pass thresholds.
+4. **Build method evolution:** manual prompt-passing (ChatGPT plans → founder pastes to Claude Code/Codex) → founder asked for automation → LangGraph chosen as core orchestrator (vs CrewAI = optional role layer; Microsoft agent tooling rejected). bucks.ai owns state (Supabase); LangGraph is the engine; workers are Claude Code + Codex CLIs; ChatGPT is planner.
+5. **The runner then built itself** through ~28 "LangGraph Complete" prompts (mission autonomy core, quality/review gates, browser validation, connectors, scale validation) — nearly all landed (verified in code, §4).
+6. **Cost pivot:** API costs too high (~$10 Claude burn) → switched Codex to subscription usage limits, then wanted Claude routed through Pro subscription too, with **auto-resume after cooldown** ("once my limit resets it starts up again and continues on its own"). Cooldown guard was built (see §4.4 — works but has real-world bugs).
+7. **Where ChatGPT left off:** a 14-phase "empower LangGraph with every credential/integration it will ever need" plan (secrets normalization → SQL policy → Supabase → GitHub/Vercel → Slack → models → Playwright → PostHog/Sentry → Stripe → email/CRM → lead APIs → storage → MCP → enterprise infra). Founder stopped at Phase 8 (PostHog) when ChatGPT limits hit. **This analysis's verdict: stop that plan at Phase 8; phases 9–14 front-load power nothing uses yet (see §6).**
+
+---
+
+## 3. CURRENT STATE — THE APP (`src/`, verified)
+
+- **Stack:** Next.js 16 (App Router, `src/` dir), TypeScript strict, Tailwind v4, Supabase (auth + DB via `@supabase/ssr`), OpenAI SDK, posthog-js. Deployed on Vercel. ESLint 9 flat config. No test framework configured for the app (playwright is in devDependencies but NO playwright.config or test specs exist — and it's `playwright`, not `@playwright/test`).
+- **Working features (per PROJECT_STATE.md + route inventory):** landing page (10 components); `/intake` launch-sequence wizard; AI blueprint generation (`/api/generate-blueprint`, GPT-4o, JSON mode); Supabase auth + saved businesses; `/tools` Tool Permission Setup Queue; GitHub repo creation (`/api/github/create-repo` — proper auth/ownership/permission gating, sanitized names, starter files, activity logging); Next.js scaffold prep; Vercel project creation + deploy status; Execution Status API + Execution Command Center (tabbed business workspace: Overview/Actions/Build/Deploy/Tools/Activity/Settings); dashboard re-entry command cards; Operating Team UI for a 21-agent registry + agent run history; research mode (segments/competitors/monetization/risks/budgets/distribution/evidence/hypotheses APIs); customer validation (personas/leads/hypotheses/feedback APIs).
+- **Design system:** #080808 bg, #4F46E5 accent, amber=human-required, red=blocked, minimal green, no emoji, "operator console" aesthetic.
+- **Data layer:** `src/lib/projects.ts`, `supabase/{admin,client,server,env}.ts`, per-domain libs (`research.ts` 55KB, `execution/status.ts` 34KB, `agents/{registry,runs,status}.ts` ~72KB combined) — (inferred: substantial mock/registry logic lives in these).
+- **Agent-facing repo protocol:** AGENTS.md (canonical rules: feature branches only, `./scripts/check.sh` before commit, structured end-of-task summary format, secrets by name only), CLAUDE.md, PROJECT_STATE.md, TASKS.md, DECISIONS.md (8 ADRs), AI_CHANGELOG.md, 20+ HANDOFF_*.md files at root.
+- **Scripts:** `check.sh` (npm install + lint + build — note: not `npm ci`, no typecheck step, no pytest), `finish-feature.sh`, `merge-feature.sh`, `kill-next.sh`, `status-all.sh`.
+- **NOT in the app yet:** Stripe/payments, email sending, real CRM backend, waitlist capture, streaming blueprint output, Sentry, real tests, CI.
+
+## 4. CURRENT STATE — THE RUNNER (`runner/langgraph/`, verified)
+
+### 4.1 Architecture
+- CLI (`main.py`): `setup` (env report + degraded-mode listing), `status`, `next-task`, `run-once`, `run-loop`, `soak` (100-task simulated harness with failure/timeout injection), `dry-run` (full graph traversal, no side effects), `sync-github-issues` (imports open issues → task queue), `scan-sql`, `logs`, `reset-state`.
+- State: pydantic `RunnerState` (state.py) — task, worker result, gate statuses (acceptance criteria / DoD / code review / high-risk review / merge approval), deploy result, SQL scan/approval, cooldown timestamps, cost, attempt counts, error history, mission fields.
+- Task queue: local `tasks.json` (+ GitHub issue sync). Human interaction: `outbox/` (requests) + `inbox/` (approval files). Runtime in `.runtime/` (gitignored).
+- Workers (`workers/`): claude_worker (CLI, api_key or subscription mode), codex_worker (subscription usage limits), chatgpt_worker (planner), base_worker.
+- Graph (`graph.py`, 100KB — inferred from tests/flags): plan → dispatch worker → check → gates (acceptance, DoD, review, high-risk review) → SQL gate → merge (risk-based approval) → deploy + poll → validate → update logs/state → decide continue/stop.
+
+### 4.2 The 48 tools (all verified present, flag-gated in config.py)
+Mission: mission_compiler, seeded_mission_queue, task_quality_guard (planner gate v2 + scope guard), task_tools. Quality gates: acceptance_criteria_gate, definition_of_done, independent_code_review, high_risk_claude_review (Haiku reviewer), business_output_rubrics, launch_readiness_scorecard, product_eval_harness. Repair/escalation: auto_repair_loop, codex_to_claude_escalation, failure_guard, failure_retry_backoff, repeated_error_guard. Safety: claude_hooks_safety_pack, claude_subagent_pack, sql_guard, sql_environment_gate (dev/staging/prod policy), risk_based_merge_approval, rollback_revert_policy, strategic_decision_gate (pause every N tasks), resource_gate (credential requests by name). Limits: cost_budget_guard, codex_usage_limit_guard, claude_subscription_cooldown, worker_timeout_guard, worker_health_probe, stale_run_watchdog, context_compression. Integrations: git_tools, github_tools, vercel_tools (deploy + poll), supabase_tools (THIN — 2.5KB), slack_tools (webhook, curated event set), mcp_connector_registry. Validation: playwright_harness, ui_flow_validator, live_batch_validation_report, soak_harness. Misc: model_routing_policy, fast_engineering_mode, http_retry, log_tools, shell_tools, summary_tools.
+- 49 test files; AGENTS.md mandates pytest green before commit. Validation docs exist (two-worker smoke, five-task batch, final validation batch, overnight profile).
+
+### 4.3 Key defaults (config.py)
+MAX_LOOP_TASKS=10 (overnight profile: 50 / 480min), AUTO_MERGE=true, AUTO_DEPLOY=true, BLOCK_ON_DEPLOY_FAILURE=true, AUTO_APPLY_SQL=true with `require_on_production` policy, MERGE_APPROVAL_POLICY=require_approval_on_high (overnight: **auto**), gates on but non-strict (warn-don't-block), E2E_ENABLED=**false**, UI_FLOW_VALIDATION=**false**, PRODUCT_EVAL=**false**, cost guard on but MAX_SESSION_COST_DOLLARS=0.0 (disabled; overnight: $25), CLAUDE_AUTH_MODE=api_key.
+
+### 4.4 Cooldown auto-resume (founder's active request) — built, three real-world bugs
+Works: detects cooldown text from Claude subscription mode, computes resume time, requeues task, waits, resumes; Slack events wired (`cooldown_detected/resumed/blocked`). Bugs:
+1. Parser handles only RELATIVE durations ("try again in 2 hours"); Claude Code emits ABSOLUTE times ("Your limit will reset at 6pm") → falls back to 1h default wait.
+2. `MAX_WAITS=3` default: with 1h fallback waits and ~5h Pro reset windows → wait 1h, still limited (count 2), wait 1h (count 3) → **halts before the limit resets**. Fix: absolute-time parsing + `CLAUDE_SUBSCRIPTION_COOLDOWN_MAX_WAITS=0` (unlimited; code supports ≤0).
+3. Cooldown waits consume `MAX_RUNTIME_MINUTES` wall clock; no subscription overnight profile exists (overnight.env sets api_key mode).
+
+---
+
+## 5. VULNERABILITIES & RISKS
+
+### Security (app)
+- **`/api/generate-blueprint` is UNAUTHENTICATED** — public repo + deployed app = anyone can burn OpenAI credits. Highest-priority fix.
+- AI output is cast, not validated: `JSON.parse(rawContent) as BusinessBlueprint`. Malformed model output flows into UI/DB. Need zod parsing (or OpenAI structured outputs json_schema strict mode).
+- No rate limiting anywhere. No startup env validation. `gpt-4o` hardcoded.
+- Repo is now PUBLIC: run gitleaks/trufflehog over full history; enable GitHub secret scanning + push protection. HANDOFF/changelog files are classic accidental-secret locations. Also `.env.local` holds all production secrets on one machine — no vault, no rotation.
+- RLS on Supabase tables: unverified — must audit (app uses service-role admin client in `supabase/admin.ts`; confirm server-only usage).
+
+### Infrastructure (the big one)
+- **ZERO external CI.** No `.github/workflows/`. Every gate runs INSIDE the runner; `check.sh` runs on the founder's machine. With overnight `MERGE_APPROVAL_POLICY=auto` + AUTO_MERGE + AUTO_DEPLOY, one bad merge to main poisons the baseline for every subsequent autonomous task — the highest compounding risk in the whole system.
+- `check.sh` uses `npm install` (not `npm ci`), no `tsc --noEmit`, never runs pytest. AGENTS.md invokes "hooks exist for a reason" but no hooks are committed.
+- No DATABASE_URL/DIRECT_DATABASE_URL in runner config; supabase_tools thin → runner can't truly inspect schema/apply/rollback migrations; SQL flows through file-approval only, schema state isn't versioned in-repo.
+- Cost guard is effectively blind (no real token accounting from worker CLIs; estimates default 0).
+- Megafiles: graph.py 100KB, research.ts 55KB, execution/status.ts 34KB — worst for the very agents editing them (context cost, merge conflicts).
+
+### Strategic
+- **Proof gap:** zero customers, zero launched businesses, ~4 months to YC deadline. Every week of runner-empowerment is a week not producing the only evidence that matters.
+- "v1 → v-final" philosophy vs reality: long-horizon autonomy compounds errors; the founder's own runner design (batch ramps 5→10→25→50, strategic gate every 5) already concedes this. Plans past the first launched business WILL be revised by contact with users — build M5+ expecting revision.
+- Subscription-mode dependence: overnight throughput capped by Pro limits by design; auto-resume is a budget hack, not architecture. For true long runs: capped API key (founder's own external-containment model).
+- Single founder-machine dependency: runner runs on Arnav's WSL box; no remote/VPS execution; laptop closed = company stops.
+- Compliance for future outreach: CAN-SPAM (identity, postal address, opt-out, honored unsubscribes), no impersonation; ads only with hard external budget caps. Never bypass CAPTCHAs/ToS/identity checks — gets accounts banned and domains burned (and no legitimate AI assistant will help with bypasses).
+
+---
+
+## 6. GAP ANALYSIS — RUNNER TOOLS STILL MISSING (delta only; ranked)
+
+**Tier 1 (blockers for trustworthy long runs):**
+1. Cooldown fixes (absolute-time parsing; MAX_WAITS=0 profile; exclude cooldown waits from runtime cap; `profiles/overnight-subscription.env`).
+2. External CI gate: GitHub Actions (app: npm ci+lint+tsc+build; runner: pytest; path-filtered) + branch protection; runner merges via PR/checks API.
+3. Real DB tooling: DATABASE_URL/DIRECT_DATABASE_URL config, `db_tools.py` (schema inspect, migration apply/rollback respecting sql_environment_gate, RLS listing), versioned `supabase/migrations/`.
+4. Real cost/token accounting: parse actual usage from Claude Code/Codex JSON output → feed existing cost guard.
+
+**Tier 2 (the two unbuilt items from the 28-prompt list):**
+5. **Learning/experiment memory (#21)** — biggest gap; nothing compounds across runs. Supabase `runner_task_outcomes` + `runner_lessons`; write on task completion; planner reads top-K lessons before generating tasks. Start keyword-match, embeddings later.
+6. **Analytics reader layer (#20)** — the improvement loop is blind. `posthog_tools.py` (funnels/drop-offs), `sentry_tools.py` (new issues since deploy), vercel runtime logs.
+
+**Tier 3 (expansion, just-in-time):**
+7. Web research tool (Tavily or Firecrawl wrapper) — planner currently can't research markets/docs.
+8. Slack interactive approvals (bot token + buttons → writes inbox approval files) — removes the founder-as-2am-bottleneck; multiplies practical autonomy more than any new gate.
+9. Artifact/evidence storage (screenshots, reports → Supabase Storage, linked in Slack) — needed for public proof corpus.
+10. Parallel workers via git worktrees (only AFTER CI exists).
+11. Runner→app reporting into the existing `agent_runs` tables (first step of M4).
+12. Secrets broker (Infisical/Doppler) — at M8, when per-business credentials exist.
+**Anti-recommendations:** don't build Stripe/email/CRM/ads as RUNNER tools (they're product features, built as missions); skip ad platforms entirely until a launched business has organic traction; skip old plan Phases 9–14 as prerequisites.
+
+---
+
+## 7. THE MISSION PLAN — M0→M9 (feed to the runner mission-by-mission)
+
+Operating rule: **seed one mission → runner executes in overnight batches (strategic gate every 5 tasks) → verify done-when criteria → founder reviews (~1hr) → seed next.** Never feed the whole plan at once: each mission's verification is built by the previous one; M5+ have designed-in human steps; M5's lessons should rewrite M6–M8 cheaply. Runner earns bigger batches by clearing checkpoints.
+
+- **M0 — Runner hardening (~1 wk, mostly founder):** Tier 1 items + Slack buttons. Done when: 25-task overnight subscription run completes, ≥1 real cooldown survived, all merges gated by green CI. Human: enable Actions/branch protection, DB URLs from Supabase, Slack app.
+- **M1 — Production trust layer (~30 tasks):** auth on EVERY route; zod for all request bodies AND AI outputs; Upstash rate limiting; env validation; Sentry (client+server); RLS audit + tests; error envelope. Done when: no unauth mutating/AI route; malformed AI output can't reach UI; Sentry catches a prod test error.
+- **M2 — Verification engine (~20 tasks):** test user + seeded data; E2E_ENABLED=true; Playwright suite (signup/login, intake→blueprint, dashboard, tool queue, business tabs); E2E on Vercel preview URLs in CI; UI flow config; screenshot artifacts. Done when: a login-breaking PR cannot merge; runner validates deployed previews.
+- **M3 — Analytics + observation (~15 tasks):** PostHog event taxonomy (signup→intake→blueprint→saved→tool_approved→repo→deploy funnel); server-side capture; dashboards as code; runner-side posthog/sentry reader tools. Done when: "how many users reached a deployed repo this week" is answerable by the runner.
+- **M4 — THE PIVOT: bucks.ai runs its own runner (~40 tasks):** `missions` table (business_id, goal, constraints, status); runner polls/claims/streams status into existing agent_runs tables; Operating Team UI shows real runs; in-app approval queue (same inbox/outbox + Slack buttons); **sandbox-per-business runner profile** (business's own repo from create-repo flow, scoped GitHub token, own Vercel project, capped keys — external containment formalized). Done when: clicking "Execute" on a saved business makes the runner scaffold/build/deploy that business's repo with status in the UI. After M4 the runner has two modes: pointed at bucks-ai/app = self-improvement; pointed at business repos = the product.
+- **M5 — Launch ONE real business (~30 tasks + founder sales time):** pick one B2B micro-SaaS painkiller with reachable buyers; run it through intake→blueprint→M4 execution→deployed MVP on real domain; landing+waitlist+funnel; **document every run (prompts, tasks, evidence) — this corpus IS the YC application.** Done when: real product live, ≥80% system-built, logs prove it. Human: domain, product accounts, sales calls.
+- **M6 — Customer discovery + outreach (~40 tasks; build AFTER M5 needs users):** research tools → ICP briefs/competitor maps; leads table (Apollo or CSV first) + enrichment/scoring; compliant sequences (CAN-SPAM), Gmail/Resend, **drafts by default, sends require approval**, daily caps as autonomy rules; CRM pipeline in-app + reply ingestion + follow-ups. Done when: 100-lead scored list + personalized drafts for the M5 business; replies tracked after approved sends.
+- **M7 — Revenue loop (~30 tasks):** Stripe test mode (products/prices/Checkout/Portal/webhook ledger/subscription state/plan gating); revenue dashboard (MRR, churn, failures); live mode only after test-mode E2E (Stripe test clocks) passes. Done when: test card subscribes end-to-end, state survives webhook replay. Human: Stripe identity/bank onboarding.
+- **M8 — Business memory + evaluation (~25 tasks):** experiment log (hypothesis→action→metric→outcome); idea scorecard + kill/continue engine on PostHog+Stripe+CRM data; runner lessons memory if not done at M0; weekly auto business review to Slack. Done when: system argues from data whether to iterate or kill the M5 business.
+- **M9 — Enterprise hardening (~50 tasks; only with paying users):** orgs/RBAC; multi-tenant isolation audit; audit-log table for every autonomous action (agent, why, tool, diff, cost, risk) surfaced in-app; secrets vault; background jobs (Inngest/Trigger.dev); admin console; usage metering/quotas; parallel workers; status page. Done when: two unrelated users each launch a business with zero data/credential overlap; every action auditable.
+
+**Human-only checklist (schedule founder time):** Stripe identity/bank; domain purchases over budget; Google OAuth consent; Slack app install; ToS acceptance for new services; entity filing; approving first outreach batches; sales calls.
+
+## 8. OPERATING MODEL AFTER M9
+
+- Business creation: idea → intake → blueprint (IS the timeline) → mission compiler → missions → tasks. Missions 1–3 of a business (build/deploy/launch infra) are plannable from the blueprint; mission 4+ (traction loop) are GENERATED FROM LIVE DATA (M3 eyes + M8 memory) — checkpointed by the autonomy constitution (budgets, send caps, scorecard thresholds), not by the founder.
+- Self-improvement: founder feeds goal-level missions ("raise activation to 40%"); planner+compiler author all task prompts. One level higher: weekly review PROPOSES candidate missions from observed data; founder approves. End state: **founder = constitution + mission approval + human-only actions; bucks.ai = mission authoring, execution, verification, learning — for itself and every business it runs.**
+- Post-M9 capability ceiling, honestly: the machine makes ATTEMPTS cheap and compounding (memory). Whether any attempt reaches ~$83k MRR (= $1M/yr) depends on problem selection, distribution/trust, and market staying power — no M10 fixes those with code; volume + memory improve the odds. **Statistically the most likely million-dollar business bucks.ai produces is bucks.ai itself** — a system with public proof it launches businesses is what founders pay for and YC funds.
+- Beyond M9 (portfolio era): N concurrent businesses; cross-business playbooks distilled from M8 memory; Marketing Brain (content/SEO/ads with hard external caps); voice/support agents; self-serve bucks.ai product.
+
+## 9. BEST COURSE OF ACTION FROM TODAY (July 5, 2026; YC app ~Nov 2026)
+
+- **Week 1 (M0):** cooldown fixes; GitHub Actions + branch protection; auth `/api/generate-blueprint`; DB tooling; real cost accounting; Slack buttons. Also: gitleaks history scan + enable secret scanning (repo just went public).
+- **Weeks 2–3 (M1+M2):** trust layer + verification engine, seeded as the first real missions.
+- **Week 4 (M3):** analytics loop; start choosing the M5 business idea (B2B, painful, reachable buyers, small scope).
+- **Month 2 (M4+M5):** the pivot, then launch the proof business. Founder starts sales conversations immediately — do not wait for M6 tooling; manual outreach with system-generated drafts is fine and faster.
+- **Month 3 (M6+M7):** outreach engine + Stripe on the live business; aim for first paying users; publish build-in-public proof content (the M5 run corpus).
+- **Month 4 (M8 + YC application):** memory/evaluation; write the application around verifiable numbers: "our system created N repos, deployed N apps, configured N tools, sent N compliant emails, booked N demos, closed $X, shipped N improvements, with humans only for legal/payment/calls."
+- M9 happens when customers exist, possibly during/after the batch.
+- Session-practical notes: Cowork's shell couldn't reach `~/bucks-ai` this session (WSL UNC mount issue — reconnect folder/restart session); this analysis therefore came via GitHub API reads. Ready-to-run next steps: CI workflow files + cooldown patch can be produced as drop-in files on request.
+
+## 10. SCALING BOTTLENECKS & SOLUTIONS (post-proof future)
+
+| Bottleneck | When it bites | Solution |
+|---|---|---|
+| Model cost per business | M5+ | Real token accounting → routing policy (Codex/cheap models for UI/docs; Claude for backend/architecture); context compression (exists); caching; capped per-business keys |
+| Subscription usage limits | now | Cooldown auto-resume (fixed) for dev; capped API keys for production runs; per-business keys at M4 |
+| Founder machine = single point of failure | M4+ | Move runner to VPS/container; systemd/PM2; later job queue (Inngest/Trigger.dev) with multiple runner instances |
+| Serial task execution | M9 | Git worktree parallel workers + dependency-aware scheduling (mission compiler already emits deps); requires CI first |
+| Main-branch poisoning | now | CI + branch protection + risk-based merge (exists) + rollback policy (exists, manual) |
+| Verification depth (build-passes ≠ product-works) | M2+ | E2E on previews, UI flows, product eval harness (all built, dormant — turn on); later visual regression, Lighthouse |
+| No cross-run learning | M0/M8 | Lessons memory (Tier 2.1) — the compounding moat |
+| Outreach deliverability/compliance | M6 | Warmed domains, caps, CAN-SPAM fields, approval-gated sends, suppression lists |
+| Multi-tenant secrets | M9 | Vault (Infisical/Doppler), scoped short-lived tokens, GitHub Apps over PATs |
+| Trust/auditability for customers | M9 | Audit-log-everything table surfaced in-app; artifact evidence; status page |
+| Platform ToS limits on automation | ongoing | OAuth/official APIs only; never CAPTCHAs/identity bypass; human completes ToS steps |
+| Idea selection quality | forever | M8 scorecards + kill criteria + portfolio volume; founder judgment stays in the loop at mission approval |
+
+## 11. STACK & OPTIMIZATION RECOMMENDATIONS (consolidated)
+
+App: keep Next.js 16/Tailwind4/Supabase/Vercel (right choices); add zod everywhere (requests, AI outputs, env); Upstash for rate limits; Sentry; vitest for the big pure-logic libs + @playwright/test for e2e; OpenAI structured outputs instead of json_object; model via env; split research.ts/status.ts/registry.ts into modules; move HANDOFF_*.md → docs/handoffs/; add engines/.nvmrc; Dependabot/Renovate; prettier or biome. Runner: pyproject.toml + uv (replace pip-freeze requirements.txt); ruff (+mypy optional) in the pytest gate; split graph.py into node modules; keep the flag-gate pattern (it's good). Infra: GitHub Actions (path-filtered), branch protection, gitleaks in CI, secret scanning + push protection, Vercel preview E2E; later VPS runner + Inngest/Trigger.dev + Infisical.
+
+## 12. KEY REFERENCE INDEX
+
+- Repo: github.com/bucks-ai/app · local `~/bucks-ai` · founder email arnav144193@gmail.com
+- Read-first files: AGENTS.md (agent rules + summary format), PROJECT_STATE.md (live status), TASKS.md (queue), DECISIONS.md (ADRs 001–008), AI_CHANGELOG.md (session history), runner/langgraph/README.md (51KB env/usage docs), profiles/overnight.env (tuning philosophy)
+- Runner entry: `runner/langgraph/main.py` (CLI) · config: `config.py` (~100 flags) · state: `state.py` · loop: `graph.py` · tools: `tools/` (48) · workers: `workers/` (claude/codex/chatgpt) · tests: `tests/` (49 files, pytest)
+- App API surface: `/api/generate-blueprint`, `/api/businesses/*` (research, validation, agents, agent-runs, execution-status/timeline), `/api/github/*`, `/api/vercel/*`, `/api/tool-permissions`, `/api/businesses/save-blueprint`
+- Companion doc: `LANGGRAPH_GAPS_AND_MISSION_PLAN.md` (same analysis, mission-plan-focused edition)
+- Env expectations: root `.env.example` (app) + `runner/langgraph/.env.example` (runner) — names only, never commit values
+- Workflow scripts: `scripts/check.sh|finish-feature.sh|merge-feature.sh`
+- Philosophy anchors: external containment over internal restriction; default-execute-until-wall; OAuth-first + vault; human-only = legal/identity/payment/ToS/calls; proof > power.
+
+---
+
+## 13. COMPLETION LOG
+
+> **Protocol:** After every completed task, append one entry here and include this file in the task's commit. Entry format:
+> `- [date] [mission.task] — what was completed — commit/branch — verified by (pytest/CI/manual/GitHub read)`
+> This section is the single source of truth for plan progress. Any AI session resuming work MUST read this section before starting, and MUST update it before finishing. Do not rewrite history — append only. When a full mission's done-when criteria are met, add a line `MISSION Mx COMPLETE` with evidence.
+
+### M0 — Runner hardening [IN PROGRESS]
+- [2026-07-05] M0 planning — full audit, gap analysis, mission plan M0–M9, this document — produced in Cowork architect session — verified by founder review
+- [2026-07-05] M0.1 drop-in kit authored (App CI + Runner CI workflows, cooldown guard v2 with absolute-time parsing + 11 tests, overnight-subscription profile, install instructions) — pending install/commit by executor session
+- [2026-07-05] M0.1 kit installed on `feature/m0-hardening` (this commit): `.github/workflows/app.yml`, `.github/workflows/runner.yml`, `runner/langgraph/tools/claude_subscription_cooldown.py` (v2, absolute-time parsing), `runner/langgraph/tests/test_cooldown_absolute_time.py` (11 new tests), `runner/langgraph/profiles/overnight-subscription.env`, plus this doc + `LANGGRAPH_GAPS_AND_MISSION_PLAN.md` at repo root. Also repaired local repo state: `.git` was missing `HEAD`/`config`/`index`/`packed-refs`/`refs/heads/*` (top-level plumbing files only — same failure mode as the mount issue noted in M0_INSTALL_INSTRUCTIONS.md §Session note), and the repo root was missing 43 top-level tracked files (AGENTS.md, package.json, README.md, etc. — subdirectories were untouched). Both reconstructed from git objects after verifying local HEAD matched `origin/main` exactly via `git ls-remote` (no data loss, no guessing). Separately found `npm`/`node` in this WSL environment resolved to the Windows-installed `node.exe` via `/mnt/c/Program Files/nodejs`, which throws `EISDIR`/`EPERM` errors on `rimraf` cleanup of `node_modules` on the native Linux filesystem — installed a native Linux Node 20 via the existing (unused) `~/.nvm` to fix; this may be worth a permanent fix (`nvm use 20` in `.bashrc` or a `.nvmrc`) so future sessions don't hit the same npm cleanup failure — verified by `python -m pytest tests/ -x -q` → 1381 passed (1370 baseline + 11 new) and `./scripts/check.sh` → lint + typecheck + build all green
+- [2026-07-05] M0.1 pushed to GitHub on `feature/m0-hardening`, PR opened — verified by GitHub read (see PR URL in task report; CI checks pending observation, PR intentionally left unmerged per task instructions)
+
+### Remaining M0 checklist (from §7/§6 Tier 1)
+- [ ] M0.1 Install drop-in kit; pytest green; both CI checks green on PR; merge — install/pytest/check.sh done 2026-07-05 (see log above); PR open, CI checks not yet observed, not yet merged (intentional — leave for founder/architect to confirm CI before merge)
+- [ ] M0.2 Branch protection on main (require both CI checks) — HUMAN
+- [ ] M0.3 Secret scanning + push protection enabled; gitleaks history scan — HUMAN
+- [ ] M0.4 graph.py: exclude cooldown wait time from MAX_RUNTIME_MINUTES budget
+- [ ] M0.5 check.sh hardening (npm ci + tsc --noEmit)
+- [ ] M0.6 db_tools.py + DATABASE_URL/DIRECT_DATABASE_URL config + versioned migrations dir
+- [ ] M0.7 Real token/cost accounting from worker CLI JSON output → cost_budget_guard
+- [ ] M0.8 Slack interactive approvals (bot token + buttons → inbox files)
+- [ ] M0.9 Validation run: 25-task overnight subscription-mode run, ≥1 cooldown survived, all merges CI-gated → MISSION M0 COMPLETE
