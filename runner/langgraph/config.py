@@ -82,7 +82,7 @@ class RunnerConfig:
     )
     slack_notify_events: frozenset = field(default_factory=_load_slack_events)
     repo_path: str = field(
-        default_factory=lambda: os.getenv("BUCKS_AI_REPO_PATH", "/home/arnavt/bucks-ai")
+        default_factory=lambda: os.getenv("BUCKS_AI_REPO_PATH", "/home/arnav/bucks-ai")
     )
     runner_mode: str = field(
         default_factory=lambda: os.getenv("RUNNER_MODE", "browser_or_cli")

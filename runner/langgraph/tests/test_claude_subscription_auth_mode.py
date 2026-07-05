@@ -84,7 +84,11 @@ def test_subscription_mode_strips_api_key_from_env():
          mock.patch("workers.claude_worker.get_config") as mock_cfg, \
          mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-ant-test", "PATH": "/usr/bin"}):
 
-        cfg = RunnerConfig(anthropic_api_key="sk-ant-test", claude_auth_mode="subscription")
+        cfg = RunnerConfig(
+            anthropic_api_key="sk-ant-test",
+            claude_auth_mode="subscription",
+            claude_hooks_safety_pack_enabled=False,
+        )
         mock_cfg.return_value = cfg
 
         worker._run_cli("hello", "t1", auth_mode="subscription")
@@ -105,7 +109,9 @@ def test_api_key_mode_passes_env_none():
         from state import ToolResult
         return ToolResult(tool="shell", success=True, output="done")
 
-    with mock.patch("workers.claude_worker.run_command", side_effect=fake_run_command):
+    with mock.patch("workers.claude_worker.run_command", side_effect=fake_run_command), \
+         mock.patch("workers.claude_worker.get_config") as mock_cfg:
+        mock_cfg.return_value = RunnerConfig(claude_hooks_safety_pack_enabled=False)
         worker._run_cli("hello", "t2", auth_mode="api_key")
 
     assert captured_env["env"] is None
@@ -122,7 +128,9 @@ def test_default_auth_mode_passes_env_none():
         from state import ToolResult
         return ToolResult(tool="shell", success=True, output="done")
 
-    with mock.patch("workers.claude_worker.run_command", side_effect=fake_run_command):
+    with mock.patch("workers.claude_worker.run_command", side_effect=fake_run_command), \
+         mock.patch("workers.claude_worker.get_config") as mock_cfg:
+        mock_cfg.return_value = RunnerConfig(claude_hooks_safety_pack_enabled=False)
         worker._run_cli("hello", "t3")
 
     assert captured_env["env"] is None
@@ -146,7 +154,11 @@ def test_subscription_mode_logged_in_worker_started():
          mock.patch("workers.claude_worker.shutil.which", return_value="/usr/bin/claude"), \
          mock.patch("workers.claude_worker.get_config") as mock_cfg:
 
-        cfg = RunnerConfig(anthropic_api_key=None, claude_auth_mode="subscription")
+        cfg = RunnerConfig(
+            anthropic_api_key=None,
+            claude_auth_mode="subscription",
+            claude_hooks_safety_pack_enabled=False,
+        )
         mock_cfg.return_value = cfg
 
         worker.run_worker_prompt("do something", {"id": "t4"})
