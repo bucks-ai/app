@@ -1,7 +1,8 @@
 // POST /api/businesses/[id]/validation/feedback   — create structured feedback note
 
 import { hasSupabaseEnv } from "@/lib/supabase/env";
-import { getCurrentUser, getBusinessById } from "@/lib/projects";
+import { getBusinessById } from "@/lib/projects";
+import { requireUser } from "@/lib/api-auth";
 import { createValidationFeedbackNote } from "@/lib/validation";
 import type {
   NewValidationFeedbackNoteInput,
@@ -31,17 +32,15 @@ export async function POST(
   const { id } = await params;
   if (!id) return errorResponse("Business id is required.", "invalid_input", 400);
 
-  const userResult = await getCurrentUser();
-  if (userResult.error || !userResult.data) {
-    return errorResponse("Authentication required.", "unauthenticated", 401);
-  }
+  const { user, response } = await requireUser();
+  if (!user) return response;
 
   const businessResult = await getBusinessById(id);
   if (businessResult.error || !businessResult.data) {
     return errorResponse("Business not found.", "business_not_found", 404);
   }
 
-  if (businessResult.data.user_id !== userResult.data.id) {
+  if (businessResult.data.user_id !== user.id) {
     return errorResponse("Access denied.", "forbidden", 403);
   }
 
@@ -59,7 +58,7 @@ export async function POST(
 
   const input: NewValidationFeedbackNoteInput = {
     business_id: id,
-    user_id: userResult.data.id,
+    user_id: user.id,
     summary,
     lead_id: (body.lead_id as string | null) ?? null,
     hypothesis_id: (body.hypothesis_id as string | null) ?? null,

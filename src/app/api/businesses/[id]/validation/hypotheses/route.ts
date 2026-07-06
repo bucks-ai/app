@@ -2,7 +2,8 @@
 // PATCH /api/businesses/[id]/validation/hypotheses   — update hypothesis (body must include id)
 
 import { hasSupabaseEnv } from "@/lib/supabase/env";
-import { getCurrentUser, getBusinessById } from "@/lib/projects";
+import { getBusinessById } from "@/lib/projects";
+import { requireUser } from "@/lib/api-auth";
 import { createValidationHypothesis, updateValidationHypothesis } from "@/lib/validation";
 import type {
   NewValidationHypothesisInput,
@@ -24,12 +25,10 @@ function errorResponse(error: string, code: string, status: number) {
   return Response.json({ ok: false, error, code }, { status });
 }
 
-async function resolveAuth(id: string) {
-  const userResult = await getCurrentUser();
-  if (userResult.error || !userResult.data) return { user: null, business: null };
+async function resolveBusiness(id: string) {
   const businessResult = await getBusinessById(id);
-  if (businessResult.error || !businessResult.data) return { user: userResult.data, business: null };
-  return { user: userResult.data, business: businessResult.data };
+  if (businessResult.error || !businessResult.data) return null;
+  return businessResult.data;
 }
 
 // ---------------------------------------------------------------------------
@@ -47,8 +46,10 @@ export async function POST(
   const { id } = await params;
   if (!id) return errorResponse("Business id is required.", "invalid_input", 400);
 
-  const { user, business } = await resolveAuth(id);
-  if (!user) return errorResponse("Authentication required.", "unauthenticated", 401);
+  const { user, response } = await requireUser();
+  if (!user) return response;
+
+  const business = await resolveBusiness(id);
   if (!business) return errorResponse("Business not found.", "business_not_found", 404);
   if (business.user_id !== user.id) return errorResponse("Access denied.", "forbidden", 403);
 
@@ -115,8 +116,10 @@ export async function PATCH(
   const { id } = await params;
   if (!id) return errorResponse("Business id is required.", "invalid_input", 400);
 
-  const { user, business } = await resolveAuth(id);
-  if (!user) return errorResponse("Authentication required.", "unauthenticated", 401);
+  const { user, response } = await requireUser();
+  if (!user) return response;
+
+  const business = await resolveBusiness(id);
   if (!business) return errorResponse("Business not found.", "business_not_found", 404);
   if (business.user_id !== user.id) return errorResponse("Access denied.", "forbidden", 403);
 
