@@ -306,6 +306,7 @@ Copy `.env.example` to `.env` and fill in:
 | `MERGE_VIA_PR` | Merge through a GitHub pull request + the checks/merge API instead of a local `git merge` + direct push to `main` (default: true — required when `main` has branch protection with required status checks). Set `false` only for lab repos without branch protection, to fall back to the old direct-merge path unchanged. |
 | `PR_CHECKS_TIMEOUT_S` | Max seconds to poll a PR's check runs before giving up (default: 900) |
 | `PR_CHECKS_POLL_INTERVAL_S` | Seconds between check-run polls (default: 20) |
+| `CLAUDE_CLI_TIMEOUT_S` | Wall-clock cap in seconds for one Claude CLI invocation by the Claude worker (default: 1800; keep `WORKER_TIMEOUT_THRESHOLD` just below this so the timeout guard stays consistent) |
 | `AUTO_DEPLOY` | Auto-trigger Vercel (default: true) |
 | `AUTO_DEPLOY_POLL` | Poll the triggered deployment until it finishes (default: true) |
 | `BLOCK_ON_DEPLOY_FAILURE` | Stop the loop when a polled deploy fails or times out (default: true) |
