@@ -9,6 +9,10 @@ import {
 } from "@/lib/research";
 import { badRequest, zodIssuesToFields } from "@/lib/api-error";
 import { generateResearchBodySchema } from "@/lib/schemas/research";
+import { limit, tooManyRequests, type RateLimitOptions } from "@/lib/rate-limit";
+
+/** Conservative default: research generation is the AI-driven research workspace build. */
+const RESEARCH_GENERATE_RATE_LIMIT: RateLimitOptions = { limit: 5, windowMs: 60_000 };
 
 function errorResponse(error: string, code: string, status: number) {
   return Response.json({ ok: false, error, code }, { status });
@@ -78,6 +82,12 @@ export async function POST(
   if (userResult.error || !userResult.data) {
     return errorResponse("Authentication required.", "unauthenticated", 401);
   }
+
+  const rateLimitResult = await limit(
+    `${userResult.data.id}:research-generate`,
+    RESEARCH_GENERATE_RATE_LIMIT,
+  );
+  if (!rateLimitResult.allowed) return tooManyRequests();
 
   const businessResult = await getBusinessById(id);
   if (businessResult.error || !businessResult.data) {
