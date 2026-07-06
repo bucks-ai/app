@@ -5,16 +5,23 @@ const {
   hasSupabaseEnvMock,
   getBusinessByIdMock,
   inferAgentRunsFromActivityLogsMock,
+  limitMock,
 } = vi.hoisted(() => ({
   requireUserMock: vi.fn(),
   hasSupabaseEnvMock: vi.fn(),
   getBusinessByIdMock: vi.fn(),
   inferAgentRunsFromActivityLogsMock: vi.fn(),
+  limitMock: vi.fn(),
 }));
 
 vi.mock("@/lib/api-auth", () => ({
   requireUser: requireUserMock,
 }));
+
+vi.mock("@/lib/rate-limit", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/rate-limit")>();
+  return { ...actual, limit: limitMock };
+});
 
 vi.mock("@/lib/supabase/env", () => ({
   hasSupabaseEnv: hasSupabaseEnvMock,
@@ -47,7 +54,9 @@ describe("POST /api/businesses/[id]/agent-runs/infer", () => {
     hasSupabaseEnvMock.mockReset();
     getBusinessByIdMock.mockReset();
     inferAgentRunsFromActivityLogsMock.mockReset();
+    limitMock.mockReset();
     hasSupabaseEnvMock.mockReturnValue(true);
+    limitMock.mockResolvedValue({ allowed: true, remaining: 4 });
   });
 
   it("returns the standard 401 envelope and never runs inference when unauthenticated", async () => {
@@ -61,6 +70,24 @@ describe("POST /api/businesses/[id]/agent-runs/infer", () => {
       error: "Authentication required.",
       code: "unauthenticated",
     });
+    expect(limitMock).not.toHaveBeenCalled();
+    expect(getBusinessByIdMock).not.toHaveBeenCalled();
+    expect(inferAgentRunsFromActivityLogsMock).not.toHaveBeenCalled();
+  });
+
+  it("returns the standard 429 envelope and never runs inference when the rate limit is exceeded", async () => {
+    requireUserMock.mockResolvedValue({ user: { id: "user-1" }, response: null });
+    limitMock.mockResolvedValue({ allowed: false, remaining: 0 });
+
+    const response = await POST(new Request("http://localhost"), makeParams("biz-1"));
+
+    expect(response.status).toBe(429);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: "Too many requests. Please try again later.",
+      code: "rate_limited",
+    });
+    expect(limitMock).toHaveBeenCalledWith("user-1:agent-runs-infer", { limit: 5, windowMs: 60_000 });
     expect(getBusinessByIdMock).not.toHaveBeenCalled();
     expect(inferAgentRunsFromActivityLogsMock).not.toHaveBeenCalled();
   });

@@ -6,10 +6,17 @@ import { requireUser } from "@/lib/api-auth";
 import { apiError, badRequest, zodIssuesToFields } from "@/lib/api-error";
 import { generateBlueprintBodySchema } from "@/lib/schemas/generate-blueprint";
 import { businessBlueprintOutputSchema } from "@/lib/schemas/blueprint-output";
+import { limit, tooManyRequests, type RateLimitOptions } from "@/lib/rate-limit";
+
+/** Conservative default: blueprint generation is an expensive OpenAI call. */
+const BLUEPRINT_RATE_LIMIT: RateLimitOptions = { limit: 5, windowMs: 60_000 };
 
 export async function POST(request: NextRequest) {
   const { user, response } = await requireUser();
   if (!user) return response;
+
+  const rateLimitResult = await limit(`${user.id}:generate-blueprint`, BLUEPRINT_RATE_LIMIT);
+  if (!rateLimitResult.allowed) return tooManyRequests();
 
   if (!process.env.OPENAI_API_KEY) {
     return Response.json(

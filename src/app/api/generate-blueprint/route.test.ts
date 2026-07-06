@@ -1,15 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
-const { requireUserMock, openaiCreateMock, openaiConstructorMock } = vi.hoisted(() => ({
+const { requireUserMock, openaiCreateMock, openaiConstructorMock, limitMock } = vi.hoisted(() => ({
   requireUserMock: vi.fn(),
   openaiCreateMock: vi.fn(),
   openaiConstructorMock: vi.fn(),
+  limitMock: vi.fn(),
 }));
 
 vi.mock("@/lib/api-auth", () => ({
   requireUser: requireUserMock,
 }));
+
+vi.mock("@/lib/rate-limit", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/rate-limit")>();
+  return { ...actual, limit: limitMock };
+});
 
 vi.mock("openai", () => ({
   default: class {
@@ -85,6 +91,8 @@ describe("POST /api/generate-blueprint", () => {
     requireUserMock.mockReset();
     openaiCreateMock.mockReset();
     openaiConstructorMock.mockReset();
+    limitMock.mockReset();
+    limitMock.mockResolvedValue({ allowed: true, remaining: 4 });
     process.env.OPENAI_API_KEY = "test-key";
   });
 
@@ -111,6 +119,27 @@ describe("POST /api/generate-blueprint", () => {
       error: "Authentication required.",
       code: "unauthenticated",
     });
+    expect(limitMock).not.toHaveBeenCalled();
+    expect(openaiConstructorMock).not.toHaveBeenCalled();
+    expect(openaiCreateMock).not.toHaveBeenCalled();
+  });
+
+  it("returns the standard 429 envelope and never calls OpenAI when the rate limit is exceeded", async () => {
+    requireUserMock.mockResolvedValue({
+      user: { id: "user-1", email: "a@example.com" },
+      response: null,
+    });
+    limitMock.mockResolvedValue({ allowed: false, remaining: 0 });
+
+    const response = await POST(makeRequest(validIdea));
+
+    expect(response.status).toBe(429);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: "Too many requests. Please try again later.",
+      code: "rate_limited",
+    });
+    expect(limitMock).toHaveBeenCalledWith("user-1:generate-blueprint", { limit: 5, windowMs: 60_000 });
     expect(openaiConstructorMock).not.toHaveBeenCalled();
     expect(openaiCreateMock).not.toHaveBeenCalled();
   });
