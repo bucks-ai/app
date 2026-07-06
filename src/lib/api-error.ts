@@ -1,10 +1,25 @@
 // Shared API error envelope helpers for Next.js App Router route handlers.
 // Matches the { ok: false, error, code } shape already used across src/app/api/**/route.ts.
 
+import * as Sentry from "@sentry/nextjs";
 import type { ZodError } from "zod";
 
 export function apiError(error: string, code: string, status: number) {
   return Response.json({ ok: false, error, code }, { status });
+}
+
+/**
+ * 500 envelope for uncaught server errors. Reports the exception to Sentry
+ * when SENTRY_DSN is configured; a complete no-op otherwise (no network calls).
+ */
+export function serverError(
+  error: unknown,
+  message = "Something went wrong. Please try again.",
+) {
+  if (process.env.SENTRY_DSN) {
+    Sentry.captureException(error);
+  }
+  return apiError(message, "internal_error", 500);
 }
 
 /** 401 envelope for routes guarded by requireUser() in src/lib/api-auth.ts. */
