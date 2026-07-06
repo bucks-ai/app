@@ -11,6 +11,7 @@ import {
 } from "@/lib/github/next-scaffold";
 import { badRequest, zodIssuesToFields } from "@/lib/api-error";
 import { prepareNextScaffoldBodySchema } from "@/lib/schemas/infra";
+import { limit, tooManyRequests, RATE_LIMITS } from "@/lib/rate-limit";
 
 type ErrorDetail = {
   failedFile?: string;
@@ -85,6 +86,9 @@ export async function POST(request: NextRequest) {
   // Auth
   const { user, response } = await requireUser();
   if (!user) return response;
+
+  const rateLimitResult = await limit(`${user.id}:github-prepare-scaffold`, RATE_LIMITS.mutationDefault);
+  if (!rateLimitResult.allowed) return tooManyRequests();
 
   // Business ownership
   const businessResult = await getBusinessById(businessId);

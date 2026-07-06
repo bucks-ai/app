@@ -9,6 +9,7 @@ import {
 } from "@/lib/tool-permissions";
 import { badRequest, zodIssuesToFields } from "@/lib/api-error";
 import { seedToolPermissionsBodySchema } from "@/lib/schemas/infra";
+import { limit, tooManyRequests, RATE_LIMITS } from "@/lib/rate-limit";
 
 function errorResponse(error: string, code: string, status: number) {
   return Response.json({ ok: false, error, code }, { status });
@@ -98,6 +99,9 @@ export async function POST(request: NextRequest) {
 
   const { user, response } = await requireUser();
   if (!user) return response;
+
+  const rateLimitResult = await limit(`${user.id}:tool-permissions-seed`, RATE_LIMITS.mutationDefault);
+  if (!rateLimitResult.allowed) return tooManyRequests();
 
   // Verify ownership
   const businessResult = await getBusinessById(businessId);

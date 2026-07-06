@@ -14,6 +14,7 @@ import {
   createValidationLeadBodySchema,
   updateValidationLeadBodySchema,
 } from "@/lib/schemas/validation";
+import { limit, tooManyRequests, RATE_LIMITS } from "@/lib/rate-limit";
 
 function errorResponse(error: string, code: string, status: number) {
   return Response.json({ ok: false, error, code }, { status });
@@ -42,6 +43,9 @@ export async function POST(
 
   const { user, response } = await requireUser();
   if (!user) return response;
+
+  const rateLimitResult = await limit(`${user.id}:validation-leads`, RATE_LIMITS.mutationDefault);
+  if (!rateLimitResult.allowed) return tooManyRequests();
 
   const business = await resolveBusiness(id);
   if (!business) return errorResponse("Business not found.", "business_not_found", 404);
@@ -107,6 +111,9 @@ export async function PATCH(
 
   const { user, response } = await requireUser();
   if (!user) return response;
+
+  const rateLimitResult = await limit(`${user.id}:validation-leads`, RATE_LIMITS.mutationDefault);
+  if (!rateLimitResult.allowed) return tooManyRequests();
 
   const business = await resolveBusiness(id);
   if (!business) return errorResponse("Business not found.", "business_not_found", 404);

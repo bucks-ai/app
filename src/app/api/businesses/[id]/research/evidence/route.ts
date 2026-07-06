@@ -7,6 +7,7 @@ import { createResearchEvidence } from "@/lib/research";
 import type { NewResearchEvidenceInput } from "@/types/research";
 import { badRequest, zodIssuesToFields } from "@/lib/api-error";
 import { createResearchEvidenceBodySchema } from "@/lib/schemas/research";
+import { limit, tooManyRequests, RATE_LIMITS } from "@/lib/rate-limit";
 
 function errorResponse(error: string, code: string, status: number) {
   return Response.json({ ok: false, error, code }, { status });
@@ -31,6 +32,9 @@ export async function POST(
   if (userResult.error || !userResult.data) {
     return errorResponse("Authentication required.", "unauthenticated", 401);
   }
+
+  const rateLimitResult = await limit(`${userResult.data.id}:research-evidence`, RATE_LIMITS.mutationDefault);
+  if (!rateLimitResult.allowed) return tooManyRequests();
 
   const businessResult = await getBusinessById(id);
   if (businessResult.error || !businessResult.data) {

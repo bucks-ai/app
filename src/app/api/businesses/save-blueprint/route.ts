@@ -13,6 +13,7 @@ import { hasSupabaseEnv } from "@/lib/supabase/env";
 import { requireUser } from "@/lib/api-auth";
 import { badRequest, zodIssuesToFields } from "@/lib/api-error";
 import { saveBlueprintBodySchema } from "@/lib/schemas/save-blueprint";
+import { limit, tooManyRequests, RATE_LIMITS } from "@/lib/rate-limit";
 
 function errorResponse(error: string, code: string, status: number) {
   return Response.json({ ok: false, error, code }, { status });
@@ -29,6 +30,9 @@ export async function POST(request: NextRequest) {
 
   const { user, response } = await requireUser();
   if (!user) return response;
+
+  const rateLimitResult = await limit(`${user.id}:save-blueprint`, RATE_LIMITS.mutationDefault);
+  if (!rateLimitResult.allowed) return tooManyRequests();
 
   let json: unknown;
   try {
