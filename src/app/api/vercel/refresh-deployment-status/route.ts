@@ -5,13 +5,9 @@ import { getBusinessById } from "@/lib/projects";
 import { requireUser } from "@/lib/api-auth";
 import { getLatestVercelProjectForBusiness } from "@/lib/vercel/project-metadata";
 import { refreshVercelDeploymentStatusForBusiness } from "@/lib/vercel/deployment-status";
-import { badRequest, zodIssuesToFields } from "@/lib/api-error";
+import { apiError, badRequest, notFound, zodIssuesToFields } from "@/lib/api-error";
 import { refreshVercelDeploymentStatusBodySchema } from "@/lib/schemas/infra";
 import { limit, tooManyRequests, RATE_LIMITS } from "@/lib/rate-limit";
-
-function errorResponse(error: string, code: string, status: number) {
-  return Response.json({ ok: false, error, code }, { status });
-}
 
 // ---------------------------------------------------------------------------
 // POST /api/vercel/refresh-deployment-status
@@ -20,7 +16,7 @@ function errorResponse(error: string, code: string, status: number) {
 
 export async function POST(request: NextRequest) {
   if (!hasSupabaseEnv()) {
-    return errorResponse(
+    return apiError(
       "Supabase is not configured.",
       "missing_supabase_env",
       503
@@ -56,21 +52,17 @@ export async function POST(request: NextRequest) {
   // Business ownership
   const businessResult = await getBusinessById(businessId);
   if (businessResult.error || !businessResult.data) {
-    return errorResponse("Business not found.", "business_not_found", 404);
+    return notFound("Business not found.", "business_not_found");
   }
   const business = businessResult.data;
   if (business.user_id !== user.id) {
-    return errorResponse("Access denied.", "forbidden", 403);
+    return apiError("Access denied.", "forbidden", 403);
   }
 
   // Require existing Vercel project metadata
   const metaResult = await getLatestVercelProjectForBusiness(businessId);
   if (metaResult.error || !metaResult.data) {
-    return errorResponse(
-      "No Vercel project found for this business. Create a Vercel project first.",
-      "vercel_project_missing",
-      400
-    );
+    return badRequest("No Vercel project found for this business. Create a Vercel project first.", "vercel_project_missing");
   }
 
   // If token is missing, log and return the stored state with a clear warning
@@ -97,7 +89,7 @@ export async function POST(request: NextRequest) {
   );
 
   if (refreshResult.error || !refreshResult.data) {
-    return errorResponse(
+    return apiError(
       refreshResult.error ?? "Deployment status refresh failed.",
       "vercel_status_failed",
       500

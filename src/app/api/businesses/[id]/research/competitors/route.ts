@@ -11,16 +11,12 @@ import type {
   NewResearchCompetitorInput,
   UpdateResearchCompetitorInput,
 } from "@/types/research";
-import { badRequest, zodIssuesToFields } from "@/lib/api-error";
+import { apiError, unauthorized, badRequest, notFound, zodIssuesToFields } from "@/lib/api-error";
 import {
   createResearchCompetitorBodySchema,
   updateResearchCompetitorBodySchema,
 } from "@/lib/schemas/research";
 import { limit, tooManyRequests, RATE_LIMITS } from "@/lib/rate-limit";
-
-function errorResponse(error: string, code: string, status: number) {
-  return Response.json({ ok: false, error, code }, { status });
-}
 
 async function resolveAuth(id: string) {
   const userResult = await getCurrentUser();
@@ -39,20 +35,20 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   if (!hasSupabaseEnv()) {
-    return errorResponse("Supabase is not configured.", "missing_supabase_env", 503);
+    return apiError("Supabase is not configured.", "missing_supabase_env", 503);
   }
 
   const { id } = await params;
-  if (!id) return errorResponse("Business id is required.", "invalid_input", 400);
+  if (!id) return badRequest("Business id is required.", "invalid_input");
 
   const { user, business } = await resolveAuth(id);
-  if (!user) return errorResponse("Authentication required.", "unauthenticated", 401);
+  if (!user) return unauthorized();
 
   const rateLimitResult = await limit(`${user.id}:research-competitors`, RATE_LIMITS.mutationDefault);
   if (!rateLimitResult.allowed) return tooManyRequests();
 
-  if (!business) return errorResponse("Business not found.", "business_not_found", 404);
-  if (business.user_id !== user.id) return errorResponse("Access denied.", "forbidden", 403);
+  if (!business) return notFound("Business not found.", "business_not_found");
+  if (business.user_id !== user.id) return apiError("Access denied.", "forbidden", 403);
 
   let json: unknown;
   try {
@@ -90,7 +86,7 @@ export async function POST(
 
   if (result.error || !result.data) {
     const code = result.code ?? "research_create_failed";
-    return errorResponse(result.error ?? "Could not create competitor.", code,
+    return apiError(result.error ?? "Could not create competitor.", code,
       code === "research_schema_missing" ? 503 : 500);
   }
 
@@ -106,20 +102,20 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   if (!hasSupabaseEnv()) {
-    return errorResponse("Supabase is not configured.", "missing_supabase_env", 503);
+    return apiError("Supabase is not configured.", "missing_supabase_env", 503);
   }
 
   const { id } = await params;
-  if (!id) return errorResponse("Business id is required.", "invalid_input", 400);
+  if (!id) return badRequest("Business id is required.", "invalid_input");
 
   const { user, business } = await resolveAuth(id);
-  if (!user) return errorResponse("Authentication required.", "unauthenticated", 401);
+  if (!user) return unauthorized();
 
   const rateLimitResult = await limit(`${user.id}:research-competitors`, RATE_LIMITS.mutationDefault);
   if (!rateLimitResult.allowed) return tooManyRequests();
 
-  if (!business) return errorResponse("Business not found.", "business_not_found", 404);
-  if (business.user_id !== user.id) return errorResponse("Access denied.", "forbidden", 403);
+  if (!business) return notFound("Business not found.", "business_not_found");
+  if (business.user_id !== user.id) return apiError("Access denied.", "forbidden", 403);
 
   let json: unknown;
   try {
@@ -157,7 +153,7 @@ export async function PATCH(
 
   if (result.error || !result.data) {
     const code = result.code ?? "research_update_failed";
-    return errorResponse(result.error ?? "Could not update competitor.", code,
+    return apiError(result.error ?? "Could not update competitor.", code,
       code === "research_schema_missing" ? 503 : 500);
   }
 

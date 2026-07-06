@@ -9,16 +9,12 @@ import type {
   NewValidationHypothesisInput,
   UpdateValidationHypothesisInput,
 } from "@/types/validation";
-import { badRequest, zodIssuesToFields } from "@/lib/api-error";
+import { apiError, badRequest, notFound, zodIssuesToFields } from "@/lib/api-error";
 import {
   createValidationHypothesisBodySchema,
   updateValidationHypothesisBodySchema,
 } from "@/lib/schemas/validation";
 import { limit, tooManyRequests, RATE_LIMITS } from "@/lib/rate-limit";
-
-function errorResponse(error: string, code: string, status: number) {
-  return Response.json({ ok: false, error, code }, { status });
-}
 
 async function resolveBusiness(id: string) {
   const businessResult = await getBusinessById(id);
@@ -35,11 +31,11 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   if (!hasSupabaseEnv()) {
-    return errorResponse("Supabase is not configured.", "missing_supabase_env", 503);
+    return apiError("Supabase is not configured.", "missing_supabase_env", 503);
   }
 
   const { id } = await params;
-  if (!id) return errorResponse("Business id is required.", "invalid_input", 400);
+  if (!id) return badRequest("Business id is required.", "invalid_input");
 
   const { user, response } = await requireUser();
   if (!user) return response;
@@ -48,8 +44,8 @@ export async function POST(
   if (!rateLimitResult.allowed) return tooManyRequests();
 
   const business = await resolveBusiness(id);
-  if (!business) return errorResponse("Business not found.", "business_not_found", 404);
-  if (business.user_id !== user.id) return errorResponse("Access denied.", "forbidden", 403);
+  if (!business) return notFound("Business not found.", "business_not_found");
+  if (business.user_id !== user.id) return apiError("Access denied.", "forbidden", 403);
 
   let json: unknown;
   try {
@@ -85,7 +81,7 @@ export async function POST(
 
   if (result.error || !result.data) {
     const code = result.code ?? "validation_create_failed";
-    return errorResponse(result.error ?? "Could not create hypothesis.", code,
+    return apiError(result.error ?? "Could not create hypothesis.", code,
       code === "validation_schema_missing" ? 503 : 500);
   }
 
@@ -101,11 +97,11 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   if (!hasSupabaseEnv()) {
-    return errorResponse("Supabase is not configured.", "missing_supabase_env", 503);
+    return apiError("Supabase is not configured.", "missing_supabase_env", 503);
   }
 
   const { id } = await params;
-  if (!id) return errorResponse("Business id is required.", "invalid_input", 400);
+  if (!id) return badRequest("Business id is required.", "invalid_input");
 
   const { user, response } = await requireUser();
   if (!user) return response;
@@ -114,8 +110,8 @@ export async function PATCH(
   if (!rateLimitResult.allowed) return tooManyRequests();
 
   const business = await resolveBusiness(id);
-  if (!business) return errorResponse("Business not found.", "business_not_found", 404);
-  if (business.user_id !== user.id) return errorResponse("Access denied.", "forbidden", 403);
+  if (!business) return notFound("Business not found.", "business_not_found");
+  if (business.user_id !== user.id) return apiError("Access denied.", "forbidden", 403);
 
   let json: unknown;
   try {
@@ -151,7 +147,7 @@ export async function PATCH(
 
   if (result.error || !result.data) {
     const code = result.code ?? "validation_update_failed";
-    return errorResponse(result.error ?? "Could not update hypothesis.", code,
+    return apiError(result.error ?? "Could not update hypothesis.", code,
       code === "validation_schema_missing" ? 503 : 500);
   }
 

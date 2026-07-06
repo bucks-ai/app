@@ -9,27 +9,9 @@ import {
   prepareDeployableNextScaffold,
   ScaffoldPreparationError,
 } from "@/lib/github/next-scaffold";
-import { badRequest, zodIssuesToFields } from "@/lib/api-error";
+import { apiError, badRequest, notFound, zodIssuesToFields } from "@/lib/api-error";
 import { prepareNextScaffoldBodySchema } from "@/lib/schemas/infra";
 import { limit, tooManyRequests, RATE_LIMITS } from "@/lib/rate-limit";
-
-type ErrorDetail = {
-  failedFile?: string;
-  githubStatusCode?: number;
-  githubMessage?: string;
-};
-
-function errorResponse(
-  error: string,
-  code: string,
-  status: number,
-  detail?: ErrorDetail
-) {
-  return Response.json(
-    { ok: false, error, code, ...(detail ? { detail } : {}) },
-    { status }
-  );
-}
 
 function scaffoldErrorResponse(error: unknown) {
   const detail =
@@ -43,11 +25,11 @@ function scaffoldErrorResponse(error: unknown) {
         }
       : undefined;
 
-  return errorResponse(
+  return apiError(
     "Starter scaffold could not be written to GitHub.",
     "scaffold_failed",
     500,
-    detail
+    detail ? { detail } : undefined,
   );
 }
 
@@ -57,7 +39,7 @@ function scaffoldErrorResponse(error: unknown) {
 
 export async function POST(request: NextRequest) {
   if (!hasSupabaseEnv()) {
-    return errorResponse(
+    return apiError(
       "Supabase is not configured.",
       "missing_supabase_env",
       503
@@ -93,16 +75,16 @@ export async function POST(request: NextRequest) {
   // Business ownership
   const businessResult = await getBusinessById(businessId);
   if (businessResult.error || !businessResult.data) {
-    return errorResponse("Business not found.", "business_not_found", 404);
+    return notFound("Business not found.", "business_not_found");
   }
   const business = businessResult.data;
   if (business.user_id !== user.id) {
-    return errorResponse("Access denied.", "forbidden", 403);
+    return apiError("Access denied.", "forbidden", 403);
   }
 
   // Require GitHub env
   if (!hasGitHubEnv()) {
-    return errorResponse(
+    return apiError(
       "GitHub token is not configured. Add GITHUB_PERSONAL_ACCESS_TOKEN to .env.local.",
       "github_env_missing",
       503
@@ -112,7 +94,7 @@ export async function POST(request: NextRequest) {
   // GitHub permission gate
   const permissionsResult = await getToolPermissionsForBusiness(businessId);
   if (permissionsResult.error || !permissionsResult.data) {
-    return errorResponse(
+    return apiError(
       "Could not read tool permissions.",
       "github_not_approved",
       403
@@ -124,7 +106,7 @@ export async function POST(request: NextRequest) {
   );
   const approvedStatuses = new Set(["approved", "connected_demo"]);
   if (!githubPermission || !approvedStatuses.has(githubPermission.status)) {
-    return errorResponse(
+    return apiError(
       `GitHub permission must be approved or connected_demo before preparing a scaffold.`,
       "github_not_approved",
       403
@@ -134,10 +116,9 @@ export async function POST(request: NextRequest) {
   // Require existing GitHub repo
   const repoResult = await getLatestGitHubRepoForBusiness(businessId);
   if (repoResult.error || !repoResult.data) {
-    return errorResponse(
+    return badRequest(
       "No GitHub repository found for this business. Create a repo first.",
       "github_repo_missing",
-      400
     );
   }
   const repo = repoResult.data;

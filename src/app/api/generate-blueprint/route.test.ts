@@ -277,7 +277,8 @@ describe("POST /api/generate-blueprint", () => {
 
     expect(response.status).toBe(500);
     const payload = await response.json();
-    expect(payload.error).toBe("parse_error");
+    expect(payload.ok).toBe(false);
+    expect(payload.code).toBe("parse_error");
     expect(payload.blueprint).toBeUndefined();
   });
 });

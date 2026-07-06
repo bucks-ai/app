@@ -4,8 +4,13 @@
 import * as Sentry from "@sentry/nextjs";
 import type { ZodError } from "zod";
 
-export function apiError(error: string, code: string, status: number) {
-  return Response.json({ ok: false, error, code }, { status });
+export function apiError(
+  error: string,
+  code: string,
+  status: number,
+  extra?: Record<string, unknown>,
+) {
+  return Response.json({ ok: false, error, code, ...(extra ?? {}) }, { status });
 }
 
 /**
@@ -25,6 +30,16 @@ export function serverError(
 /** 401 envelope for routes guarded by requireUser() in src/lib/api-auth.ts. */
 export function unauthorized(message = "Authentication required.") {
   return apiError(message, "unauthenticated", 401);
+}
+
+/** 404 envelope for routes looking up a resource that does not exist or isn't owned by the caller. */
+export function notFound(message: string, code = "not_found") {
+  return apiError(message, code, 404);
+}
+
+/** 502 envelope for routes rejecting an AI-generated response that failed schema validation. */
+export function aiOutputInvalid(message = "The AI returned a response that failed validation.") {
+  return apiError(message, "AI_OUTPUT_INVALID", 502);
 }
 
 /** 400 envelope for routes validating request bodies with zod's safeParse(). */
