@@ -211,6 +211,109 @@ def test_run_e2e_suite_degrades_without_playwright():
 
 
 # ---------------------------------------------------------------------------
+# run_e2e_suite navigation timeout wiring
+#
+# Regression test: browser.new_context() does not accept a
+# default_navigation_timeout kwarg in the installed Playwright API (it raises
+# TypeError). The timeout must be applied via
+# context.set_default_navigation_timeout(...) after the context is created.
+# A fake playwright.sync_api module stands in for the real one so this is
+# exercised without a live browser.
+# ---------------------------------------------------------------------------
+
+class _FakePage:
+    def __init__(self):
+        self.goto_calls = []
+
+    def goto(self, url, wait_until=None):
+        self.goto_calls.append((url, wait_until))
+
+    def title(self):
+        return "Fake Title"
+
+    def content(self):
+        return "<html>fake</html>"
+
+
+class _FakeContext:
+    def __init__(self):
+        self.default_navigation_timeout = None
+        self.pages = []
+
+    def set_default_navigation_timeout(self, timeout_ms):
+        self.default_navigation_timeout = timeout_ms
+
+    def new_page(self):
+        page = _FakePage()
+        self.pages.append(page)
+        return page
+
+
+class _FakeBrowser:
+    def __init__(self):
+        self.contexts = []
+        self.closed = False
+
+    def new_context(self, **kwargs):
+        # Mirrors the real Playwright API: new_context() takes no
+        # default_navigation_timeout kwarg. Raising here reproduces the bug
+        # so the test fails if the harness regresses to the old call.
+        if kwargs:
+            raise TypeError(
+                f"Browser.new_context() got an unexpected keyword argument {next(iter(kwargs))!r}"
+            )
+        ctx = _FakeContext()
+        self.contexts.append(ctx)
+        return ctx
+
+    def close(self):
+        self.closed = True
+
+
+class _FakeChromium:
+    def __init__(self):
+        self.browsers = []
+
+    def launch(self, headless=True):
+        browser = _FakeBrowser()
+        self.browsers.append(browser)
+        return browser
+
+
+class _FakePlaywright:
+    def __init__(self):
+        self.chromium = _FakeChromium()
+
+
+class _FakeSyncPlaywrightCM:
+    def __init__(self):
+        self.pw = _FakePlaywright()
+
+    def __enter__(self):
+        return self.pw
+
+    def __exit__(self, *exc_info):
+        return False
+
+
+def test_run_e2e_suite_sets_navigation_timeout_without_new_context_kwarg():
+    import types
+
+    fake_module = types.ModuleType("playwright.sync_api")
+    fake_module.sync_playwright = lambda: _FakeSyncPlaywrightCM()
+
+    from tools.playwright_harness import run_e2e_suite
+
+    with mock.patch("tools.playwright_harness.is_playwright_available", return_value=True):
+        with mock.patch.dict("sys.modules", {"playwright.sync_api": fake_module}):
+            result = run_e2e_suite("https://example.com", timeout_ms=12345)
+
+    assert result["error"] is None, result
+    assert result["success"] is True, result
+    assert result["results"], "expected at least the default scenario to run"
+
+
+# ---------------------------------------------------------------------------
 # Script runner
 # ---------------------------------------------------------------------------
 

@@ -1278,6 +1278,18 @@ def _merge_via_pull_request(state: RunnerState, task: dict, branch: str) -> None
         }, task_id=task_id)
         return
 
+    if pr.get("no_diff"):
+        # Branch has no commits ahead of base — the worker made no net changes.
+        # Nothing to merge; leave worker_result untouched (task still succeeds)
+        # and just clean up the now-redundant branch.
+        log_event("pr_no_diff", {
+            "task_id": task_id, "branch": branch,
+            "reason": "no commits between branch and base; treated as no-op success",
+        }, task_id=task_id)
+        if cfg.auto_cleanup_branches:
+            cleanup_feature_branch(cfg.repo_path, branch)
+        return
+
     state.pr_number = pr.get("number")
     state.pr_url = pr.get("url")
 

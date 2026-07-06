@@ -276,11 +276,22 @@ def create_pull_request(repo: str, branch: str, title: str, body: str, base: str
             "number": pr.get("number"), "url": pr.get("html_url"),
         }
     except Exception as e:
+        status = _status_code(e)
+        body = _error_body(e)
+        # GitHub rejects PR creation with 422 "No commits between <base> and <branch>"
+        # when the feature branch has no commits ahead of base (e.g. the worker made
+        # no net changes). That is not a merge failure — there is simply nothing to
+        # merge, since the branch already matches base. Treat it as a no-op success
+        # instead of failing the task.
+        no_diff = status == 422 and body and "no commits between" in body.lower()
+        if no_diff:
+            log_event("pr_create_no_diff", {"repo": repo, "branch": branch, "base": base})
+            return {"success": True, "created": False, "no_diff": True, "number": None, "url": None}
         log_event("error", {
             "tool": "github", "action": "create_pull_request",
-            "error": str(e), "body": _error_body(e),
+            "error": str(e), "body": body,
         })
-        return {"success": False, "error": str(e), "error_body": _error_body(e)}
+        return {"success": False, "error": str(e), "error_body": body}
 
 
 def poll_pr_checks(
