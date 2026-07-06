@@ -379,7 +379,7 @@ def _wire_for_pr_merge(commit_result, *, create_result, checks_result, merge_res
     def _fetch(repo):
         calls["fetch"] += 1
     graph.fetch_pull_main = _fetch
-    graph.cleanup_feature_branch = lambda repo, branch: calls["cleanup"].append(branch)
+    graph.cleanup_feature_branch = lambda repo, branch, **kw: calls["cleanup"].append(branch)
     return calls
 
 

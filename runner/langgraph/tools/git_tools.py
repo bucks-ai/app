@@ -99,7 +99,16 @@ def merge_feature_branch(repo_path: str, branch: str) -> dict:
     return {"success": r.success, "output": r.output}
 
 
-def cleanup_feature_branch(repo_path: str, branch: str) -> dict:
+def cleanup_feature_branch(repo_path: str, branch: str, force: bool = False) -> dict:
+    """Delete a feature branch locally and on origin.
+
+    ``force=True`` retries a failed ``-d`` with ``-D``.  Only pass it when the
+    branch's changes are already confirmed on the base branch by an external
+    authority (e.g. the GitHub merge API returned success, or the PR had no
+    diff against base).  Squash/API merges rewrite history, so git's local
+    "not fully merged" check false-positives on branches whose content HAS
+    landed — that is the case force exists for (M0.9 finding, 2026-07-06).
+    """
     if branch.lower() in _PROTECTED_BRANCHES:
         result = {
             "success": False,
@@ -125,6 +134,12 @@ def cleanup_feature_branch(repo_path: str, branch: str) -> dict:
             return result
 
     local = _git(["branch", "-d", branch], repo_path)
+    if not local.success and force and "not fully merged" in (local.output or ""):
+        log_event("branch_cleanup_forced", {
+            "branch": branch,
+            "reason": "squash/API merge not detectable locally; -d refused, retrying -D",
+        })
+        local = _git(["branch", "-D", branch], repo_path)
     remote = _git(["push", "origin", "--delete", branch], repo_path, timeout=120)
     result = {
         "success": local.success and remote.success,

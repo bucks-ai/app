@@ -8,6 +8,7 @@ npm ci
 npm run lint
 npx next typegen
 npx tsc --noEmit
+npm test
 npm run build
 
 echo "Project verification completed successfully."
