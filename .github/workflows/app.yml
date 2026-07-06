@@ -16,17 +16,6 @@ on:
       - ".github/workflows/app.yml"
   pull_request:
     branches: [main]
-    paths:
-      - "src/**"
-      - "public/**"
-      - "package.json"
-      - "package-lock.json"
-      - "next.config.ts"
-      - "tsconfig.json"
-      - "eslint.config.mjs"
-      - "postcss.config.mjs"
-      - "middleware.ts"
-      - ".github/workflows/app.yml"
 
 jobs:
   check:

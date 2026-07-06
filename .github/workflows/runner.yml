@@ -8,9 +8,6 @@ on:
       - ".github/workflows/runner.yml"
   pull_request:
     branches: [main]
-    paths:
-      - "runner/**"
-      - ".github/workflows/runner.yml"
 
 jobs:
   pytest:
