@@ -10,6 +10,8 @@ import {
   ScaffoldPreparationError,
 } from "@/lib/github/next-scaffold";
 import { sanitizeVercelProjectName, createVercelProjectWithSetup } from "@/lib/vercel/client";
+import { badRequest, zodIssuesToFields } from "@/lib/api-error";
+import { createVercelProjectBodySchema } from "@/lib/schemas/infra";
 
 type ErrorDetail = {
   failedFile?: string;
@@ -71,26 +73,28 @@ export async function POST(request: NextRequest) {
   }
 
   // Parse body
-  let body: {
-    businessId?: unknown;
-    projectName?: unknown;
-    prepareScaffold?: unknown;
-    createDeployment?: unknown;
-  };
+  let json: unknown;
   try {
-    body = (await request.json()) as typeof body;
+    json = await request.json();
   } catch {
-    return errorResponse("Request body must be valid JSON.", "invalid_input", 400);
+    return badRequest("Request body must be valid JSON.", "invalid_json");
   }
 
-  const businessId =
-    typeof body.businessId === "string" && body.businessId ? body.businessId : null;
-  if (!businessId) {
-    return errorResponse("businessId is required.", "invalid_input", 400);
+  const parsed = createVercelProjectBodySchema.safeParse(json);
+  if (!parsed.success) {
+    return badRequest(
+      "Request body failed validation.",
+      "validation_error",
+      zodIssuesToFields(parsed.error),
+    );
   }
 
-  const prepareScaffold = body.prepareScaffold === true;
-  const createDeployment = body.createDeployment === true;
+  const {
+    businessId,
+    projectName: requestedProjectName,
+    prepareScaffold = false,
+    createDeployment = false,
+  } = parsed.data;
 
   // Auth
   const { user, response } = await requireUser();
@@ -156,10 +160,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Derive project name
-  const rawName =
-    typeof body.projectName === "string" && body.projectName.trim()
-      ? body.projectName.trim()
-      : business.idea_name;
+  const rawName = requestedProjectName ?? business.idea_name;
 
   const projectName = sanitizeVercelProjectName(rawName);
   if (!projectName) {

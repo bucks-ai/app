@@ -8,7 +8,8 @@ import {
   createGitHubRepository,
   createStarterRepositoryFiles,
 } from "@/lib/github/client";
-import type { GitHubRepoVisibility } from "@/types/github";
+import { badRequest, zodIssuesToFields } from "@/lib/api-error";
+import { createGitHubRepoBodySchema } from "@/lib/schemas/infra";
 
 function errorResponse(error: string, code: string, status: number) {
   return Response.json({ ok: false, error, code }, { status });
@@ -47,29 +48,28 @@ export async function POST(request: NextRequest) {
   }
 
   // Parse body
-  let body: {
-    businessId?: unknown;
-    repoName?: unknown;
-    visibility?: unknown;
-    includeStarterFiles?: unknown;
-  };
+  let json: unknown;
   try {
-    body = (await request.json()) as typeof body;
+    json = await request.json();
   } catch {
-    return errorResponse("Request body must be valid JSON.", "invalid_input", 400);
+    return badRequest("Request body must be valid JSON.", "invalid_json");
   }
 
-  const businessId =
-    typeof body.businessId === "string" && body.businessId ? body.businessId : null;
-  if (!businessId) {
-    return errorResponse("businessId is required.", "invalid_input", 400);
+  const parsed = createGitHubRepoBodySchema.safeParse(json);
+  if (!parsed.success) {
+    return badRequest(
+      "Request body failed validation.",
+      "validation_error",
+      zodIssuesToFields(parsed.error),
+    );
   }
 
-  const rawVisibility = body.visibility;
-  const visibility: GitHubRepoVisibility =
-    rawVisibility === "public" ? "public" : "private";
-
-  const includeStarterFiles = body.includeStarterFiles !== false; // default true
+  const {
+    businessId,
+    repoName: requestedRepoName,
+    visibility = "private",
+    includeStarterFiles = true,
+  } = parsed.data;
 
   // Auth
   const { user, response } = await requireUser();
@@ -117,10 +117,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Determine repo name
-  const rawName =
-    typeof body.repoName === "string" && body.repoName.trim()
-      ? body.repoName.trim()
-      : business.idea_name;
+  const rawName = requestedRepoName ?? business.idea_name;
 
   const repoName = sanitizeRepoName(rawName);
   if (!repoName) {

@@ -5,6 +5,8 @@ import { getBusinessById } from "@/lib/projects";
 import { requireUser } from "@/lib/api-auth";
 import { getLatestVercelProjectForBusiness } from "@/lib/vercel/project-metadata";
 import { refreshVercelDeploymentStatusForBusiness } from "@/lib/vercel/deployment-status";
+import { badRequest, zodIssuesToFields } from "@/lib/api-error";
+import { refreshVercelDeploymentStatusBodySchema } from "@/lib/schemas/infra";
 
 function errorResponse(error: string, code: string, status: number) {
   return Response.json({ ok: false, error, code }, { status });
@@ -25,18 +27,23 @@ export async function POST(request: NextRequest) {
   }
 
   // Parse body
-  let body: { businessId?: unknown };
+  let json: unknown;
   try {
-    body = (await request.json()) as typeof body;
+    json = await request.json();
   } catch {
-    return errorResponse("Request body must be valid JSON.", "invalid_input", 400);
+    return badRequest("Request body must be valid JSON.", "invalid_json");
   }
 
-  const businessId =
-    typeof body.businessId === "string" && body.businessId ? body.businessId : null;
-  if (!businessId) {
-    return errorResponse("businessId is required.", "invalid_input", 400);
+  const parsed = refreshVercelDeploymentStatusBodySchema.safeParse(json);
+  if (!parsed.success) {
+    return badRequest(
+      "Request body failed validation.",
+      "validation_error",
+      zodIssuesToFields(parsed.error),
+    );
   }
+
+  const { businessId } = parsed.data;
 
   // Auth
   const { user, response } = await requireUser();

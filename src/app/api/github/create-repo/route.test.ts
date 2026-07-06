@@ -157,4 +157,40 @@ describe("POST /api/github/create-repo", () => {
       data: { fullName: "user/acme" },
     });
   });
+
+  it("returns a 400 badRequest envelope when businessId is missing", async () => {
+    const response = await POST(makeRequest({ repoName: "my-repo" }));
+
+    expect(response.status).toBe(400);
+    const payload = await response.json();
+    expect(payload.ok).toBe(false);
+    expect(payload.code).toBe("validation_error");
+    expect(payload.issues.businessId).toBeDefined();
+    expect(requireUserMock).not.toHaveBeenCalled();
+  });
+
+  it("returns a 400 badRequest envelope when visibility is not a valid enum value", async () => {
+    const response = await POST(
+      makeRequest({ businessId: "biz-1", visibility: "hidden" }),
+    );
+
+    expect(response.status).toBe(400);
+    const payload = await response.json();
+    expect(payload.code).toBe("validation_error");
+    expect(payload.issues.visibility).toBeDefined();
+  });
+
+  it("returns a 400 badRequest envelope for a malformed JSON body", async () => {
+    const request = new NextRequest("http://localhost/api/github/create-repo", {
+      method: "POST",
+      body: "{not valid json",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(400);
+    const payload = await response.json();
+    expect(payload.code).toBe("invalid_json");
+  });
 });

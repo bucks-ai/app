@@ -7,6 +7,8 @@ import {
   seedToolPermissionsForBusiness,
   createToolPermissionActivityLog,
 } from "@/lib/tool-permissions";
+import { badRequest, zodIssuesToFields } from "@/lib/api-error";
+import { seedToolPermissionsBodySchema } from "@/lib/schemas/infra";
 
 function errorResponse(error: string, code: string, status: number) {
   return Response.json({ ok: false, error, code }, { status });
@@ -76,17 +78,23 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  let body: { businessId?: string };
+  let json: unknown;
   try {
-    body = (await request.json()) as { businessId?: string };
+    json = await request.json();
   } catch {
-    return errorResponse("Request body must be valid JSON.", "invalid_input", 400);
+    return badRequest("Request body must be valid JSON.", "invalid_json");
   }
 
-  const { businessId } = body;
-  if (!businessId || typeof businessId !== "string") {
-    return errorResponse("businessId is required in the request body.", "invalid_input", 400);
+  const parsed = seedToolPermissionsBodySchema.safeParse(json);
+  if (!parsed.success) {
+    return badRequest(
+      "Request body failed validation.",
+      "validation_error",
+      zodIssuesToFields(parsed.error),
+    );
   }
+
+  const { businessId } = parsed.data;
 
   const { user, response } = await requireUser();
   if (!user) return response;

@@ -98,4 +98,16 @@ describe("POST /api/businesses/[id]/agent-runs/infer", () => {
       data: { created: 2, skipped: 1 },
     });
   });
+
+  it("returns a 400 badRequest envelope when the business id path param is empty", async () => {
+    const response = await POST(new Request("http://localhost"), makeParams(""));
+
+    expect(response.status).toBe(400);
+    const payload = await response.json();
+    expect(payload.ok).toBe(false);
+    expect(payload.code).toBe("validation_error");
+    expect(payload.issues.id).toBeDefined();
+    expect(requireUserMock).not.toHaveBeenCalled();
+    expect(inferAgentRunsFromActivityLogsMock).not.toHaveBeenCalled();
+  });
 });

@@ -130,4 +130,48 @@ describe("PATCH /api/tool-permissions/[id]", () => {
       data: { id: "perm-1", status: "approved" },
     });
   });
+
+  it("returns a 400 badRequest envelope when action is missing", async () => {
+    requireUserMock.mockResolvedValue({ user: { id: "user-1" }, response: null });
+
+    const response = await PATCH(makeRequest({}), makeParams("perm-1"));
+
+    expect(response.status).toBe(400);
+    const payload = await response.json();
+    expect(payload.ok).toBe(false);
+    expect(payload.code).toBe("validation_error");
+    expect(payload.issues.action).toBeDefined();
+    expect(getToolPermissionByIdMock).not.toHaveBeenCalled();
+  });
+
+  it("returns a 400 badRequest envelope when action is not a valid enum value", async () => {
+    requireUserMock.mockResolvedValue({ user: { id: "user-1" }, response: null });
+
+    const response = await PATCH(
+      makeRequest({ action: "delete_everything" }),
+      makeParams("perm-1"),
+    );
+
+    expect(response.status).toBe(400);
+    const payload = await response.json();
+    expect(payload.code).toBe("validation_error");
+    expect(payload.issues.action).toBeDefined();
+    expect(getToolPermissionByIdMock).not.toHaveBeenCalled();
+  });
+
+  it("returns a 400 badRequest envelope for a malformed JSON body", async () => {
+    requireUserMock.mockResolvedValue({ user: { id: "user-1" }, response: null });
+
+    const request = new NextRequest("http://localhost/api/tool-permissions/perm-1", {
+      method: "PATCH",
+      body: "{not valid json",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const response = await PATCH(request, makeParams("perm-1"));
+
+    expect(response.status).toBe(400);
+    const payload = await response.json();
+    expect(payload.code).toBe("invalid_json");
+  });
 });

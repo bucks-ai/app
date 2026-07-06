@@ -149,4 +149,38 @@ describe("POST /api/github/prepare-next-scaffold", () => {
       data: { filesWritten: 3 },
     });
   });
+
+  it("returns a 400 badRequest envelope when businessId is missing", async () => {
+    const response = await POST(makeRequest({}));
+
+    expect(response.status).toBe(400);
+    const payload = await response.json();
+    expect(payload.ok).toBe(false);
+    expect(payload.code).toBe("validation_error");
+    expect(payload.issues.businessId).toBeDefined();
+    expect(requireUserMock).not.toHaveBeenCalled();
+  });
+
+  it("returns a 400 badRequest envelope when businessId is not a string", async () => {
+    const response = await POST(makeRequest({ businessId: 123 }));
+
+    expect(response.status).toBe(400);
+    const payload = await response.json();
+    expect(payload.code).toBe("validation_error");
+    expect(payload.issues.businessId).toBeDefined();
+  });
+
+  it("returns a 400 badRequest envelope for a malformed JSON body", async () => {
+    const request = new NextRequest("http://localhost/api/github/prepare-next-scaffold", {
+      method: "POST",
+      body: "{not valid json",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(400);
+    const payload = await response.json();
+    expect(payload.code).toBe("invalid_json");
+  });
 });

@@ -17,6 +17,8 @@ import { hasSupabaseEnv } from "@/lib/supabase/env";
 import { getBusinessById } from "@/lib/projects";
 import { requireUser } from "@/lib/api-auth";
 import { inferAgentRunsFromActivityLogs } from "@/lib/agents/runs";
+import { badRequest, zodIssuesToFields } from "@/lib/api-error";
+import { agentRunsInferParamsSchema } from "@/lib/schemas/infra";
 
 function errorResponse(error: string, code: string, status: number) {
   return Response.json({ ok: false, error, code }, { status });
@@ -30,10 +32,17 @@ export async function POST(
     return errorResponse("Supabase is not configured.", "missing_supabase_env", 503);
   }
 
-  const { id } = await params;
-  if (!id) {
-    return errorResponse("Business id is required.", "invalid_input", 400);
+  const rawParams = await params;
+  const parsed = agentRunsInferParamsSchema.safeParse(rawParams);
+  if (!parsed.success) {
+    return badRequest(
+      "Request path failed validation.",
+      "validation_error",
+      zodIssuesToFields(parsed.error),
+    );
   }
+
+  const { id } = parsed.data;
 
   const { user, response } = await requireUser();
   if (!user) return response;
