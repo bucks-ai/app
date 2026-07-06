@@ -40,4 +40,27 @@ rejected by GitHub, since `main` requires a PR with passing checks.
 
 ## Results
 
-_Filled in after the PR's checks complete — see below._
+- **PR:** [#10](https://github.com/bucks-ai/app/pull/10) (`feature/smoke-pr-merge-2` -> `main`)
+- **Head SHA:** `144169f`
+- **Required checks:**
+  - `Lint, typecheck, build` — pass (55s)
+  - `Runner tests` — pass (35s)
+- **Merge state:** `mergeStateStatus=CLEAN`, `mergeable=MERGEABLE` per `gh pr view`
+- **Merge:** `PUT /repos/bucks-ai/app/pulls/10/merge` with `merge_method=merge`
+  (same default `merge_pull_request` uses) — `merged: true`, merge commit `7a8a047`
+- **Post-merge:** `git fetch && git pull origin main` fast-forwarded local `main`
+  from `92e6ca1` to `7a8a047` cleanly; feature branch deleted on GitHub and locally.
+
+This confirms the live path: pushing straight to `main` would have been rejected
+by branch protection, but opening a PR, waiting for both required contexts to go
+green, and merging via the REST API — exactly what `_merge_via_pull_request`
+does — succeeds.
+
+## Known Limitations
+
+- This test only exercised a docs-only change; it doesn't confirm behavior when
+  a required check legitimately *fails* (that would need a deliberately broken
+  PR, which risks polluting CI history — left as a follow-up if desired).
+- `poll_pr_checks`'s timeout/interval config (`PR_CHECKS_TIMEOUT_S`,
+  `PR_CHECKS_POLL_INTERVAL_S`) was not exercised directly; checks here resolved
+  in under a minute, well inside default bounds.
