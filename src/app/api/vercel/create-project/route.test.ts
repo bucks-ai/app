@@ -171,4 +171,40 @@ describe("POST /api/vercel/create-project", () => {
       data: { projectId: "proj-1" },
     });
   });
+
+  it("returns a 400 badRequest envelope when businessId is missing", async () => {
+    const response = await POST(makeRequest({ projectName: "acme" }));
+
+    expect(response.status).toBe(400);
+    const payload = await response.json();
+    expect(payload.ok).toBe(false);
+    expect(payload.code).toBe("validation_error");
+    expect(payload.issues.businessId).toBeDefined();
+    expect(requireUserMock).not.toHaveBeenCalled();
+  });
+
+  it("returns a 400 badRequest envelope when prepareScaffold is not a boolean", async () => {
+    const response = await POST(
+      makeRequest({ businessId: "biz-1", prepareScaffold: "yes" }),
+    );
+
+    expect(response.status).toBe(400);
+    const payload = await response.json();
+    expect(payload.code).toBe("validation_error");
+    expect(payload.issues.prepareScaffold).toBeDefined();
+  });
+
+  it("returns a 400 badRequest envelope for a malformed JSON body", async () => {
+    const request = new NextRequest("http://localhost/api/vercel/create-project", {
+      method: "POST",
+      body: "{not valid json",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(400);
+    const payload = await response.json();
+    expect(payload.code).toBe("invalid_json");
+  });
 });
