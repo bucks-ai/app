@@ -49,7 +49,17 @@ _COOLDOWN_MARKERS = (
     "please try again in",
     "try again after",
     "overloaded with requests",
+    # 2026-07 wording: "You've hit your session limit · resets 4am"
+    "session limit",
+    "you've hit your",
+    "you have hit your",
 )
+
+# Wording-independent signal: the Claude CLI JSON output reports the HTTP
+# status of the failed API call.  A 429 in subscription mode is a cooldown
+# regardless of how the human-readable message is phrased, so a future copy
+# change cannot silently break detection again (M0.9 lesson, 2026-07-06).
+_API_429_RE = re.compile(r'"api_error_status"\s*:\s*429')
 
 # Patterns like "try again in 2 hours", "resets in 47 minutes", "wait 30 minutes"
 _DURATION_PATTERNS = (
@@ -70,12 +80,21 @@ _ABSOLUTE_PATTERNS = (
         r"(?:available|try)\s+(?:again\s+)?at\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?",
         re.IGNORECASE,
     ),
+    # "resets 4am" / "resets 4:30pm" — 2026-07 wording drops the "at".
+    # am/pm is REQUIRED here so bare numbers elsewhere in the text can't
+    # false-match (e.g. "resets 30" is meaningless without a meridiem).
+    re.compile(
+        r"resets?\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)",
+        re.IGNORECASE,
+    ),
 )
 
 
 def _is_cooldown_error(output: Optional[str], error: Optional[str]) -> bool:
     """True when the worker response contains a Claude subscription cooldown signal."""
     text = " ".join(filter(None, [output, error])).lower()
+    if _API_429_RE.search(text):
+        return True
     return any(marker in text for marker in _COOLDOWN_MARKERS)
 
 

@@ -110,7 +110,7 @@ def _wire_git(commit_result):
         calls["merge"].append(branch)
         return {"success": True, "output": ""}
     graph.merge_feature_branch = _merge
-    graph.cleanup_feature_branch = lambda repo, branch: calls["cleanup"].append(branch)
+    graph.cleanup_feature_branch = lambda repo, branch, **kw: calls["cleanup"].append(branch)
     def _fetch(repo):
         calls["fetch"] += 1
     graph.fetch_pull_main = _fetch

@@ -1287,7 +1287,7 @@ def _merge_via_pull_request(state: RunnerState, task: dict, branch: str) -> None
             "reason": "no commits between branch and base; treated as no-op success",
         }, task_id=task_id)
         if cfg.auto_cleanup_branches:
-            cleanup_feature_branch(cfg.repo_path, branch)
+            cleanup_feature_branch(cfg.repo_path, branch, force=True)
         return
 
     state.pr_number = pr.get("number")
@@ -1325,7 +1325,9 @@ def _merge_via_pull_request(state: RunnerState, task: dict, branch: str) -> None
 
     fetch_pull_main(cfg.repo_path)
     if cfg.auto_cleanup_branches:
-        cleanup_feature_branch(cfg.repo_path, branch)
+        # force: the GitHub merge API just confirmed this branch's changes are
+        # on main; a squash merge makes local `git branch -d` false-refuse.
+        cleanup_feature_branch(cfg.repo_path, branch, force=True)
 
 
 _RUNNER_DIR = Path(__file__).parent
