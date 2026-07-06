@@ -180,6 +180,9 @@ class RunnerConfig:
     worker_timeout_threshold: int = field(
         default_factory=lambda: int(os.getenv("WORKER_TIMEOUT_THRESHOLD", "570"))
     )
+    claude_cli_timeout_s: int = field(
+        default_factory=lambda: int(os.getenv("CLAUDE_CLI_TIMEOUT_S", "1800"))
+    )
     cost_budget_guard_enabled: bool = field(
         default_factory=lambda: os.getenv("COST_BUDGET_GUARD", "true").lower() == "true"
     )
@@ -487,6 +490,7 @@ class RunnerConfig:
             "worker_timeout_guard_enabled": self.worker_timeout_guard_enabled,
             "max_worker_timeouts": self.max_worker_timeouts,
             "worker_timeout_threshold": self.worker_timeout_threshold,
+            "claude_cli_timeout_s": self.claude_cli_timeout_s,
             "cost_budget_guard_enabled": self.cost_budget_guard_enabled,
             "max_session_cost_dollars": self.max_session_cost_dollars,
             "max_task_cost_dollars": self.max_task_cost_dollars,

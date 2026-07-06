@@ -133,7 +133,10 @@ class ClaudeWorker(BaseWorker):
         if auth_mode == "subscription":
             env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
 
-        r = run_command(cmd, timeout=600, env=env)
+        # Configurable wall-clock cap for one CLI invocation.  600s proved too
+        # small for heavy multi-file tasks (M0.9: m1-11/m1-12 zod rollouts
+        # timed out at exactly 600s while smaller tasks completed fine).
+        r = run_command(cmd, timeout=cfg.claude_cli_timeout_s, env=env)
 
         output_text = r.output
         api_cost = None

@@ -1,10 +1,11 @@
 import { NextRequest } from "next/server";
 import OpenAI from "openai";
-import type { StartupIdea, BusinessBlueprint } from "@/types/startup";
+import type { StartupIdea } from "@/types/startup";
 import { buildBlueprintPrompt } from "@/lib/blueprint-prompt";
 import { requireUser } from "@/lib/api-auth";
-import { badRequest, zodIssuesToFields } from "@/lib/api-error";
+import { apiError, badRequest, zodIssuesToFields } from "@/lib/api-error";
 import { generateBlueprintBodySchema } from "@/lib/schemas/generate-blueprint";
+import { businessBlueprintOutputSchema } from "@/lib/schemas/blueprint-output";
 
 export async function POST(request: NextRequest) {
   const { user, response } = await requireUser();
@@ -62,9 +63,9 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  let blueprint: BusinessBlueprint;
+  let rawBlueprint: unknown;
   try {
-    blueprint = JSON.parse(rawContent) as BusinessBlueprint;
+    rawBlueprint = JSON.parse(rawContent);
   } catch {
     return Response.json(
       {
@@ -75,5 +76,19 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  return Response.json({ blueprint }, { status: 200 });
+  const parsedBlueprint = businessBlueprintOutputSchema.safeParse(rawBlueprint);
+  if (!parsedBlueprint.success) {
+    console.error(
+      "generate-blueprint: AI output failed schema validation.",
+      rawContent,
+      parsedBlueprint.error.issues,
+    );
+    return apiError(
+      "The AI returned a blueprint that failed validation.",
+      "AI_OUTPUT_INVALID",
+      502,
+    );
+  }
+
+  return Response.json({ blueprint: parsedBlueprint.data }, { status: 200 });
 }
