@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { hasSupabaseEnv } from "@/lib/supabase/env";
-import { getCurrentUser } from "@/lib/projects";
+import { requireUser } from "@/lib/api-auth";
 import {
   getToolPermissionById,
   updateToolPermissionStatus,
@@ -48,12 +48,8 @@ export async function PATCH(
     return errorResponse("Permission id is required.", "invalid_input", 400);
   }
 
-  const userResult = await getCurrentUser();
-  if (userResult.error || !userResult.data) {
-    return errorResponse("Authentication required.", "unauthenticated", 401);
-  }
-
-  const user = userResult.data;
+  const { user, response } = await requireUser();
+  if (!user) return response;
 
   let body: { action?: unknown };
   try {

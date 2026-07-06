@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server";
 import { hasSupabaseEnv } from "@/lib/supabase/env";
 import { hasVercelEnv } from "@/lib/vercel/env";
-import { getCurrentUser, getBusinessById, createAgentActivityLog } from "@/lib/projects";
+import { getBusinessById, createAgentActivityLog } from "@/lib/projects";
+import { requireUser } from "@/lib/api-auth";
 import { getToolPermissionsForBusiness, updateToolPermissionStatus } from "@/lib/tool-permissions";
 import { getLatestGitHubRepoForBusiness } from "@/lib/github/repo-metadata";
 import {
@@ -92,11 +93,8 @@ export async function POST(request: NextRequest) {
   const createDeployment = body.createDeployment === true;
 
   // Auth
-  const userResult = await getCurrentUser();
-  if (userResult.error || !userResult.data) {
-    return errorResponse("Authentication required.", "unauthenticated", 401);
-  }
-  const user = userResult.data;
+  const { user, response } = await requireUser();
+  if (!user) return response;
 
   // Business ownership
   const businessResult = await getBusinessById(businessId);
