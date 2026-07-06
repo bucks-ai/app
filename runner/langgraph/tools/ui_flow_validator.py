@@ -217,7 +217,8 @@ def run_ui_flow_validation(
 
         with sync_playwright() as pw:
             browser = pw.chromium.launch(headless=headless)
-            ctx = browser.new_context(default_navigation_timeout=timeout_ms)
+            ctx = browser.new_context()
+            ctx.set_default_navigation_timeout(timeout_ms)
             page = ctx.new_page()
             for flow in flows:
                 result = run_flow(page, base_url, flow)
