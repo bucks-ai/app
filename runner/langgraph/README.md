@@ -293,6 +293,10 @@ Copy `.env.example` to `.env` and fill in:
 | `SLACK_WEBHOOK_URL` | Slack notifications for notable runner events (optional) |
 | `SLACK_NOTIFY` | Enable/disable Slack notifications (default: true) |
 | `SLACK_NOTIFY_EVENTS` | Comma-separated event types to notify on (default: curated set) |
+| `SLACK_INTERACTIVE_APPROVALS` | Enable `approvals_daemon.py` (Slack button-click approvals for the merge/SQL/resource/strategic gates) (default: false) |
+| `SLACK_BOT_TOKEN` | Bot token (`xoxb-...`) used by `approvals_daemon.py` to post/update messages (needs `chat:write`) |
+| `SLACK_APP_TOKEN` | App-level token (`xapp-...`) used by `approvals_daemon.py` for Socket Mode (needs `connections:write`) |
+| `SLACK_CHANNEL_ID` | Channel `approvals_daemon.py` posts approval requests into |
 | `BUCKS_AI_REPO_PATH` | Path to repo (default: `/home/arnavt/bucks-ai`) |
 | `RUNNER_MODE` | `browser_or_cli` (default) |
 | `MAX_LOOP_TASKS` | Max tasks per run (default: 10) |
@@ -792,6 +796,55 @@ off the flight recorder: every call to `log_event(...)` is offered to
 `format_event(...)` builds the message text and is pure/side-effect free, so the
 formatting and filtering are unit-tested without the network (see
 `tests/test_slack_tools.py`).
+
+---
+
+## Slack Interactive Approvals
+
+The runner's file-based approval gates — merge approval, SQL approval,
+resource/credential request, strategic review (see their sections above and
+`graph.py`) — normally require a human to create a file by hand in `inbox/`.
+`approvals_daemon.py` is an optional standalone process that replaces that
+manual step with a Slack button click, **without changing the gates or the
+graph at all**: it watches `outbox/` for new request files and writes the
+exact same fulfillment file into `inbox/` that a human would have created.
+
+Run it alongside the runner loop, as a separate process:
+
+```bash
+python approvals_daemon.py &
+python main.py run-loop
+```
+
+Required env vars (see the table above): `SLACK_INTERACTIVE_APPROVALS=true`,
+`SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `SLACK_CHANNEL_ID`. Missing any of these
+is a clear startup error and a nonzero exit — the daemon refuses to start in
+a half-configured state rather than silently doing nothing.
+
+How it works:
+
+- Polls `outbox/` every few seconds. Any new file recognized as one of the
+  four approval-request conventions gets a Slack message: request type, the
+  outbox filename, a sanitized/truncated (~1500 char) excerpt of the file
+  content, and **Approve** / **Reject** buttons.
+- A button click (via Socket Mode) writes the matching `inbox/` fulfillment
+  file — `{task_id}_merge_approved.txt`, `{task_id}_sql_approved.txt`,
+  `{task_id}_resources_provided.txt`, or `strategic_review_{loop}_approved.txt`
+  — then updates the Slack message to show who clicked and the outcome.
+- Only `sql_approval` has a real reject-by-content mechanism (the graph reads
+  `rejected`/`reject`/`no` from that file). The other three gates only have an
+  approve convention in the graph (their documented "reject" path is simply
+  *not* creating the file), so **Reject** on those writes nothing — the
+  request stays blocked until resolved another way, and the Slack message
+  says so.
+- Never posts secret values: outbox content is redacted for anything that
+  looks like a credential or connection string before it's truncated and
+  posted (see `tools/slack_approvals.sanitize_excerpt`).
+
+The request-classification, Block Kit formatting, and button-click-to-inbox-file
+mapping are all pure functions in `tools/slack_approvals.py`, unit-tested
+without any Slack calls (see `tests/test_slack_approvals.py` and
+`tests/test_approvals_daemon.py`).
 
 ---
 

@@ -85,6 +85,12 @@ class RunnerConfig:
         default_factory=lambda: os.getenv("SLACK_NOTIFY", "true").lower() == "true"
     )
     slack_notify_events: frozenset = field(default_factory=_load_slack_events)
+    slack_interactive_approvals: bool = field(
+        default_factory=lambda: os.getenv("SLACK_INTERACTIVE_APPROVALS", "false").lower() == "true"
+    )
+    slack_bot_token: Optional[str] = field(default_factory=lambda: os.getenv("SLACK_BOT_TOKEN"))
+    slack_app_token: Optional[str] = field(default_factory=lambda: os.getenv("SLACK_APP_TOKEN"))
+    slack_channel_id: Optional[str] = field(default_factory=lambda: os.getenv("SLACK_CHANNEL_ID"))
     repo_path: str = field(
         default_factory=lambda: os.getenv("BUCKS_AI_REPO_PATH", "/home/arnav/bucks-ai")
     )
@@ -420,6 +426,11 @@ class RunnerConfig:
     def has_slack(self) -> bool:
         return bool(self.slack_webhook_url)
 
+    @property
+    def has_slack_interactive_approvals(self) -> bool:
+        """True when the approvals_daemon.py has everything it needs to run."""
+        return bool(self.slack_bot_token and self.slack_app_token and self.slack_channel_id)
+
     def report(self) -> dict:
         return {
             "openai": self.has_openai,
@@ -434,6 +445,8 @@ class RunnerConfig:
             "vercel_project_id": self.vercel_project_id,
             "slack": self.has_slack,
             "slack_notify": self.slack_notify,
+            "slack_interactive_approvals": self.slack_interactive_approvals,
+            "slack_interactive_approvals_configured": self.has_slack_interactive_approvals,
             "repo_path": self.repo_path,
             "runner_mode": self.runner_mode,
             "max_loop_tasks": self.max_loop_tasks,
