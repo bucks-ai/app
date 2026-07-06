@@ -10,15 +10,12 @@ import {
 import type {
   NewResearchRiskInput,
   UpdateResearchRiskInput,
-  ResearchConfidence,
-  ResearchPriority,
 } from "@/types/research";
-
-const VALID_CONFIDENCES = new Set<ResearchConfidence>([
-  "assumption", "weak_signal", "medium_signal", "strong_signal", "validated", "invalidated",
-]);
-const VALID_PRIORITIES = new Set<ResearchPriority>(["high", "medium", "low"]);
-const VALID_SEVERITIES = new Set(["critical", "high", "medium", "low"]);
+import { badRequest, zodIssuesToFields } from "@/lib/api-error";
+import {
+  createResearchRiskBodySchema,
+  updateResearchRiskBodySchema,
+} from "@/lib/schemas/research";
 
 function errorResponse(error: string, code: string, status: number) {
   return Response.json({ ok: false, error, code }, { status });
@@ -52,33 +49,32 @@ export async function POST(
   if (!business) return errorResponse("Business not found.", "business_not_found", 404);
   if (business.user_id !== user.id) return errorResponse("Access denied.", "forbidden", 403);
 
-  let body: Record<string, unknown> = {};
+  let json: unknown;
   try {
-    body = (await request.json()) as Record<string, unknown>;
+    json = await request.json();
   } catch {
-    return errorResponse("Invalid JSON body.", "invalid_input", 400);
+    return badRequest("Request body must be valid JSON.", "invalid_json");
   }
 
-  const title = typeof body.title === "string" ? body.title.trim() : "";
-  if (!title) return errorResponse("title is required.", "invalid_input", 400);
-
-  const rawSeverity = body.severity as string | undefined;
-  const rawConfidence = body.confidence as string | undefined;
-  const rawPriority = body.priority as string | undefined;
+  const parsed = createResearchRiskBodySchema.safeParse(json);
+  if (!parsed.success) {
+    return badRequest(
+      "Request body failed validation.",
+      "validation_error",
+      zodIssuesToFields(parsed.error),
+    );
+  }
+  const body = parsed.data;
 
   const input: NewResearchRiskInput = {
     business_id: id,
     user_id: user.id,
-    title,
-    description: (body.description as string | null) ?? null,
-    severity: rawSeverity && VALID_SEVERITIES.has(rawSeverity) ? rawSeverity : null,
-    mitigation: (body.mitigation as string | null) ?? null,
-    confidence: VALID_CONFIDENCES.has(rawConfidence as ResearchConfidence)
-      ? (rawConfidence as ResearchConfidence)
-      : null,
-    priority: VALID_PRIORITIES.has(rawPriority as ResearchPriority)
-      ? (rawPriority as ResearchPriority)
-      : "medium",
+    title: body.title,
+    description: body.description ?? null,
+    severity: body.severity ?? null,
+    mitigation: body.mitigation ?? null,
+    confidence: body.confidence ?? null,
+    priority: body.priority ?? "medium",
   };
 
   const result = await createResearchRisk(input);
@@ -112,37 +108,32 @@ export async function PATCH(
   if (!business) return errorResponse("Business not found.", "business_not_found", 404);
   if (business.user_id !== user.id) return errorResponse("Access denied.", "forbidden", 403);
 
-  let body: Record<string, unknown> = {};
+  let json: unknown;
   try {
-    body = (await request.json()) as Record<string, unknown>;
+    json = await request.json();
   } catch {
-    return errorResponse("Invalid JSON body.", "invalid_input", 400);
+    return badRequest("Request body must be valid JSON.", "invalid_json");
   }
 
-  const riskId = typeof body.id === "string" ? body.id.trim() : "";
-  if (!riskId) return errorResponse("id (risk uuid) is required.", "invalid_input", 400);
-
-  const rawSeverity = body.severity as string | undefined;
-  const rawConfidence = body.confidence as string | undefined;
-  const rawPriority = body.priority as string | undefined;
+  const parsed = updateResearchRiskBodySchema.safeParse(json);
+  if (!parsed.success) {
+    return badRequest(
+      "Request body failed validation.",
+      "validation_error",
+      zodIssuesToFields(parsed.error),
+    );
+  }
+  const body = parsed.data;
 
   const input: UpdateResearchRiskInput = {
-    id: riskId,
+    id: body.id,
     business_id: id,
-    ...(body.title !== undefined && { title: body.title as string }),
-    ...(body.description !== undefined && { description: body.description as string | null }),
-    ...(rawSeverity !== undefined && {
-      severity: VALID_SEVERITIES.has(rawSeverity) ? rawSeverity : null,
-    }),
-    ...(body.mitigation !== undefined && { mitigation: body.mitigation as string | null }),
-    ...(rawConfidence !== undefined &&
-      VALID_CONFIDENCES.has(rawConfidence as ResearchConfidence) && {
-        confidence: rawConfidence as ResearchConfidence,
-      }),
-    ...(rawPriority !== undefined &&
-      VALID_PRIORITIES.has(rawPriority as ResearchPriority) && {
-        priority: rawPriority as ResearchPriority,
-      }),
+    ...(body.title !== undefined && { title: body.title }),
+    ...(body.description !== undefined && { description: body.description }),
+    ...(body.severity !== undefined && { severity: body.severity }),
+    ...(body.mitigation !== undefined && { mitigation: body.mitigation }),
+    ...(body.confidence !== undefined && { confidence: body.confidence }),
+    ...(body.priority !== undefined && { priority: body.priority }),
   };
 
   const result = await updateResearchRisk(input);

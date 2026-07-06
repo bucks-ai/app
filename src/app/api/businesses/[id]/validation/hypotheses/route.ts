@@ -8,18 +8,12 @@ import { createValidationHypothesis, updateValidationHypothesis } from "@/lib/va
 import type {
   NewValidationHypothesisInput,
   UpdateValidationHypothesisInput,
-  ValidationHypothesisStatus,
-  ValidationHypothesisType,
-  ValidationPriority,
 } from "@/types/validation";
-
-const VALID_STATUSES = new Set<ValidationHypothesisStatus>([
-  "untested", "testing", "supported", "rejected", "inconclusive",
-]);
-const VALID_TYPES = new Set<ValidationHypothesisType>([
-  "customer", "market", "product", "revenue", "other",
-]);
-const VALID_PRIORITIES = new Set<ValidationPriority>(["high", "medium", "low"]);
+import { badRequest, zodIssuesToFields } from "@/lib/api-error";
+import {
+  createValidationHypothesisBodySchema,
+  updateValidationHypothesisBodySchema,
+} from "@/lib/schemas/validation";
 
 function errorResponse(error: string, code: string, status: number) {
   return Response.json({ ok: false, error, code }, { status });
@@ -53,41 +47,34 @@ export async function POST(
   if (!business) return errorResponse("Business not found.", "business_not_found", 404);
   if (business.user_id !== user.id) return errorResponse("Access denied.", "forbidden", 403);
 
-  let body: Record<string, unknown> = {};
+  let json: unknown;
   try {
-    body = (await request.json()) as Record<string, unknown>;
+    json = await request.json();
   } catch {
-    return errorResponse("Invalid JSON body.", "invalid_input", 400);
+    return badRequest("Request body must be valid JSON.", "invalid_json");
   }
 
-  const title = typeof body.title === "string" ? body.title.trim() : "";
-  if (!title) return errorResponse("title is required.", "invalid_input", 400);
-
-  const rawStatus = body.status as string | undefined;
-  const rawType = body.type as string | undefined;
-  const rawPriority = body.priority as string | undefined;
-  const rawConfidence = body.confidence;
+  const parsed = createValidationHypothesisBodySchema.safeParse(json);
+  if (!parsed.success) {
+    return badRequest(
+      "Request body failed validation.",
+      "validation_error",
+      zodIssuesToFields(parsed.error),
+    );
+  }
+  const body = parsed.data;
 
   const input: NewValidationHypothesisInput = {
     business_id: id,
     user_id: user.id,
-    title,
-    description: (body.description as string | null) ?? null,
-    type: VALID_TYPES.has(rawType as ValidationHypothesisType)
-      ? (rawType as ValidationHypothesisType)
-      : null,
-    assumption: (body.assumption as string | null) ?? null,
-    success_criteria: (body.success_criteria as string | null) ?? null,
-    status: VALID_STATUSES.has(rawStatus as ValidationHypothesisStatus)
-      ? (rawStatus as ValidationHypothesisStatus)
-      : "untested",
-    confidence:
-      typeof rawConfidence === "number" && rawConfidence >= 0 && rawConfidence <= 100
-        ? rawConfidence
-        : null,
-    priority: VALID_PRIORITIES.has(rawPriority as ValidationPriority)
-      ? (rawPriority as ValidationPriority)
-      : "medium",
+    title: body.title,
+    description: body.description ?? null,
+    type: body.type ?? null,
+    assumption: body.assumption ?? null,
+    success_criteria: body.success_criteria ?? null,
+    status: body.status ?? "untested",
+    confidence: body.confidence ?? null,
+    priority: body.priority ?? "medium",
   };
 
   const result = await createValidationHypothesis(input);
@@ -123,49 +110,34 @@ export async function PATCH(
   if (!business) return errorResponse("Business not found.", "business_not_found", 404);
   if (business.user_id !== user.id) return errorResponse("Access denied.", "forbidden", 403);
 
-  let body: Record<string, unknown> = {};
+  let json: unknown;
   try {
-    body = (await request.json()) as Record<string, unknown>;
+    json = await request.json();
   } catch {
-    return errorResponse("Invalid JSON body.", "invalid_input", 400);
+    return badRequest("Request body must be valid JSON.", "invalid_json");
   }
 
-  const hypothesisId = typeof body.id === "string" ? body.id.trim() : "";
-  if (!hypothesisId) return errorResponse("id (hypothesis uuid) is required.", "invalid_input", 400);
-
-  const rawStatus = body.status as string | undefined;
-  const rawType = body.type as string | undefined;
-  const rawPriority = body.priority as string | undefined;
-  const rawConfidence = body.confidence;
+  const parsed = updateValidationHypothesisBodySchema.safeParse(json);
+  if (!parsed.success) {
+    return badRequest(
+      "Request body failed validation.",
+      "validation_error",
+      zodIssuesToFields(parsed.error),
+    );
+  }
+  const body = parsed.data;
 
   const input: UpdateValidationHypothesisInput = {
-    id: hypothesisId,
+    id: body.id,
     business_id: id,
-    ...(body.title !== undefined && { title: body.title as string }),
-    ...(body.description !== undefined && { description: body.description as string | null }),
-    ...(rawType !== undefined && {
-      type: VALID_TYPES.has(rawType as ValidationHypothesisType)
-        ? (rawType as ValidationHypothesisType)
-        : null,
-    }),
-    ...(body.assumption !== undefined && { assumption: body.assumption as string | null }),
-    ...(body.success_criteria !== undefined && {
-      success_criteria: body.success_criteria as string | null,
-    }),
-    ...(rawStatus !== undefined &&
-      VALID_STATUSES.has(rawStatus as ValidationHypothesisStatus) && {
-        status: rawStatus as ValidationHypothesisStatus,
-      }),
-    ...(rawConfidence !== undefined && {
-      confidence:
-        typeof rawConfidence === "number" && rawConfidence >= 0 && rawConfidence <= 100
-          ? rawConfidence
-          : null,
-    }),
-    ...(rawPriority !== undefined &&
-      VALID_PRIORITIES.has(rawPriority as ValidationPriority) && {
-        priority: rawPriority as ValidationPriority,
-      }),
+    ...(body.title !== undefined && { title: body.title }),
+    ...(body.description !== undefined && { description: body.description }),
+    ...(body.type !== undefined && { type: body.type }),
+    ...(body.assumption !== undefined && { assumption: body.assumption }),
+    ...(body.success_criteria !== undefined && { success_criteria: body.success_criteria }),
+    ...(body.status !== undefined && { status: body.status }),
+    ...(body.confidence !== undefined && { confidence: body.confidence }),
+    ...(body.priority !== undefined && { priority: body.priority }),
   };
 
   const result = await updateValidationHypothesis(input);

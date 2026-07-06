@@ -8,18 +8,12 @@ import { createValidationLead, updateValidationLead } from "@/lib/validation";
 import type {
   NewValidationLeadInput,
   UpdateValidationLeadInput,
-  ValidationLeadStatus,
-  ValidationSource,
-  ValidationPriority,
 } from "@/types/validation";
-
-const VALID_STATUSES = new Set<ValidationLeadStatus>([
-  "identified", "contacted", "replied", "scheduled", "interviewed", "not_interested",
-]);
-const VALID_SOURCES = new Set<ValidationSource>([
-  "manual", "blueprint", "linkedin", "twitter", "email", "referral", "other",
-]);
-const VALID_PRIORITIES = new Set<ValidationPriority>(["high", "medium", "low"]);
+import { badRequest, zodIssuesToFields } from "@/lib/api-error";
+import {
+  createValidationLeadBodySchema,
+  updateValidationLeadBodySchema,
+} from "@/lib/schemas/validation";
 
 function errorResponse(error: string, code: string, status: number) {
   return Response.json({ ok: false, error, code }, { status });
@@ -53,39 +47,36 @@ export async function POST(
   if (!business) return errorResponse("Business not found.", "business_not_found", 404);
   if (business.user_id !== user.id) return errorResponse("Access denied.", "forbidden", 403);
 
-  let body: Record<string, unknown> = {};
+  let json: unknown;
   try {
-    body = (await request.json()) as Record<string, unknown>;
+    json = await request.json();
   } catch {
-    return errorResponse("Invalid JSON body.", "invalid_input", 400);
+    return badRequest("Request body must be valid JSON.", "invalid_json");
   }
 
-  const name = typeof body.name === "string" ? body.name.trim() : "";
-  if (!name) return errorResponse("name is required.", "invalid_input", 400);
-
-  const rawStatus = body.status as string | undefined;
-  const rawSource = body.source as string | undefined;
-  const rawPriority = body.priority as string | undefined;
+  const parsed = createValidationLeadBodySchema.safeParse(json);
+  if (!parsed.success) {
+    return badRequest(
+      "Request body failed validation.",
+      "validation_error",
+      zodIssuesToFields(parsed.error),
+    );
+  }
+  const body = parsed.data;
 
   const input: NewValidationLeadInput = {
     business_id: id,
     user_id: user.id,
-    name,
-    company: (body.company as string | null) ?? null,
-    role: (body.role as string | null) ?? null,
-    segment: (body.segment as string | null) ?? null,
-    source: VALID_SOURCES.has(rawSource as ValidationSource)
-      ? (rawSource as ValidationSource)
-      : "manual",
-    contact_url: (body.contact_url as string | null) ?? null,
-    email: (body.email as string | null) ?? null,
-    status: VALID_STATUSES.has(rawStatus as ValidationLeadStatus)
-      ? (rawStatus as ValidationLeadStatus)
-      : "identified",
-    notes: (body.notes as string | null) ?? null,
-    priority: VALID_PRIORITIES.has(rawPriority as ValidationPriority)
-      ? (rawPriority as ValidationPriority)
-      : "medium",
+    name: body.name,
+    company: body.company ?? null,
+    role: body.role ?? null,
+    segment: body.segment ?? null,
+    source: body.source ?? "manual",
+    contact_url: body.contact_url ?? null,
+    email: body.email ?? null,
+    status: body.status ?? "identified",
+    notes: body.notes ?? null,
+    priority: body.priority ?? "medium",
   };
 
   const result = await createValidationLead(input);
@@ -121,42 +112,36 @@ export async function PATCH(
   if (!business) return errorResponse("Business not found.", "business_not_found", 404);
   if (business.user_id !== user.id) return errorResponse("Access denied.", "forbidden", 403);
 
-  let body: Record<string, unknown> = {};
+  let json: unknown;
   try {
-    body = (await request.json()) as Record<string, unknown>;
+    json = await request.json();
   } catch {
-    return errorResponse("Invalid JSON body.", "invalid_input", 400);
+    return badRequest("Request body must be valid JSON.", "invalid_json");
   }
 
-  const leadId = typeof body.id === "string" ? body.id.trim() : "";
-  if (!leadId) return errorResponse("id (lead uuid) is required.", "invalid_input", 400);
-
-  const rawStatus = body.status as string | undefined;
-  const rawSource = body.source as string | undefined;
-  const rawPriority = body.priority as string | undefined;
+  const parsed = updateValidationLeadBodySchema.safeParse(json);
+  if (!parsed.success) {
+    return badRequest(
+      "Request body failed validation.",
+      "validation_error",
+      zodIssuesToFields(parsed.error),
+    );
+  }
+  const body = parsed.data;
 
   const input: UpdateValidationLeadInput = {
-    id: leadId,
+    id: body.id,
     business_id: id,
-    ...(body.name !== undefined && { name: body.name as string }),
-    ...(body.company !== undefined && { company: body.company as string | null }),
-    ...(body.role !== undefined && { role: body.role as string | null }),
-    ...(body.segment !== undefined && { segment: body.segment as string | null }),
-    ...(rawSource !== undefined &&
-      VALID_SOURCES.has(rawSource as ValidationSource) && {
-        source: rawSource as ValidationSource,
-      }),
-    ...(body.contact_url !== undefined && { contact_url: body.contact_url as string | null }),
-    ...(body.email !== undefined && { email: body.email as string | null }),
-    ...(rawStatus !== undefined &&
-      VALID_STATUSES.has(rawStatus as ValidationLeadStatus) && {
-        status: rawStatus as ValidationLeadStatus,
-      }),
-    ...(body.notes !== undefined && { notes: body.notes as string | null }),
-    ...(rawPriority !== undefined &&
-      VALID_PRIORITIES.has(rawPriority as ValidationPriority) && {
-        priority: rawPriority as ValidationPriority,
-      }),
+    ...(body.name !== undefined && { name: body.name }),
+    ...(body.company !== undefined && { company: body.company }),
+    ...(body.role !== undefined && { role: body.role }),
+    ...(body.segment !== undefined && { segment: body.segment }),
+    ...(body.source !== undefined && { source: body.source }),
+    ...(body.contact_url !== undefined && { contact_url: body.contact_url }),
+    ...(body.email !== undefined && { email: body.email }),
+    ...(body.status !== undefined && { status: body.status }),
+    ...(body.notes !== undefined && { notes: body.notes }),
+    ...(body.priority !== undefined && { priority: body.priority }),
   };
 
   const result = await updateValidationLead(input);
