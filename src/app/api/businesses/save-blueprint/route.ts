@@ -3,7 +3,6 @@ import {
   createAgentActivityLog,
   createBusiness,
   createHumanRequiredActionsFromBlueprint,
-  getCurrentUser,
   saveBusinessBlueprint,
 } from "@/lib/projects";
 import {
@@ -11,6 +10,7 @@ import {
   createToolPermissionActivityLog,
 } from "@/lib/tool-permissions";
 import { hasSupabaseEnv } from "@/lib/supabase/env";
+import { requireUser } from "@/lib/api-auth";
 import type { BusinessBlueprint, StartupIdea } from "@/types/startup";
 
 type SaveBlueprintBody = {
@@ -56,6 +56,9 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const { user, response } = await requireUser();
+  if (!user) return response;
+
   let body: SaveBlueprintBody;
   try {
     body = (await request.json()) as SaveBlueprintBody;
@@ -83,12 +86,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const userResult = await getCurrentUser();
-  if (userResult.error || !userResult.data) {
-    return errorResponse("You must be signed in to save a blueprint.", "not_authenticated", 401);
-  }
-
-  const user = userResult.data;
   const startupIdea = body.startupIdea;
   const blueprint = body.blueprint;
 
