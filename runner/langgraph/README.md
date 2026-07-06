@@ -286,6 +286,8 @@ Copy `.env.example` to `.env` and fill in:
 | `GITHUB_TOKEN` | GitHub issues/PR integration |
 | `SUPABASE_URL` | Supabase SQL execution |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase SQL execution |
+| `DATABASE_URL` | Direct Postgres connection string used by `tools/db_tools.py` for read-only inspection (`inspect_schema`, `list_rls_policies`) (optional — pooled connection string, e.g. Supabase's pgbouncer URL, is fine here) |
+| `DIRECT_DATABASE_URL` | Direct (non-pooled) Postgres connection string used by `tools/db_tools.py` for applying migrations (`apply_migration_file`, `apply_pending_migrations`); falls back to `DATABASE_URL` when unset |
 | `VERCEL_TOKEN` | Deploy status / trigger |
 | `VERCEL_PROJECT_ID` | Scope deploy polling to one Vercel project (optional) |
 | `SLACK_WEBHOOK_URL` | Slack notifications for notable runner events (optional) |

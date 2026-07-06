@@ -70,6 +70,10 @@ class RunnerConfig:
     supabase_service_role_key: Optional[str] = field(
         default_factory=lambda: os.getenv("SUPABASE_SERVICE_ROLE_KEY")
     )
+    database_url: Optional[str] = field(default_factory=lambda: os.getenv("DATABASE_URL"))
+    direct_database_url: Optional[str] = field(
+        default_factory=lambda: os.getenv("DIRECT_DATABASE_URL")
+    )
     vercel_token: Optional[str] = field(default_factory=lambda: os.getenv("VERCEL_TOKEN"))
     vercel_project_id: Optional[str] = field(
         default_factory=lambda: os.getenv("VERCEL_PROJECT_ID")
@@ -404,6 +408,11 @@ class RunnerConfig:
         return bool(self.supabase_url and self.supabase_service_role_key)
 
     @property
+    def has_database(self) -> bool:
+        """True if a direct Postgres connection is configured (DATABASE_URL and/or DIRECT_DATABASE_URL)."""
+        return bool(self.database_url or self.direct_database_url)
+
+    @property
     def has_vercel(self) -> bool:
         return bool(self.vercel_token)
 
@@ -419,6 +428,8 @@ class RunnerConfig:
             "github": self.has_github,
             "github_repo": self.github_repo,
             "supabase": self.has_supabase,
+            "database": self.has_database,
+            "has_direct_database_url": bool(self.direct_database_url),
             "vercel": self.has_vercel,
             "vercel_project_id": self.vercel_project_id,
             "slack": self.has_slack,
