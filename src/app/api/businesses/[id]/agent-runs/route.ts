@@ -25,6 +25,7 @@ import {
 import type { AgentRunCreateInput } from "@/types/agent-runs";
 import type { AgentTemplateId, AgentNodeId } from "@/types/agents";
 import { getAgentTemplate } from "@/lib/agents/registry";
+import { limit, tooManyRequests, RATE_LIMITS } from "@/lib/rate-limit";
 
 function errorResponse(error: string, code: string, status: number) {
   return Response.json({ ok: false, error, code }, { status });
@@ -126,6 +127,9 @@ export async function POST(
 
   const { user, response } = await requireUser();
   if (!user) return response;
+
+  const rateLimitResult = await limit(`${user.id}:agent-runs`, RATE_LIMITS.mutationDefault);
+  if (!rateLimitResult.allowed) return tooManyRequests();
 
   const businessResult = await getBusinessById(id);
   if (businessResult.error || !businessResult.data) {

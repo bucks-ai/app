@@ -19,10 +19,7 @@ import { requireUser } from "@/lib/api-auth";
 import { inferAgentRunsFromActivityLogs } from "@/lib/agents/runs";
 import { badRequest, zodIssuesToFields } from "@/lib/api-error";
 import { agentRunsInferParamsSchema } from "@/lib/schemas/infra";
-import { limit, tooManyRequests, type RateLimitOptions } from "@/lib/rate-limit";
-
-/** Conservative default: agent-run inference is an expensive AI-adjacent operation. */
-const AGENT_RUNS_INFER_RATE_LIMIT: RateLimitOptions = { limit: 5, windowMs: 60_000 };
+import { limit, tooManyRequests, RATE_LIMITS } from "@/lib/rate-limit";
 
 function errorResponse(error: string, code: string, status: number) {
   return Response.json({ ok: false, error, code }, { status });
@@ -51,7 +48,7 @@ export async function POST(
   const { user, response } = await requireUser();
   if (!user) return response;
 
-  const rateLimitResult = await limit(`${user.id}:agent-runs-infer`, AGENT_RUNS_INFER_RATE_LIMIT);
+  const rateLimitResult = await limit(`${user.id}:agent-runs-infer`, RATE_LIMITS.agentRunsInfer);
   if (!rateLimitResult.allowed) return tooManyRequests();
 
   const businessResult = await getBusinessById(id);

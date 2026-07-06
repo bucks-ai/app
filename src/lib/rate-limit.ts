@@ -105,3 +105,19 @@ export async function limit(key: string, opts: RateLimitOptions): Promise<RateLi
 export function tooManyRequests(message = "Too many requests. Please try again later.") {
   return apiError(message, "rate_limited", 429);
 }
+
+/**
+ * Named per-route rate-limit presets, kept in one place so every route's
+ * limit can be audited and tuned together instead of being scattered as
+ * ad-hoc constants across route files.
+ */
+export const RATE_LIMITS = {
+  /** Expensive OpenAI blueprint generation call. */
+  blueprintGenerate: { limit: 5, windowMs: 60_000 },
+  /** AI-adjacent agent-run inference. */
+  agentRunsInfer: { limit: 5, windowMs: 60_000 },
+  /** AI-driven research workspace generation. */
+  researchGenerate: { limit: 5, windowMs: 60_000 },
+  /** Moderate default for mutating routes without a bespoke limit. */
+  mutationDefault: { limit: 30, windowMs: 60_000 },
+} as const satisfies Record<string, RateLimitOptions>;

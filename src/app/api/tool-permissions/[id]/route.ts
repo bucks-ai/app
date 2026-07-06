@@ -8,6 +8,7 @@ import {
 } from "@/lib/tool-permissions";
 import { badRequest, zodIssuesToFields } from "@/lib/api-error";
 import { updateToolPermissionBodySchema } from "@/lib/schemas/infra";
+import { limit, tooManyRequests, RATE_LIMITS } from "@/lib/rate-limit";
 
 function errorResponse(error: string, code: string, status: number) {
   return Response.json({ ok: false, error, code }, { status });
@@ -37,6 +38,9 @@ export async function PATCH(
 
   const { user, response } = await requireUser();
   if (!user) return response;
+
+  const rateLimitResult = await limit(`${user.id}:tool-permissions-update`, RATE_LIMITS.mutationDefault);
+  if (!rateLimitResult.allowed) return tooManyRequests();
 
   let json: unknown;
   try {

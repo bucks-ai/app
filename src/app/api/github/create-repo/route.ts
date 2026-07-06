@@ -10,6 +10,7 @@ import {
 } from "@/lib/github/client";
 import { badRequest, zodIssuesToFields } from "@/lib/api-error";
 import { createGitHubRepoBodySchema } from "@/lib/schemas/infra";
+import { limit, tooManyRequests, RATE_LIMITS } from "@/lib/rate-limit";
 
 function errorResponse(error: string, code: string, status: number) {
   return Response.json({ ok: false, error, code }, { status });
@@ -74,6 +75,9 @@ export async function POST(request: NextRequest) {
   // Auth
   const { user, response } = await requireUser();
   if (!user) return response;
+
+  const rateLimitResult = await limit(`${user.id}:github-create-repo`, RATE_LIMITS.mutationDefault);
+  if (!rateLimitResult.allowed) return tooManyRequests();
 
   // Business ownership
   const businessResult = await getBusinessById(businessId);

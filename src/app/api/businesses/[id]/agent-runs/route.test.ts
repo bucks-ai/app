@@ -8,6 +8,7 @@ const {
   getAgentRunSummaryForBusinessMock,
   createAgentRunMock,
   getAgentTemplateMock,
+  limitMock,
 } = vi.hoisted(() => ({
   requireUserMock: vi.fn(),
   hasSupabaseEnvMock: vi.fn(),
@@ -16,11 +17,17 @@ const {
   getAgentRunSummaryForBusinessMock: vi.fn(),
   createAgentRunMock: vi.fn(),
   getAgentTemplateMock: vi.fn(),
+  limitMock: vi.fn(),
 }));
 
 vi.mock("@/lib/api-auth", () => ({
   requireUser: requireUserMock,
 }));
+
+vi.mock("@/lib/rate-limit", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/rate-limit")>();
+  return { ...actual, limit: limitMock };
+});
 
 vi.mock("@/lib/supabase/env", () => ({
   hasSupabaseEnv: hasSupabaseEnvMock,
@@ -147,7 +154,29 @@ describe("POST /api/businesses/[id]/agent-runs", () => {
     getAgentRunSummaryForBusinessMock.mockReset();
     createAgentRunMock.mockReset();
     getAgentTemplateMock.mockReset();
+    limitMock.mockReset();
     hasSupabaseEnvMock.mockReturnValue(true);
+    limitMock.mockResolvedValue({ allowed: true, remaining: 29 });
+  });
+
+  it("returns the standard 429 envelope and never creates a run when the rate limit is exceeded", async () => {
+    requireUserMock.mockResolvedValue({ user: { id: "user-1" }, response: null });
+    limitMock.mockResolvedValue({ allowed: false, remaining: 0 });
+
+    const response = await POST(
+      makePostRequest({ agentId: "agent-1", title: "Run" }),
+      makeParams("biz-1"),
+    );
+
+    expect(response.status).toBe(429);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: "Too many requests. Please try again later.",
+      code: "rate_limited",
+    });
+    expect(limitMock).toHaveBeenCalledWith("user-1:agent-runs", { limit: 30, windowMs: 60_000 });
+    expect(getBusinessByIdMock).not.toHaveBeenCalled();
+    expect(createAgentRunMock).not.toHaveBeenCalled();
   });
 
   it("returns the standard 401 envelope and never creates a run when unauthenticated", async () => {

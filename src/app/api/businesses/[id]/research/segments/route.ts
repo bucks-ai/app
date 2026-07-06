@@ -16,6 +16,7 @@ import {
   createResearchSegmentBodySchema,
   updateResearchSegmentBodySchema,
 } from "@/lib/schemas/research";
+import { limit, tooManyRequests, RATE_LIMITS } from "@/lib/rate-limit";
 
 function errorResponse(error: string, code: string, status: number) {
   return Response.json({ ok: false, error, code }, { status });
@@ -46,6 +47,10 @@ export async function POST(
 
   const { user, business } = await resolveAuth(id);
   if (!user) return errorResponse("Authentication required.", "unauthenticated", 401);
+
+  const rateLimitResult = await limit(`${user.id}:research-segments`, RATE_LIMITS.mutationDefault);
+  if (!rateLimitResult.allowed) return tooManyRequests();
+
   if (!business) return errorResponse("Business not found.", "business_not_found", 404);
   if (business.user_id !== user.id) return errorResponse("Access denied.", "forbidden", 403);
 
@@ -109,6 +114,10 @@ export async function PATCH(
 
   const { user, business } = await resolveAuth(id);
   if (!user) return errorResponse("Authentication required.", "unauthenticated", 401);
+
+  const rateLimitResult = await limit(`${user.id}:research-segments`, RATE_LIMITS.mutationDefault);
+  if (!rateLimitResult.allowed) return tooManyRequests();
+
   if (!business) return errorResponse("Business not found.", "business_not_found", 404);
   if (business.user_id !== user.id) return errorResponse("Access denied.", "forbidden", 403);
 

@@ -12,6 +12,7 @@ import {
 import { sanitizeVercelProjectName, createVercelProjectWithSetup } from "@/lib/vercel/client";
 import { badRequest, zodIssuesToFields } from "@/lib/api-error";
 import { createVercelProjectBodySchema } from "@/lib/schemas/infra";
+import { limit, tooManyRequests, RATE_LIMITS } from "@/lib/rate-limit";
 
 type ErrorDetail = {
   failedFile?: string;
@@ -99,6 +100,9 @@ export async function POST(request: NextRequest) {
   // Auth
   const { user, response } = await requireUser();
   if (!user) return response;
+
+  const rateLimitResult = await limit(`${user.id}:vercel-create-project`, RATE_LIMITS.mutationDefault);
+  if (!rateLimitResult.allowed) return tooManyRequests();
 
   // Business ownership
   const businessResult = await getBusinessById(businessId);
