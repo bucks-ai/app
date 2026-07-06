@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import OpenAI from "openai";
 import type { StartupIdea, BusinessBlueprint } from "@/types/startup";
 import { buildBlueprintPrompt } from "@/lib/blueprint-prompt";
+import { requireUser } from "@/lib/api-auth";
 
 const REQUIRED_FIELDS: (keyof StartupIdea)[] = [
   "ideaName",
@@ -12,6 +13,9 @@ const REQUIRED_FIELDS: (keyof StartupIdea)[] = [
 ];
 
 export async function POST(request: NextRequest) {
+  const { user, response } = await requireUser();
+  if (!user) return response;
+
   if (!process.env.OPENAI_API_KEY) {
     return Response.json(
       {
