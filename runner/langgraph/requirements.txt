@@ -46,6 +46,8 @@ playwright==1.60.0
 pluggy==1.6.0
 postgrest==2.30.1
 propcache==0.5.2
+psycopg==3.3.4
+psycopg-binary==3.3.4
 pycparser==3.0
 pydantic==2.13.4
 pydantic_core==2.46.4
