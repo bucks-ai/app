@@ -1,6 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { badRequest, zodIssuesToFields } from "@/lib/api-error";
+import { badRequest, serverError, zodIssuesToFields } from "@/lib/api-error";
+
+vi.mock("@sentry/nextjs", () => ({
+  captureException: vi.fn(),
+}));
+
+import * as Sentry from "@sentry/nextjs";
 
 describe("badRequest", () => {
   it("returns a 400 envelope without issues when none are given", async () => {
@@ -24,6 +30,53 @@ describe("badRequest", () => {
       code: "validation_error",
       issues: { ideaName: ["ideaName is required."] },
     });
+  });
+});
+
+describe("serverError", () => {
+  const originalDsn = process.env.SENTRY_DSN;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.SENTRY_DSN = originalDsn;
+  });
+
+  it("returns a 500 envelope", async () => {
+    const response = serverError(new Error("boom"));
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: "Something went wrong. Please try again.",
+      code: "internal_error",
+    });
+  });
+
+  it("supports a custom message", async () => {
+    const response = serverError(new Error("boom"), "Custom failure message.");
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: "Custom failure message.",
+      code: "internal_error",
+    });
+  });
+
+  it("reports the exception to Sentry when a DSN is configured", () => {
+    process.env.SENTRY_DSN = "https://examplePublicKey@o0.ingest.sentry.io/0";
+    const error = new Error("boom");
+
+    serverError(error);
+
+    expect(Sentry.captureException).toHaveBeenCalledTimes(1);
+    expect(Sentry.captureException).toHaveBeenCalledWith(error);
+  });
+
+  it("does not call Sentry when no DSN is configured", () => {
+    delete process.env.SENTRY_DSN;
+    const error = new Error("boom");
+
+    serverError(error);
+
+    expect(Sentry.captureException).not.toHaveBeenCalled();
   });
 });
 
