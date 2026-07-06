@@ -10,14 +10,12 @@ import {
 import type {
   NewResearchMonetizationModelInput,
   UpdateResearchMonetizationModelInput,
-  ResearchConfidence,
-  ResearchPriority,
 } from "@/types/research";
-
-const VALID_CONFIDENCES = new Set<ResearchConfidence>([
-  "assumption", "weak_signal", "medium_signal", "strong_signal", "validated", "invalidated",
-]);
-const VALID_PRIORITIES = new Set<ResearchPriority>(["high", "medium", "low"]);
+import { badRequest, zodIssuesToFields } from "@/lib/api-error";
+import {
+  createResearchMonetizationModelBodySchema,
+  updateResearchMonetizationModelBodySchema,
+} from "@/lib/schemas/research";
 
 function errorResponse(error: string, code: string, status: number) {
   return Response.json({ ok: false, error, code }, { status });
@@ -51,33 +49,33 @@ export async function POST(
   if (!business) return errorResponse("Business not found.", "business_not_found", 404);
   if (business.user_id !== user.id) return errorResponse("Access denied.", "forbidden", 403);
 
-  let body: Record<string, unknown> = {};
+  let json: unknown;
   try {
-    body = (await request.json()) as Record<string, unknown>;
+    json = await request.json();
   } catch {
-    return errorResponse("Invalid JSON body.", "invalid_input", 400);
+    return badRequest("Request body must be valid JSON.", "invalid_json");
   }
 
-  const model = typeof body.model === "string" ? body.model.trim() : "";
-  if (!model) return errorResponse("model is required.", "invalid_input", 400);
-
-  const rawConfidence = body.confidence as string | undefined;
-  const rawPriority = body.priority as string | undefined;
+  const parsed = createResearchMonetizationModelBodySchema.safeParse(json);
+  if (!parsed.success) {
+    return badRequest(
+      "Request body failed validation.",
+      "validation_error",
+      zodIssuesToFields(parsed.error),
+    );
+  }
+  const body = parsed.data;
 
   const input: NewResearchMonetizationModelInput = {
     business_id: id,
     user_id: user.id,
-    model,
-    buyer: (body.buyer as string | null) ?? null,
-    price_assumption: (body.price_assumption as string | null) ?? null,
-    value_metric: (body.value_metric as string | null) ?? null,
-    reasoning: (body.reasoning as string | null) ?? null,
-    confidence: VALID_CONFIDENCES.has(rawConfidence as ResearchConfidence)
-      ? (rawConfidence as ResearchConfidence)
-      : null,
-    priority: VALID_PRIORITIES.has(rawPriority as ResearchPriority)
-      ? (rawPriority as ResearchPriority)
-      : "medium",
+    model: body.model,
+    buyer: body.buyer ?? null,
+    price_assumption: body.price_assumption ?? null,
+    value_metric: body.value_metric ?? null,
+    reasoning: body.reasoning ?? null,
+    confidence: body.confidence ?? null,
+    priority: body.priority ?? "medium",
   };
 
   const result = await createResearchMonetizationModel(input);
@@ -111,35 +109,33 @@ export async function PATCH(
   if (!business) return errorResponse("Business not found.", "business_not_found", 404);
   if (business.user_id !== user.id) return errorResponse("Access denied.", "forbidden", 403);
 
-  let body: Record<string, unknown> = {};
+  let json: unknown;
   try {
-    body = (await request.json()) as Record<string, unknown>;
+    json = await request.json();
   } catch {
-    return errorResponse("Invalid JSON body.", "invalid_input", 400);
+    return badRequest("Request body must be valid JSON.", "invalid_json");
   }
 
-  const modelId = typeof body.id === "string" ? body.id.trim() : "";
-  if (!modelId) return errorResponse("id (model uuid) is required.", "invalid_input", 400);
-
-  const rawConfidence = body.confidence as string | undefined;
-  const rawPriority = body.priority as string | undefined;
+  const parsed = updateResearchMonetizationModelBodySchema.safeParse(json);
+  if (!parsed.success) {
+    return badRequest(
+      "Request body failed validation.",
+      "validation_error",
+      zodIssuesToFields(parsed.error),
+    );
+  }
+  const body = parsed.data;
 
   const input: UpdateResearchMonetizationModelInput = {
-    id: modelId,
+    id: body.id,
     business_id: id,
-    ...(body.model !== undefined && { model: body.model as string }),
-    ...(body.buyer !== undefined && { buyer: body.buyer as string | null }),
-    ...(body.price_assumption !== undefined && { price_assumption: body.price_assumption as string | null }),
-    ...(body.value_metric !== undefined && { value_metric: body.value_metric as string | null }),
-    ...(body.reasoning !== undefined && { reasoning: body.reasoning as string | null }),
-    ...(rawConfidence !== undefined &&
-      VALID_CONFIDENCES.has(rawConfidence as ResearchConfidence) && {
-        confidence: rawConfidence as ResearchConfidence,
-      }),
-    ...(rawPriority !== undefined &&
-      VALID_PRIORITIES.has(rawPriority as ResearchPriority) && {
-        priority: rawPriority as ResearchPriority,
-      }),
+    ...(body.model !== undefined && { model: body.model }),
+    ...(body.buyer !== undefined && { buyer: body.buyer }),
+    ...(body.price_assumption !== undefined && { price_assumption: body.price_assumption }),
+    ...(body.value_metric !== undefined && { value_metric: body.value_metric }),
+    ...(body.reasoning !== undefined && { reasoning: body.reasoning }),
+    ...(body.confidence !== undefined && { confidence: body.confidence }),
+    ...(body.priority !== undefined && { priority: body.priority }),
   };
 
   const result = await updateResearchMonetizationModel(input);

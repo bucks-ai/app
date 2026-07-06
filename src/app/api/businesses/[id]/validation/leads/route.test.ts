@@ -109,6 +109,54 @@ describe("POST /api/businesses/[id]/validation/leads", () => {
       expect.objectContaining({ business_id: "biz-1", user_id: "user-1", name: validBody.name }),
     );
   });
+
+  it("returns a 400 validation_error envelope and never creates when name is missing", async () => {
+    requireUserMock.mockResolvedValue({ user: { id: "user-1" }, response: null });
+    getBusinessByIdMock.mockResolvedValue({ data: { id: "biz-1", user_id: "user-1" }, error: null });
+
+    const response = await POST(makeRequest("POST", {}), makeParams("biz-1"));
+
+    expect(response.status).toBe(400);
+    const payload = await response.json();
+    expect(payload.ok).toBe(false);
+    expect(payload.code).toBe("validation_error");
+    expect(payload.issues.name).toBeDefined();
+    expect(createValidationLeadMock).not.toHaveBeenCalled();
+  });
+
+  it("returns a 400 validation_error envelope and never creates when status is not a known enum value", async () => {
+    requireUserMock.mockResolvedValue({ user: { id: "user-1" }, response: null });
+    getBusinessByIdMock.mockResolvedValue({ data: { id: "biz-1", user_id: "user-1" }, error: null });
+
+    const response = await POST(
+      makeRequest("POST", { name: "Jane Prospect", status: "not-a-real-status" }),
+      makeParams("biz-1"),
+    );
+
+    expect(response.status).toBe(400);
+    const payload = await response.json();
+    expect(payload.code).toBe("validation_error");
+    expect(payload.issues.status).toBeDefined();
+    expect(createValidationLeadMock).not.toHaveBeenCalled();
+  });
+
+  it("returns a 400 invalid_json envelope for a malformed JSON body", async () => {
+    requireUserMock.mockResolvedValue({ user: { id: "user-1" }, response: null });
+    getBusinessByIdMock.mockResolvedValue({ data: { id: "biz-1", user_id: "user-1" }, error: null });
+
+    const request = new Request("http://localhost/api/businesses/biz-1/validation/leads", {
+      method: "POST",
+      body: "{not valid json",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const response = await POST(request, makeParams("biz-1"));
+
+    expect(response.status).toBe(400);
+    const payload = await response.json();
+    expect(payload.code).toBe("invalid_json");
+    expect(createValidationLeadMock).not.toHaveBeenCalled();
+  });
 });
 
 describe("PATCH /api/businesses/[id]/validation/leads", () => {
@@ -153,5 +201,21 @@ describe("PATCH /api/businesses/[id]/validation/leads", () => {
     expect(updateValidationLeadMock).toHaveBeenCalledWith(
       expect.objectContaining({ id: "lead-1", business_id: "biz-1" }),
     );
+  });
+
+  it("returns a 400 validation_error envelope and never updates when id is missing", async () => {
+    requireUserMock.mockResolvedValue({ user: { id: "user-1" }, response: null });
+    getBusinessByIdMock.mockResolvedValue({ data: { id: "biz-1", user_id: "user-1" }, error: null });
+
+    const response = await PATCH(
+      makeRequest("PATCH", { name: "Updated Name" }),
+      makeParams("biz-1"),
+    );
+
+    expect(response.status).toBe(400);
+    const payload = await response.json();
+    expect(payload.code).toBe("validation_error");
+    expect(payload.issues.id).toBeDefined();
+    expect(updateValidationLeadMock).not.toHaveBeenCalled();
   });
 });

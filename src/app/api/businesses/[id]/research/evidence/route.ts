@@ -4,18 +4,9 @@
 import { hasSupabaseEnv } from "@/lib/supabase/env";
 import { getCurrentUser, getBusinessById } from "@/lib/projects";
 import { createResearchEvidence } from "@/lib/research";
-import type {
-  NewResearchEvidenceInput,
-  ResearchConfidence,
-} from "@/types/research";
-
-const VALID_CONFIDENCES = new Set<ResearchConfidence>([
-  "assumption", "weak_signal", "medium_signal", "strong_signal", "validated", "invalidated",
-]);
-const VALID_EVIDENCE_TYPES = new Set([
-  "data_point", "quote", "case_study", "trend",
-  "competitor_signal", "customer_signal", "market_report",
-]);
+import type { NewResearchEvidenceInput } from "@/types/research";
+import { badRequest, zodIssuesToFields } from "@/lib/api-error";
+import { createResearchEvidenceBodySchema } from "@/lib/schemas/research";
 
 function errorResponse(error: string, code: string, status: number) {
   return Response.json({ ok: false, error, code }, { status });
@@ -50,31 +41,32 @@ export async function POST(
     return errorResponse("Access denied.", "forbidden", 403);
   }
 
-  let body: Record<string, unknown> = {};
+  let json: unknown;
   try {
-    body = (await request.json()) as Record<string, unknown>;
+    json = await request.json();
   } catch {
-    return errorResponse("Invalid JSON body.", "invalid_input", 400);
+    return badRequest("Request body must be valid JSON.", "invalid_json");
   }
 
-  const claim = typeof body.claim === "string" ? body.claim.trim() : "";
-  if (!claim) return errorResponse("claim is required.", "invalid_input", 400);
-
-  const rawEvidenceType = body.evidence_type as string | undefined;
-  const rawConfidence = body.confidence as string | undefined;
+  const parsed = createResearchEvidenceBodySchema.safeParse(json);
+  if (!parsed.success) {
+    return badRequest(
+      "Request body failed validation.",
+      "validation_error",
+      zodIssuesToFields(parsed.error),
+    );
+  }
+  const body = parsed.data;
 
   const input: NewResearchEvidenceInput = {
     business_id: id,
     user_id: userResult.data.id,
-    claim,
-    source: (body.source as string | null) ?? null,
-    source_url: (body.source_url as string | null) ?? null,
-    evidence_type:
-      rawEvidenceType && VALID_EVIDENCE_TYPES.has(rawEvidenceType) ? rawEvidenceType : null,
-    confidence: VALID_CONFIDENCES.has(rawConfidence as ResearchConfidence)
-      ? (rawConfidence as ResearchConfidence)
-      : null,
-    notes: (body.notes as string | null) ?? null,
+    claim: body.claim,
+    source: body.source ?? null,
+    source_url: body.source_url ?? null,
+    evidence_type: body.evidence_type ?? null,
+    confidence: body.confidence ?? null,
+    notes: body.notes ?? null,
   };
 
   const result = await createResearchEvidence(input);

@@ -4,14 +4,9 @@ import { hasSupabaseEnv } from "@/lib/supabase/env";
 import { getBusinessById } from "@/lib/projects";
 import { requireUser } from "@/lib/api-auth";
 import { createValidationFeedbackNote } from "@/lib/validation";
-import type {
-  NewValidationFeedbackNoteInput,
-  ValidationSignalStrength,
-} from "@/types/validation";
-
-const VALID_SIGNAL_STRENGTHS = new Set<ValidationSignalStrength>([
-  "weak", "medium", "strong",
-]);
+import type { NewValidationFeedbackNoteInput } from "@/types/validation";
+import { badRequest, zodIssuesToFields } from "@/lib/api-error";
+import { createValidationFeedbackNoteBodySchema } from "@/lib/schemas/validation";
 
 function errorResponse(error: string, code: string, status: number) {
   return Response.json({ ok: false, error, code }, { status });
@@ -44,32 +39,35 @@ export async function POST(
     return errorResponse("Access denied.", "forbidden", 403);
   }
 
-  let body: Record<string, unknown> = {};
+  let json: unknown;
   try {
-    body = (await request.json()) as Record<string, unknown>;
+    json = await request.json();
   } catch {
-    return errorResponse("Invalid JSON body.", "invalid_input", 400);
+    return badRequest("Request body must be valid JSON.", "invalid_json");
   }
 
-  const summary = typeof body.summary === "string" ? body.summary.trim() : "";
-  if (!summary) return errorResponse("summary is required.", "invalid_input", 400);
-
-  const rawSignal = body.signal_strength as string | undefined;
+  const parsed = createValidationFeedbackNoteBodySchema.safeParse(json);
+  if (!parsed.success) {
+    return badRequest(
+      "Request body failed validation.",
+      "validation_error",
+      zodIssuesToFields(parsed.error),
+    );
+  }
+  const body = parsed.data;
 
   const input: NewValidationFeedbackNoteInput = {
     business_id: id,
     user_id: user.id,
-    summary,
-    lead_id: (body.lead_id as string | null) ?? null,
-    hypothesis_id: (body.hypothesis_id as string | null) ?? null,
-    pain_signal: (body.pain_signal as string | null) ?? null,
-    willingness_to_pay_signal: (body.willingness_to_pay_signal as string | null) ?? null,
-    objections: Array.isArray(body.objections) ? (body.objections as string[]) : null,
-    quotes: Array.isArray(body.quotes) ? (body.quotes as string[]) : null,
-    next_step: (body.next_step as string | null) ?? null,
-    signal_strength: VALID_SIGNAL_STRENGTHS.has(rawSignal as ValidationSignalStrength)
-      ? (rawSignal as ValidationSignalStrength)
-      : null,
+    summary: body.summary,
+    lead_id: body.lead_id ?? null,
+    hypothesis_id: body.hypothesis_id ?? null,
+    pain_signal: body.pain_signal ?? null,
+    willingness_to_pay_signal: body.willingness_to_pay_signal ?? null,
+    objections: body.objections ?? null,
+    quotes: body.quotes ?? null,
+    next_step: body.next_step ?? null,
+    signal_strength: body.signal_strength ?? null,
   };
 
   const result = await createValidationFeedbackNote(input);

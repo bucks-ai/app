@@ -7,6 +7,8 @@ import {
   getResearchWorkspace,
   generateResearchWorkspaceFromBlueprint,
 } from "@/lib/research";
+import { badRequest, zodIssuesToFields } from "@/lib/api-error";
+import { generateResearchBodySchema } from "@/lib/schemas/research";
 
 function errorResponse(error: string, code: string, status: number) {
   return Response.json({ ok: false, error, code }, { status });
@@ -86,18 +88,19 @@ export async function POST(
     return errorResponse("Access denied.", "forbidden", 403);
   }
 
-  let body: Record<string, unknown> = {};
+  let json: unknown;
   try {
-    body = (await request.json()) as Record<string, unknown>;
+    json = await request.json();
   } catch {
-    return errorResponse("Invalid JSON body.", "invalid_input", 400);
+    return badRequest("Request body must be valid JSON.", "invalid_json");
   }
 
-  if (body.action !== "generate") {
-    return errorResponse(
-      'Unknown action. Supported actions: "generate".',
-      "invalid_input",
-      400
+  const parsed = generateResearchBodySchema.safeParse(json);
+  if (!parsed.success) {
+    return badRequest(
+      "Request body failed validation.",
+      "validation_error",
+      zodIssuesToFields(parsed.error),
     );
   }
 
