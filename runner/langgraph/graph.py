@@ -48,12 +48,18 @@ from tools.git_tools import (
     fetch_pull_main,
     push_deploy_if_available,
     current_branch,
+    current_commit_sha,
 )
 from tools.sql_guard import scan_sql_text
 from tools.sql_environment_gate import evaluate_sql_approval_policy, infer_environment
 from tools.supabase_tools import apply_sql_file
 from tools.vercel_tools import trigger_deploy
-from tools.github_tools import sync_open_issues_to_tasks
+from tools.github_tools import (
+    sync_open_issues_to_tasks,
+    create_pull_request,
+    poll_pr_checks,
+    merge_pull_request,
+)
 from tools.task_quality_guard import guard_planner_task
 from tools.claude_hooks_safety_pack import write_hooks
 from tools.acceptance_criteria_gate import guard_acceptance_criteria
@@ -1225,13 +1231,89 @@ def commit_push_merge_if_needed(state: RunnerState) -> RunnerState:
         push_branch(cfg.repo_path, branch)
 
         if cfg.auto_merge:
-            merge = merge_feature_branch(cfg.repo_path, branch)
-            if merge.get("success"):
-                fetch_pull_main(cfg.repo_path)
-                if cfg.auto_cleanup_branches:
-                    cleanup_feature_branch(cfg.repo_path, branch)
+            if cfg.merge_via_pr:
+                _merge_via_pull_request(state, task, branch)
+            else:
+                merge = merge_feature_branch(cfg.repo_path, branch)
+                if merge.get("success"):
+                    fetch_pull_main(cfg.repo_path)
+                    if cfg.auto_cleanup_branches:
+                        cleanup_feature_branch(cfg.repo_path, branch)
 
     return _persist(state, "commit_push_merge_if_needed")
+
+
+def _mark_merge_step_failed(state: RunnerState, error: str) -> None:
+    """Fail the task through the normal worker-result path so it feeds the same
+    failure_guard / retry / circuit-breaker handling as any other worker failure
+    in ``update_logs_and_state`` — the PR is left open on GitHub for inspection."""
+    state.worker_result = {**(state.worker_result or {}), "success": False, "error": error}
+
+
+def _merge_via_pull_request(state: RunnerState, task: dict, branch: str) -> None:
+    """PR-based merge path (``MERGE_VIA_PR=true``, the default).
+
+    Pushes have already happened by the time this runs. Opens (or reuses) a PR
+    for ``branch``, polls its required checks to a terminal state, and merges
+    via the API only once every check is green — branch-protection-compatible,
+    unlike a local ``git merge`` + direct push to ``main``.
+    """
+    task_id = state.current_task_id or task.get("id", "unknown")
+
+    if not cfg.has_github or not cfg.github_repo:
+        log_event("github_degraded", {
+            "reason": "no GITHUB_TOKEN/GITHUB_REPO", "action": "merge_via_pr",
+        }, task_id=task_id)
+        return
+
+    title = task.get("title") or task_id
+    digest = state.worker_summary_digest or build_run_summary_digest(state.worker_summary or {}, task=task, max_chars=1500)
+    body = f"Automated PR for task `{task_id}`.\n\n{digest}"
+
+    pr = create_pull_request(cfg.github_repo, branch, title, body)
+    if not pr.get("success"):
+        log_event("error", {
+            "task_id": task_id,
+            "error": f"pr_create_failed: {pr.get('error') or pr.get('reason')}",
+        }, task_id=task_id)
+        return
+
+    state.pr_number = pr.get("number")
+    state.pr_url = pr.get("url")
+
+    sha = current_commit_sha(cfg.repo_path)
+    checks = poll_pr_checks(
+        cfg.github_repo,
+        sha,
+        timeout_s=cfg.pr_checks_timeout_s,
+        interval_s=cfg.pr_checks_poll_interval_s,
+    )
+
+    if checks.get("timed_out"):
+        _mark_merge_step_failed(
+            state,
+            f"pr_checks_timeout: PR #{state.pr_number} required checks did not finish within {cfg.pr_checks_timeout_s}s",
+        )
+        return
+
+    if not checks.get("success"):
+        _mark_merge_step_failed(
+            state,
+            f"pr_checks_failed: PR #{state.pr_number} required checks did not pass",
+        )
+        return
+
+    merge = merge_pull_request(cfg.github_repo, state.pr_number)
+    if not merge.get("success"):
+        _mark_merge_step_failed(
+            state,
+            f"pr_merge_failed: PR #{state.pr_number}: {merge.get('error_body') or merge.get('error') or merge.get('reason')}",
+        )
+        return
+
+    fetch_pull_main(cfg.repo_path)
+    if cfg.auto_cleanup_branches:
+        cleanup_feature_branch(cfg.repo_path, branch)
 
 
 _RUNNER_DIR = Path(__file__).parent

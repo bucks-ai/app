@@ -1,9 +1,15 @@
 """GitHub API helpers — degrades gracefully when GITHUB_TOKEN is absent."""
+import time
 from typing import Optional
+
+import requests
+
 from config import get_config
+from tools.http_retry import retry_request
 from tools.log_tools import log_event
 
 _gh = None
+_API_BASE = "https://api.github.com"
 
 
 def _client():
@@ -191,3 +197,197 @@ def update_issue_for_task_result(
         "issue_number": issue_number,
         "status": status,
     }
+
+
+def _rest_headers() -> dict:
+    cfg = get_config()
+    return {
+        "Authorization": f"Bearer {cfg.github_token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+
+
+def _error_body(exc: Exception) -> Optional[str]:
+    """Best-effort extraction of GitHub's JSON/text error body from a raised
+    HTTPError, so protection-rejection reasons (405/409) are visible in logs."""
+    resp = getattr(exc, "response", None)
+    if resp is None:
+        return None
+    try:
+        return resp.text[:2000]
+    except Exception:
+        return None
+
+
+def _status_code(exc: Exception) -> Optional[int]:
+    resp = getattr(exc, "response", None)
+    return getattr(resp, "status_code", None) if resp is not None else None
+
+
+def create_pull_request(repo: str, branch: str, title: str, body: str, base: str = "main") -> dict:
+    """Create a PR for ``branch`` -> ``base``.
+
+    Idempotent: if an open PR already exists for ``branch``, that PR is
+    returned instead of creating a duplicate (``created: False``).
+    """
+    cfg = get_config()
+    if not cfg.has_github:
+        log_event("github_degraded", {"reason": "no GITHUB_TOKEN", "action": "create_pull_request"})
+        return {"success": False, "reason": "no GITHUB_TOKEN"}
+
+    owner = repo.split("/", 1)[0]
+    try:
+        existing = retry_request(
+            requests.get,
+            f"{_API_BASE}/repos/{repo}/pulls",
+            headers=_rest_headers(),
+            params={"head": f"{owner}:{branch}", "base": base, "state": "open"},
+            timeout=15,
+        )
+        existing.raise_for_status()
+        found = existing.json()
+        if found:
+            pr = found[0]
+            log_event("pr_already_exists", {
+                "repo": repo, "branch": branch,
+                "number": pr.get("number"), "url": pr.get("html_url"),
+            })
+            return {
+                "success": True, "created": False,
+                "number": pr.get("number"), "url": pr.get("html_url"),
+            }
+
+        r = retry_request(
+            requests.post,
+            f"{_API_BASE}/repos/{repo}/pulls",
+            headers=_rest_headers(),
+            json={"title": title, "body": body, "head": branch, "base": base},
+            timeout=15,
+        )
+        r.raise_for_status()
+        pr = r.json()
+        log_event("pr_created", {
+            "repo": repo, "branch": branch,
+            "number": pr.get("number"), "url": pr.get("html_url"),
+        })
+        return {
+            "success": True, "created": True,
+            "number": pr.get("number"), "url": pr.get("html_url"),
+        }
+    except Exception as e:
+        log_event("error", {
+            "tool": "github", "action": "create_pull_request",
+            "error": str(e), "body": _error_body(e),
+        })
+        return {"success": False, "error": str(e), "error_body": _error_body(e)}
+
+
+def poll_pr_checks(
+    repo: str,
+    sha: str,
+    timeout_s: float = None,
+    interval_s: float = None,
+    sleep=time.sleep,
+    now=time.monotonic,
+) -> dict:
+    """Poll the check-runs API for ``sha`` until every run completes or the
+    timeout elapses.
+
+    ``success`` is True only when every check run reached status "completed"
+    with conclusion "success" or "skipped". Distinguishes a real check
+    failure (``timed_out: False``) from giving up before checks finished
+    (``timed_out: True``) so the caller can log the right event.
+    """
+    cfg = get_config()
+    if not cfg.has_github:
+        log_event("github_degraded", {"reason": "no GITHUB_TOKEN", "action": "poll_pr_checks"})
+        return {"success": False, "timed_out": False, "reason": "no GITHUB_TOKEN", "runs": [], "polls": 0}
+
+    timeout = cfg.pr_checks_timeout_s if timeout_s is None else timeout_s
+    interval = cfg.pr_checks_poll_interval_s if interval_s is None else interval_s
+    if interval <= 0:
+        interval = 1.0
+
+    start = now()
+    polls = 0
+    log_event("pr_checks_poll_started", {"repo": repo, "sha": sha, "timeout": timeout, "interval": interval})
+
+    while True:
+        polls += 1
+        try:
+            r = retry_request(
+                requests.get,
+                f"{_API_BASE}/repos/{repo}/commits/{sha}/check-runs",
+                headers=_rest_headers(),
+                timeout=15,
+            )
+            r.raise_for_status()
+            runs = r.json().get("check_runs", [])
+        except Exception as e:
+            log_event("error", {"tool": "github", "action": "poll_pr_checks", "error": str(e)})
+            return {
+                "success": False, "timed_out": False, "error": str(e),
+                "runs": [], "polls": polls, "elapsed": round(now() - start, 2),
+            }
+
+        elapsed = round(now() - start, 2)
+        # An empty check_runs list means Actions hasn't registered a run yet —
+        # treat that as "not complete", not a vacuous success.
+        all_complete = bool(runs) and all(run.get("status") == "completed" for run in runs)
+        log_event("pr_checks_poll_tick", {
+            "sha": sha, "poll": polls, "elapsed": elapsed,
+            "total": len(runs),
+            "completed": sum(1 for run in runs if run.get("status") == "completed"),
+        })
+
+        if all_complete:
+            ok = all(run.get("conclusion") in ("success", "skipped") for run in runs)
+            log_event("pr_checks_completed" if ok else "pr_checks_failed", {
+                "sha": sha, "polls": polls, "elapsed": elapsed,
+                "conclusions": {run.get("name"): run.get("conclusion") for run in runs},
+            })
+            return {"success": ok, "timed_out": False, "runs": runs, "polls": polls, "elapsed": elapsed}
+
+        if (now() - start) + interval >= timeout:
+            log_event("pr_checks_timeout", {
+                "sha": sha, "polls": polls, "elapsed": elapsed, "timeout": timeout,
+            })
+            return {"success": False, "timed_out": True, "runs": runs, "polls": polls, "elapsed": elapsed}
+
+        sleep(interval)
+
+
+def merge_pull_request(repo: str, pr_number: int, method: str = "merge") -> dict:
+    """Merge a pull request via the REST API.
+
+    On rejection (405 — not mergeable / branch protection unmet, 409 — head
+    branch changed since checks ran) GitHub's error body is surfaced verbatim
+    in ``error_body`` so the reason is visible in logs rather than swallowed.
+    """
+    cfg = get_config()
+    if not cfg.has_github:
+        log_event("github_degraded", {"reason": "no GITHUB_TOKEN", "action": "merge_pull_request"})
+        return {"success": False, "reason": "no GITHUB_TOKEN"}
+
+    try:
+        r = retry_request(
+            requests.put,
+            f"{_API_BASE}/repos/{repo}/pulls/{pr_number}/merge",
+            headers=_rest_headers(),
+            json={"merge_method": method},
+            timeout=30,
+        )
+        r.raise_for_status()
+        result = r.json()
+        log_event("pr_merged", {"repo": repo, "number": pr_number, "sha": result.get("sha")})
+        return {"success": bool(result.get("merged")), "sha": result.get("sha"), "message": result.get("message")}
+    except Exception as e:
+        log_event("error", {
+            "tool": "github", "action": "merge_pull_request",
+            "error": str(e), "status_code": _status_code(e), "body": _error_body(e),
+        })
+        return {
+            "success": False, "error": str(e),
+            "status_code": _status_code(e), "error_body": _error_body(e),
+        }

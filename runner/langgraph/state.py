@@ -58,6 +58,8 @@ class RunnerState(BaseModel):
     current_branch: Optional[str] = None
     last_completed_step: Optional[str] = None
     last_commit: Optional[str] = None
+    pr_number: Optional[int] = None                  # GitHub PR number opened for the current task's branch (MERGE_VIA_PR)
+    pr_url: Optional[str] = None                     # HTML URL of that PR
     loop_count: int = 0
     consecutive_failures: int = 0
     started_at: Optional[str] = None

@@ -39,6 +39,8 @@ _DEFAULT_SLACK_EVENTS = frozenset({
     "task_definition_of_done_warned",
     "auto_repair_failed",
     "merge_approval_required",
+    "pr_checks_failed",
+    "pr_checks_timeout",
     "product_eval_failed",
     "worker_dispatch_crash",
     "loop_blocked_on_stale_run",
@@ -108,6 +110,15 @@ class RunnerConfig:
     )
     auto_cleanup_branches: bool = field(
         default_factory=lambda: os.getenv("AUTO_CLEANUP_BRANCHES", "true").lower() == "true"
+    )
+    merge_via_pr: bool = field(
+        default_factory=lambda: os.getenv("MERGE_VIA_PR", "true").lower() == "true"
+    )
+    pr_checks_timeout_s: int = field(
+        default_factory=lambda: int(os.getenv("PR_CHECKS_TIMEOUT_S", "900"))
+    )
+    pr_checks_poll_interval_s: int = field(
+        default_factory=lambda: int(os.getenv("PR_CHECKS_POLL_INTERVAL_S", "20"))
     )
     auto_deploy: bool = field(
         default_factory=lambda: os.getenv("AUTO_DEPLOY", "true").lower() == "true"
@@ -453,6 +464,9 @@ class RunnerConfig:
             "max_runtime_minutes": self.max_runtime_minutes,
             "auto_merge": self.auto_merge,
             "auto_cleanup_branches": self.auto_cleanup_branches,
+            "merge_via_pr": self.merge_via_pr,
+            "pr_checks_timeout_s": self.pr_checks_timeout_s,
+            "pr_checks_poll_interval_s": self.pr_checks_poll_interval_s,
             "auto_deploy": self.auto_deploy,
             "auto_deploy_poll": self.auto_deploy_poll,
             "block_on_deploy_failure": self.block_on_deploy_failure,

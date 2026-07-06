@@ -25,6 +25,14 @@ def latest_commit(repo_path: str) -> str:
     return r.output.strip() if r.success else ""
 
 
+def current_commit_sha(repo_path: str) -> str:
+    """Return the full SHA of HEAD — used as the `ref` for the GitHub checks API
+    (unlike ``latest_commit``, which returns a `<short-sha> <message>` line meant
+    for display/logging, not for use as a git ref)."""
+    r = _git(["rev-parse", "HEAD"], repo_path)
+    return r.output.strip() if r.success else ""
+
+
 def fetch_pull_main(repo_path: str) -> dict:
     log_event("git_sync", {"step": "fetch_pull_main"})
     fetch = _git(["fetch", "origin"], repo_path)
