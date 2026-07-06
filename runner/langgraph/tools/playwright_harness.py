@@ -181,7 +181,8 @@ def run_e2e_suite(
 
         with sync_playwright() as pw:
             browser = pw.chromium.launch(headless=headless)
-            ctx = browser.new_context(default_navigation_timeout=timeout_ms)
+            ctx = browser.new_context()
+            ctx.set_default_navigation_timeout(timeout_ms)
             page = ctx.new_page()
             for scenario in scenarios:
                 result = run_scenario(page, base_url, scenario)

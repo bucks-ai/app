@@ -160,6 +160,56 @@ def test_create_pull_request_degrades_without_token():
     assert result == {"success": False, "reason": "no GITHUB_TOKEN"}, result
 
 
+def test_create_pull_request_no_diff_treated_as_success():
+    """GitHub returns 422 'No commits between <base> and <branch>' when the
+    feature branch has no commits ahead of base (worker made no net changes).
+    That is not a real PR-creation failure — there is nothing to merge — so it
+    must surface as a distinct no_diff success, not success=False."""
+    def _get(url, headers=None, params=None, timeout=None):
+        return _FakeResponse(200, json_data=[])
+
+    def _post(url, headers=None, json=None, timeout=None):
+        return _FakeResponse(
+            422,
+            text='{"message":"Validation Failed","errors":[{"resource":"PullRequest",'
+                 '"code":"custom","message":"No commits between main and feature/t1"}]}',
+        )
+
+    github_tools.requests.get = _get
+    github_tools.requests.post = _post
+
+    result = _with_fake_config(
+        _FakeConfig(),
+        lambda: github_tools.create_pull_request("owner/repo", "feature/t1", "Task title", "body text"),
+    )
+
+    assert result["success"] is True, result
+    assert result["created"] is False, result
+    assert result["no_diff"] is True, result
+    assert result["number"] is None, result
+
+
+def test_create_pull_request_other_422_still_fails():
+    """A 422 for a different reason (e.g. invalid field) must still be a real
+    failure — only the specific 'no commits between' message is a no-op."""
+    def _get(url, headers=None, params=None, timeout=None):
+        return _FakeResponse(200, json_data=[])
+
+    def _post(url, headers=None, json=None, timeout=None):
+        return _FakeResponse(422, text='{"message":"Validation Failed","errors":[{"code":"invalid"}]}')
+
+    github_tools.requests.get = _get
+    github_tools.requests.post = _post
+
+    result = _with_fake_config(
+        _FakeConfig(),
+        lambda: github_tools.create_pull_request("owner/repo", "feature/t1", "Task title", "body text"),
+    )
+
+    assert result["success"] is False, result
+    assert result.get("no_diff") is not True, result
+
+
 # ---------------------------------------------------------------------------
 # poll_pr_checks
 # ---------------------------------------------------------------------------
@@ -463,6 +513,33 @@ def test_pr_merge_skips_cleanly_without_github_configured():
     assert state.worker_result["success"] is True, state.worker_result
 
 
+def test_pr_merge_no_diff_treated_as_success_and_cleans_up_branch():
+    """When create_pull_request reports no_diff (branch has no commits ahead of
+    base), the task must still succeed — checks/merge are skipped since there
+    is nothing to merge, and the now-redundant branch is cleaned up."""
+    calls = _wire_for_pr_merge(
+        _LANDED_COMMIT,
+        create_result={"success": True, "created": False, "no_diff": True, "number": None, "url": None},
+        checks_result={"success": True, "timed_out": False},
+        merge_result={"success": True, "sha": "def456"},
+    )
+    graph.cfg.auto_merge = True
+    graph.cfg.auto_cleanup_branches = True
+    graph.cfg.merge_via_pr = True
+    graph.cfg.github_token = "test-token"
+    graph.cfg.github_repo = "owner/repo"
+
+    state = graph.commit_push_merge_if_needed(_worker_done_state())
+
+    assert calls["create_pr"] == [("owner/repo", "feature/t1")], calls
+    assert calls["poll_checks"] == [], "must not poll checks when there is nothing to merge"
+    assert calls["merge_pr"] == [], "must not attempt a merge when there is nothing to merge"
+    assert calls["fetch"] == 0, calls
+    assert calls["cleanup"] == ["feature/t1"], "redundant branch should still be cleaned up"
+    assert state.pr_number is None, state
+    assert state.worker_result["success"] is True, state.worker_result
+
+
 # ---------------------------------------------------------------------------
 # Config wiring (three-place rule) + curated Slack events
 # ---------------------------------------------------------------------------
@@ -498,6 +575,8 @@ if __name__ == "__main__":
         test_create_pull_request_creates_new_pr,
         test_create_pull_request_is_idempotent_when_pr_exists,
         test_create_pull_request_degrades_without_token,
+        test_create_pull_request_no_diff_treated_as_success,
+        test_create_pull_request_other_422_still_fails,
         test_poll_pr_checks_succeeds_when_all_conclusions_pass,
         test_poll_pr_checks_fails_on_a_failed_conclusion,
         test_poll_pr_checks_times_out_when_never_complete,
@@ -511,6 +590,7 @@ if __name__ == "__main__":
         test_pr_merge_rejected_by_branch_protection_marks_task_failed,
         test_pr_merge_idempotent_pr_reuse_still_polls_and_merges,
         test_pr_merge_skips_cleanly_without_github_configured,
+        test_pr_merge_no_diff_treated_as_success_and_cleans_up_branch,
         test_merge_via_pr_config_defaults,
         test_pr_checks_events_are_in_curated_slack_set,
     ]
