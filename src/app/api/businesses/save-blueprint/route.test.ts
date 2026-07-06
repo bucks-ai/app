@@ -113,4 +113,66 @@ describe("POST /api/businesses/save-blueprint", () => {
     expect(response.status).toBe(200);
     expect(createBusinessMock).toHaveBeenCalledTimes(1);
   });
+
+  it("returns a 400 badRequest envelope and never writes to the database when startupIdea is missing required fields", async () => {
+    requireUserMock.mockResolvedValue({
+      user: { id: "user-1", email: "a@example.com" },
+      response: null,
+    });
+
+    const response = await POST(
+      makeRequest({
+        ...validBody,
+        startupIdea: { ideaName: "Test" },
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    const payload = await response.json();
+    expect(payload.ok).toBe(false);
+    expect(payload.code).toBe("validation_error");
+    expect(payload.issues).toBeDefined();
+    expect(createBusinessMock).not.toHaveBeenCalled();
+  });
+
+  it("returns a 400 badRequest envelope and never writes to the database when blueprint is missing businessSummary", async () => {
+    requireUserMock.mockResolvedValue({
+      user: { id: "user-1", email: "a@example.com" },
+      response: null,
+    });
+
+    const response = await POST(
+      makeRequest({
+        ...validBody,
+        blueprint: {},
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    const payload = await response.json();
+    expect(payload.code).toBe("validation_error");
+    expect(payload.issues["blueprint.businessSummary"]).toBeDefined();
+    expect(createBusinessMock).not.toHaveBeenCalled();
+  });
+
+  it("returns a 400 badRequest envelope for a malformed JSON body", async () => {
+    requireUserMock.mockResolvedValue({
+      user: { id: "user-1", email: "a@example.com" },
+      response: null,
+    });
+    hasSupabaseEnvMock.mockReturnValue(true);
+
+    const request = new NextRequest("http://localhost/api/businesses/save-blueprint", {
+      method: "POST",
+      body: "{not valid json",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(400);
+    const payload = await response.json();
+    expect(payload.code).toBe("invalid_json");
+    expect(createBusinessMock).not.toHaveBeenCalled();
+  });
 });

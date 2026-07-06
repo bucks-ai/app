@@ -3,14 +3,8 @@ import OpenAI from "openai";
 import type { StartupIdea, BusinessBlueprint } from "@/types/startup";
 import { buildBlueprintPrompt } from "@/lib/blueprint-prompt";
 import { requireUser } from "@/lib/api-auth";
-
-const REQUIRED_FIELDS: (keyof StartupIdea)[] = [
-  "ideaName",
-  "oneLineIdea",
-  "primaryGoal",
-  "budget",
-  "timeline",
-];
+import { badRequest, zodIssuesToFields } from "@/lib/api-error";
+import { generateBlueprintBodySchema } from "@/lib/schemas/generate-blueprint";
 
 export async function POST(request: NextRequest) {
   const { user, response } = await requireUser();
@@ -27,38 +21,23 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  let body: unknown;
+  let json: unknown;
   try {
-    body = await request.json();
+    json = await request.json();
   } catch {
-    return Response.json(
-      { error: "invalid_json", message: "Request body must be valid JSON." },
-      { status: 400 },
+    return badRequest("Request body must be valid JSON.", "invalid_json");
+  }
+
+  const parsed = generateBlueprintBodySchema.safeParse(json);
+  if (!parsed.success) {
+    return badRequest(
+      "Request body failed validation.",
+      "validation_error",
+      zodIssuesToFields(parsed.error),
     );
   }
 
-  if (!body || typeof body !== "object") {
-    return Response.json(
-      { error: "invalid_payload", message: "Request body must be a JSON object." },
-      { status: 400 },
-    );
-  }
-
-  const idea = body as Partial<StartupIdea>;
-  const missing = REQUIRED_FIELDS.filter(
-    (field) => !idea[field] || String(idea[field]).trim() === "",
-  );
-
-  if (missing.length > 0) {
-    return Response.json(
-      {
-        error: "validation_error",
-        message: `Missing required fields: ${missing.join(", ")}.`,
-        fields: missing,
-      },
-      { status: 400 },
-    );
-  }
+  const idea = parsed.data;
 
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const prompt = buildBlueprintPrompt(idea as StartupIdea);
