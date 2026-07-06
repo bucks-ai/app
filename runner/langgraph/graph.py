@@ -2144,11 +2144,21 @@ def decide_continue_or_stop(state: RunnerState) -> RunnerState:
             resume_dt = datetime.fromisoformat(cooldown_until)
             remaining = (resume_dt - datetime.utcnow()).total_seconds()
             if remaining > 0:
+                # Treat the start of the wait as activity too, so
+                # stale_run_watchdog can't trip on a gap it never saw
+                # (the watchdog only checks in update_logs_and_state,
+                # which won't run again until the wait is over).
+                state.last_task_completed_at = datetime.utcnow().isoformat()
                 log_event("claude_subscription_cooldown_waiting", {
                     "resume_at": cooldown_until,
                     "remaining_seconds": round(remaining, 1),
                 })
                 time.sleep(remaining)
+                # Cooldown sleeps are excluded from MAX_RUNTIME_MINUTES (see
+                # the effective-elapsed calculation below) and count as
+                # activity for stale_run_watchdog purposes.
+                state.cooldown_wait_seconds_total += remaining
+                state.last_task_completed_at = datetime.utcnow().isoformat()
         except (ValueError, TypeError):
             pass
         state.claude_subscription_cooldown_until = None
@@ -2171,10 +2181,20 @@ def decide_continue_or_stop(state: RunnerState) -> RunnerState:
     if started_at:
         from datetime import timezone
         elapsed = (datetime.utcnow() - datetime.fromisoformat(started_at)).total_seconds() / 60
-        if elapsed > cfg.max_runtime_minutes:
+        # Cooldown waits are wall-clock time the loop spent deliberately
+        # asleep, not runtime the run actually used — exclude them so
+        # sleeping through a Claude subscription reset window never
+        # kills an otherwise-healthy run.
+        effective_elapsed = elapsed - (state.cooldown_wait_seconds_total / 60)
+        if effective_elapsed > cfg.max_runtime_minutes:
             state.stop_reason = "max_runtime"
             state.status = "stopped"
-            log_event("loop_stopped", {"reason": "max_runtime", "elapsed_minutes": elapsed})
+            log_event("loop_stopped", {
+                "reason": "max_runtime",
+                "elapsed_minutes": elapsed,
+                "effective_elapsed_minutes": effective_elapsed,
+                "cooldown_wait_seconds_total": state.cooldown_wait_seconds_total,
+            })
             return state
 
     state.status = "running"
