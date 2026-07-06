@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { hasSupabaseEnv } from "@/lib/supabase/env";
-import { getCurrentUser, getBusinessById } from "@/lib/projects";
+import { getBusinessById } from "@/lib/projects";
+import { requireUser } from "@/lib/api-auth";
 import {
   getToolPermissionsForBusiness,
   seedToolPermissionsForBusiness,
@@ -33,12 +34,8 @@ export async function GET(request: NextRequest) {
     return errorResponse("businessId query parameter is required.", "invalid_input", 400);
   }
 
-  const userResult = await getCurrentUser();
-  if (userResult.error || !userResult.data) {
-    return errorResponse("Authentication required.", "unauthenticated", 401);
-  }
-
-  const user = userResult.data;
+  const { user, response } = await requireUser();
+  if (!user) return response;
 
   // Verify ownership
   const businessResult = await getBusinessById(businessId);
@@ -91,12 +88,8 @@ export async function POST(request: NextRequest) {
     return errorResponse("businessId is required in the request body.", "invalid_input", 400);
   }
 
-  const userResult = await getCurrentUser();
-  if (userResult.error || !userResult.data) {
-    return errorResponse("Authentication required.", "unauthenticated", 401);
-  }
-
-  const user = userResult.data;
+  const { user, response } = await requireUser();
+  if (!user) return response;
 
   // Verify ownership
   const businessResult = await getBusinessById(businessId);

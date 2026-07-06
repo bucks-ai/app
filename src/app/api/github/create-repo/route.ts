@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server";
 import { hasSupabaseEnv } from "@/lib/supabase/env";
 import { hasGitHubEnv, getGitHubEnv } from "@/lib/github/env";
-import { getCurrentUser, getBusinessById, createAgentActivityLog } from "@/lib/projects";
+import { getBusinessById, createAgentActivityLog } from "@/lib/projects";
+import { requireUser } from "@/lib/api-auth";
 import { getToolPermissionsForBusiness, updateToolPermissionStatus } from "@/lib/tool-permissions";
 import {
   createGitHubRepository,
@@ -71,11 +72,8 @@ export async function POST(request: NextRequest) {
   const includeStarterFiles = body.includeStarterFiles !== false; // default true
 
   // Auth
-  const userResult = await getCurrentUser();
-  if (userResult.error || !userResult.data) {
-    return errorResponse("Authentication required.", "unauthenticated", 401);
-  }
-  const user = userResult.data;
+  const { user, response } = await requireUser();
+  if (!user) return response;
 
   // Business ownership
   const businessResult = await getBusinessById(businessId);
@@ -205,7 +203,7 @@ export async function POST(request: NextRequest) {
     // Non-fatal — don't fail the response over a status update
   }
 
-  const response: Record<string, unknown> = {
+  const responseBody: Record<string, unknown> = {
     ok: true,
     data: {
       repoUrl: repoResult.repoUrl,
@@ -218,8 +216,8 @@ export async function POST(request: NextRequest) {
   };
 
   if (starterFilesWarning) {
-    response.warning = starterFilesWarning;
+    responseBody.warning = starterFilesWarning;
   }
 
-  return Response.json(response, { status: 201 });
+  return Response.json(responseBody, { status: 201 });
 }

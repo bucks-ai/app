@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server";
 import { hasSupabaseEnv } from "@/lib/supabase/env";
 import { hasVercelEnv } from "@/lib/vercel/env";
-import { getCurrentUser, getBusinessById } from "@/lib/projects";
+import { getBusinessById } from "@/lib/projects";
+import { requireUser } from "@/lib/api-auth";
 import { getLatestVercelProjectForBusiness } from "@/lib/vercel/project-metadata";
 import {
   getLatestVercelDeploymentForProject,
@@ -34,11 +35,8 @@ export async function GET(request: NextRequest) {
   }
 
   // Auth
-  const userResult = await getCurrentUser();
-  if (userResult.error || !userResult.data) {
-    return errorResponse("Authentication required.", "unauthenticated", 401);
-  }
-  const user = userResult.data;
+  const { user, response } = await requireUser();
+  if (!user) return response;
 
   // Business ownership
   const businessResult = await getBusinessById(businessId);
