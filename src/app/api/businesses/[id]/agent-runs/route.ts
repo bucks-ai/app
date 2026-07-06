@@ -15,7 +15,8 @@
 //   agent_run_create_failed    — DB write failed
 
 import { hasSupabaseEnv } from "@/lib/supabase/env";
-import { getCurrentUser, getBusinessById } from "@/lib/projects";
+import { getBusinessById } from "@/lib/projects";
+import { requireUser } from "@/lib/api-auth";
 import {
   getAgentRunsForBusiness,
   getAgentRunSummaryForBusiness,
@@ -42,17 +43,15 @@ export async function GET(
     return errorResponse("Business id is required.", "invalid_input", 400);
   }
 
-  const userResult = await getCurrentUser();
-  if (userResult.error || !userResult.data) {
-    return errorResponse("Authentication required.", "unauthenticated", 401);
-  }
+  const { user, response } = await requireUser();
+  if (!user) return response;
 
   const businessResult = await getBusinessById(id);
   if (businessResult.error || !businessResult.data) {
     return errorResponse("Business not found.", "business_not_found", 404);
   }
 
-  if (businessResult.data.user_id !== userResult.data.id) {
+  if (businessResult.data.user_id !== user.id) {
     return errorResponse("Access denied.", "forbidden", 403);
   }
 
@@ -125,17 +124,15 @@ export async function POST(
     return errorResponse("Business id is required.", "invalid_input", 400);
   }
 
-  const userResult = await getCurrentUser();
-  if (userResult.error || !userResult.data) {
-    return errorResponse("Authentication required.", "unauthenticated", 401);
-  }
+  const { user, response } = await requireUser();
+  if (!user) return response;
 
   const businessResult = await getBusinessById(id);
   if (businessResult.error || !businessResult.data) {
     return errorResponse("Business not found.", "business_not_found", 404);
   }
 
-  if (businessResult.data.user_id !== userResult.data.id) {
+  if (businessResult.data.user_id !== user.id) {
     return errorResponse("Access denied.", "forbidden", 403);
   }
 
@@ -164,7 +161,7 @@ export async function POST(
 
   const input: AgentRunCreateInput = {
     business_id: id,
-    user_id: userResult.data.id,
+    user_id: user.id,
     agent_id: agentId as AgentTemplateId,
     node_id: template.node as AgentNodeId,
     title,

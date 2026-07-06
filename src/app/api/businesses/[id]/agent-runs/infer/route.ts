@@ -14,7 +14,8 @@
 //   agent_runs_infer_failed    — inference process failed
 
 import { hasSupabaseEnv } from "@/lib/supabase/env";
-import { getCurrentUser, getBusinessById } from "@/lib/projects";
+import { getBusinessById } from "@/lib/projects";
+import { requireUser } from "@/lib/api-auth";
 import { inferAgentRunsFromActivityLogs } from "@/lib/agents/runs";
 
 function errorResponse(error: string, code: string, status: number) {
@@ -34,17 +35,15 @@ export async function POST(
     return errorResponse("Business id is required.", "invalid_input", 400);
   }
 
-  const userResult = await getCurrentUser();
-  if (userResult.error || !userResult.data) {
-    return errorResponse("Authentication required.", "unauthenticated", 401);
-  }
+  const { user, response } = await requireUser();
+  if (!user) return response;
 
   const businessResult = await getBusinessById(id);
   if (businessResult.error || !businessResult.data) {
     return errorResponse("Business not found.", "business_not_found", 404);
   }
 
-  if (businessResult.data.user_id !== userResult.data.id) {
+  if (businessResult.data.user_id !== user.id) {
     return errorResponse("Access denied.", "forbidden", 403);
   }
 

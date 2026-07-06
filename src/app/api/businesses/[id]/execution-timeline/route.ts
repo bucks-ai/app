@@ -1,5 +1,6 @@
 import { hasSupabaseEnv } from "@/lib/supabase/env";
-import { getBusinessById, getCurrentUser } from "@/lib/projects";
+import { getBusinessById } from "@/lib/projects";
+import { requireUser } from "@/lib/api-auth";
 import { getExecutionTimelineForBusiness } from "@/lib/execution/status";
 
 function errorResponse(error: string, code: string, status: number) {
@@ -27,17 +28,15 @@ export async function GET(
     return errorResponse("Business id is required.", "invalid_input", 400);
   }
 
-  const userResult = await getCurrentUser();
-  if (userResult.error || !userResult.data) {
-    return errorResponse("Authentication required.", "unauthenticated", 401);
-  }
+  const { user, response } = await requireUser();
+  if (!user) return response;
 
   const businessResult = await getBusinessById(id);
   if (businessResult.error || !businessResult.data) {
     return errorResponse("Business not found.", "not_found", 404);
   }
 
-  if (businessResult.data.user_id !== userResult.data.id) {
+  if (businessResult.data.user_id !== user.id) {
     return errorResponse("Access denied.", "forbidden", 403);
   }
 
