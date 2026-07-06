@@ -124,6 +124,7 @@ def test_node_sets_last_commit_when_worker_already_committed():
     })
     graph.cfg.auto_merge = True
     graph.cfg.auto_cleanup_branches = True
+    graph.cfg.merge_via_pr = False
 
     state = graph.commit_push_merge_if_needed(_worker_done_state())
 
@@ -175,6 +176,7 @@ def test_node_skips_cleanup_when_merge_fails():
     )
     graph.cfg.auto_merge = True
     graph.cfg.auto_cleanup_branches = True
+    graph.cfg.merge_via_pr = False
 
     state = graph.commit_push_merge_if_needed(_worker_done_state())
 
@@ -192,6 +194,7 @@ def test_node_respects_branch_cleanup_flag():
     })
     graph.cfg.auto_merge = True
     graph.cfg.auto_cleanup_branches = False
+    graph.cfg.merge_via_pr = False
 
     state = graph.commit_push_merge_if_needed(_worker_done_state())
 

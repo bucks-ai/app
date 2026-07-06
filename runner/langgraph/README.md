@@ -303,6 +303,9 @@ Copy `.env.example` to `.env` and fill in:
 | `MAX_RUNTIME_MINUTES` | Max runtime (default: 480) |
 | `AUTO_MERGE` | Auto-merge on check pass (default: true) |
 | `AUTO_CLEANUP_BRANCHES` | Delete local and remote feature branches after successful auto-merge (default: true) |
+| `MERGE_VIA_PR` | Merge through a GitHub pull request + the checks/merge API instead of a local `git merge` + direct push to `main` (default: true — required when `main` has branch protection with required status checks). Set `false` only for lab repos without branch protection, to fall back to the old direct-merge path unchanged. |
+| `PR_CHECKS_TIMEOUT_S` | Max seconds to poll a PR's check runs before giving up (default: 900) |
+| `PR_CHECKS_POLL_INTERVAL_S` | Seconds between check-run polls (default: 20) |
 | `AUTO_DEPLOY` | Auto-trigger Vercel (default: true) |
 | `AUTO_DEPLOY_POLL` | Poll the triggered deployment until it finishes (default: true) |
 | `BLOCK_ON_DEPLOY_FAILURE` | Stop the loop when a polled deploy fails or times out (default: true) |
@@ -476,7 +479,7 @@ Append-only JSONL flight recorder. Each line is a JSON event:
 {"event_type": "task_loaded", "timestamp": "...", "task_id": "...", "payload": {...}}
 ```
 
-Event types: `task_started`, `task_loaded`, `branch_rewritten`, `branch_rewrite_persisted`, `prompt_generated`, `fast_engineering_mode_injected`, `context_compressed`, `planner_started`, `planner_finished`, `worker_started`, `worker_finished`, `summary_captured`, `run_summary_digest`, `check_started`, `check_passed`, `check_failed`, `branch_created`, `commit_created`, `push_completed`, `merge_started`, `merge_completed`, `branch_cleanup_completed`, `deploy_skipped`, `deploy_started`, `deploy_completed`, `deploy_result`, `deploy_poll_started`, `deploy_poll_tick`, `deploy_poll_ready`, `deploy_poll_failed`, `deploy_poll_timeout`, `deploy_poll_unavailable`, `loop_blocked_on_deploy`, `rollback_revert_policy_required`, `sql_detected`, `sql_scan_passed`, `sql_scan_blocked`, `sql_applied`, `resource_request_pending`, `resource_request_waiting`, `resource_request_fulfilled`, `next_task_requested`, `loop_stopped`, `slack_degraded`, `error`
+Event types: `task_started`, `task_loaded`, `branch_rewritten`, `branch_rewrite_persisted`, `prompt_generated`, `fast_engineering_mode_injected`, `context_compressed`, `planner_started`, `planner_finished`, `worker_started`, `worker_finished`, `summary_captured`, `run_summary_digest`, `check_started`, `check_passed`, `check_failed`, `branch_created`, `commit_created`, `push_completed`, `merge_started`, `merge_completed`, `pr_created`, `pr_already_exists`, `pr_checks_poll_started`, `pr_checks_poll_tick`, `pr_checks_completed`, `pr_checks_failed`, `pr_checks_timeout`, `pr_merged`, `branch_cleanup_completed`, `deploy_skipped`, `deploy_started`, `deploy_completed`, `deploy_result`, `deploy_poll_started`, `deploy_poll_tick`, `deploy_poll_ready`, `deploy_poll_failed`, `deploy_poll_timeout`, `deploy_poll_unavailable`, `loop_blocked_on_deploy`, `rollback_revert_policy_required`, `sql_detected`, `sql_scan_passed`, `sql_scan_blocked`, `sql_applied`, `resource_request_pending`, `resource_request_waiting`, `resource_request_fulfilled`, `next_task_requested`, `loop_stopped`, `slack_degraded`, `error`
 
 ---
 
@@ -529,6 +532,47 @@ python runner/langgraph/main.py sync-github-issues owner/name
 
 If no repo argument is supplied, the runner uses `GITHUB_REPO` (or
 `GITHUB_REPOSITORY`) from the environment.
+
+---
+
+## Merge Flow (PR-based, branch-protection compatible)
+
+When `main` has branch protection with required status checks (e.g. the
+`Lint, typecheck, build` and `Runner tests` GitHub Actions checks), a local
+`git merge` followed by a direct `git push origin main` is rejected by
+GitHub. With `MERGE_VIA_PR=true` (default), `commit_push_merge_if_needed`
+merges through a pull request instead:
+
+1. `push_branch` — push the feature branch (unchanged from before).
+2. `create_pull_request` — open a PR for the branch against `main` via the
+   REST API. Idempotent: if an open PR already exists for the branch (e.g. a
+   retried task), that PR is reused instead of creating a duplicate.
+3. `poll_pr_checks` — poll `GET /repos/{repo}/commits/{sha}/check-runs` every
+   `PR_CHECKS_POLL_INTERVAL_S` seconds (default 20) until every check run is
+   `completed`, or `PR_CHECKS_TIMEOUT_S` seconds (default 900) elapse.
+   Success requires every run's conclusion to be `success` or `skipped`.
+4. `merge_pull_request` — merge the PR via `PUT
+   /repos/{repo}/pulls/{number}/merge`, only once checks are green.
+5. `fetch_pull_main` + local feature-branch cleanup — unchanged from before.
+
+**Failure handling:** a failed or timed-out check run, or a rejected merge
+(405 — branch protection unmet, 409 — branch changed since checks ran), is
+fed back into `state.worker_result` as a failure (`success: False`) so it
+goes through the same `failure_guard` / retry / circuit-breaker path as any
+other task failure in `update_logs_and_state` — the task is marked failed
+(or retried, per the normal failure guard policy) and the loop continues to
+the next task. The PR itself is **left open** on GitHub for inspection; it
+is not closed or deleted. `pr_checks_failed` and `pr_checks_timeout` are
+both in the curated Slack event set.
+
+**Requirements:** the `GITHUB_TOKEN` used by the runner must belong to a
+user/app with permission to merge pull requests on the repo — required
+checks apply to it exactly as they would to any other contributor; a token
+without merge rights will see the same 405/409 rejections a human would.
+
+Set `MERGE_VIA_PR=false` to fall back to the old direct-merge path
+(`merge_feature.sh`, local `git merge` + push to `main`) unchanged — an
+escape hatch for lab/sandbox repos that don't have branch protection.
 
 ---
 
@@ -877,7 +921,7 @@ Allowed with warnings: `DROP TABLE IF EXISTS`, `DROP POLICY IF EXISTS`, `DROP TR
 9b. `check_merge_approval_if_needed` — classify merge risk and pause for human approval when the policy requires it (see **Risk-Based Merge Approval Policy**)
 9c. `check_independent_code_review` — independent diff review for scope creep, .env modifications, and secret leaks (runs after check.sh passes; see **Independent Code Review Gate**)
 9d. `check_high_risk_claude_review` — Claude-powered review for high-risk tasks (runs after static code review passes; see **High-Risk Claude Review Gate**)
-10. `commit_push_merge_if_needed` — git commit/push/merge flow; late guard blocks any remaining protected-branch attempts, and successful auto-merges clean up the local and remote feature branch when `AUTO_CLEANUP_BRANCHES=true`
+10. `commit_push_merge_if_needed` — git commit/push/merge flow; late guard blocks any remaining protected-branch attempts; merges via a GitHub PR + checks/merge API by default (see **Merge Flow (PR-based, branch-protection compatible)**), or the old direct `git merge` path when `MERGE_VIA_PR=false`; successful auto-merges clean up the local and remote feature branch when `AUTO_CLEANUP_BRANCHES=true`
 11. `apply_sql_if_needed` — scan and apply SQL migrations
 12. `deploy_if_needed` — trigger a Vercel deploy and poll it to a terminal state (only when a commit landed; see **Vercel Behavior**)
 12a. `run_e2e_if_needed` — run Playwright browser E2E smoke tests against the deployed URL (only when `E2E_ENABLED=true` and the deployment is ready; see **Playwright Browser E2E Harness**)
@@ -933,4 +977,4 @@ python main.py logs --tail 10
 - Codex CLI (`codex`) must be on PATH for automatic Codex execution. Otherwise outbox/manual mode.
 - Supabase arbitrary SQL execution requires a custom `exec_sql` RPC function in your Supabase project.
 - Vercel trigger API may require `projectId` — set in `.env` if needed.
-- `merge-feature.sh` is called for auto-merge; ensure it's executable and tested.
+- `merge-feature.sh` is called for auto-merge only when `MERGE_VIA_PR=false`; ensure it's executable and tested. With the default `MERGE_VIA_PR=true`, merges go through the PR + checks API instead (see **Merge Flow**).
