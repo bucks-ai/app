@@ -1572,6 +1572,9 @@ def run_e2e_if_needed(state: RunnerState) -> RunnerState:
         "passed_count": sum(1 for r in result.get("results", []) if r.get("passed")),
         "failed": [r["name"] for r in result.get("results", []) if not r.get("passed")],
         "error": result.get("error"),
+        "screenshot_paths": [
+            r["screenshot_path"] for r in result.get("results", []) if r.get("screenshot_path")
+        ],
     }, task_id=state.current_task_id)
 
     return _persist(state, "run_e2e_if_needed")
@@ -1649,6 +1652,9 @@ def run_ui_flow_validation_if_needed(state: RunnerState) -> RunnerState:
         "passed_count": sum(1 for r in result.get("results", []) if r.get("passed")),
         "failed": [r["name"] for r in result.get("results", []) if not r.get("passed")],
         "error": result.get("error"),
+        "screenshot_paths": [
+            r["screenshot_path"] for r in result.get("results", []) if r.get("screenshot_path")
+        ],
     }, task_id=state.current_task_id)
 
     return _persist(state, "run_ui_flow_validation_if_needed")

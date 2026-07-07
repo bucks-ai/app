@@ -14,7 +14,12 @@ Typical usage (from the graph node run_e2e_if_needed):
 """
 from __future__ import annotations
 
-from typing import Optional
+import re
+from datetime import datetime
+from pathlib import Path
+from typing import Optional, Union
+
+DEFAULT_SCREENSHOT_DIR = Path(__file__).parent.parent / "outbox" / "screenshots"
 
 
 def is_playwright_available() -> bool:
@@ -24,6 +29,53 @@ def is_playwright_available() -> bool:
         return True
     except ImportError:
         return False
+
+
+def capture_screenshot(page, dir_path: Union[str, Path], name: str) -> Optional[str]:
+    """Capture a screenshot of ``page`` into ``dir_path`` with a timestamped filename.
+
+    Best-effort: returns the path as a string on success, or None if capture
+    fails (e.g. the page/browser already crashed) — callers should never let a
+    failed screenshot mask the real flow failure it was meant to document.
+    """
+    try:
+        directory = Path(dir_path)
+        directory.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%S%f")
+        safe_name = re.sub(r"[^A-Za-z0-9_-]+", "_", name).strip("_") or "screenshot"
+        path = directory / f"{safe_name}_{timestamp}.png"
+        page.screenshot(path=str(path))
+        return str(path)
+    except Exception:
+        return None
+
+
+def enforce_screenshot_retention(dir_path: Union[str, Path], max_count: int = 100) -> list[str]:
+    """Delete the oldest screenshots in ``dir_path`` beyond ``max_count``.
+
+    Pure filesystem operation (no Playwright dependency) so it is directly
+    unit-testable. Returns the list of deleted file paths (oldest first).
+    """
+    directory = Path(dir_path)
+    if not directory.exists():
+        return []
+
+    files = sorted(
+        (p for p in directory.iterdir() if p.is_file()),
+        key=lambda p: p.stat().st_mtime,
+    )
+    overflow = len(files) - max_count
+    if overflow <= 0:
+        return []
+
+    deleted: list[str] = []
+    for p in files[:overflow]:
+        try:
+            p.unlink()
+            deleted.append(str(p))
+        except OSError:
+            pass
+    return deleted
 
 
 def build_default_scenarios(base_url: str) -> list[dict]:
@@ -117,29 +169,49 @@ def _run_checks_on_page(page, checks: list[dict]) -> list[str]:
     return failures
 
 
-def run_scenario(page, base_url: str, scenario: dict) -> dict:
+def run_scenario(
+    page,
+    base_url: str,
+    scenario: dict,
+    screenshot_dir: Union[str, Path, None] = None,
+) -> dict:
     """Navigate to a scenario URL and evaluate its checks against an open page.
 
     Args:
-        page     — open Playwright Page object (already inside a browser context)
-        base_url — root URL (e.g. "https://my-app.vercel.app")
-        scenario — scenario dict from build_default_scenarios / custom list
+        page           — open Playwright Page object (already inside a browser context)
+        base_url       — root URL (e.g. "https://my-app.vercel.app")
+        scenario       — scenario dict from build_default_scenarios / custom list
+        screenshot_dir — directory to save a screenshot into on failure
+                         (defaults to DEFAULT_SCREENSHOT_DIR)
 
     Returns:
-        {"name": str, "passed": bool, "error": Optional[str]}
+        {"name": str, "passed": bool, "error": Optional[str], "screenshot_path": Optional[str]}
     """
     name = scenario.get("name", "unnamed")
     path = scenario.get("path", "/")
     url = base_url.rstrip("/") + path
     checks = scenario.get("checks", [])
+    target_dir = screenshot_dir or DEFAULT_SCREENSHOT_DIR
     try:
         page.goto(url, wait_until="domcontentloaded")
         failures = _run_checks_on_page(page, checks)
         if failures:
-            return {"name": name, "passed": False, "error": "; ".join(failures)}
-        return {"name": name, "passed": True, "error": None}
+            screenshot_path = capture_screenshot(page, target_dir, name)
+            return {
+                "name": name,
+                "passed": False,
+                "error": "; ".join(failures),
+                "screenshot_path": screenshot_path,
+            }
+        return {"name": name, "passed": True, "error": None, "screenshot_path": None}
     except Exception as exc:
-        return {"name": name, "passed": False, "error": str(exc)}
+        screenshot_path = capture_screenshot(page, target_dir, name)
+        return {
+            "name": name,
+            "passed": False,
+            "error": str(exc),
+            "screenshot_path": screenshot_path,
+        }
 
 
 def run_e2e_suite(
@@ -147,14 +219,17 @@ def run_e2e_suite(
     scenarios: Optional[list[dict]] = None,
     timeout_ms: int = 15000,
     headless: bool = True,
+    screenshot_dir: Union[str, Path, None] = None,
 ) -> dict:
     """Launch a Chromium browser and run all scenarios against base_url.
 
     Args:
-        base_url    — root URL to test (e.g. "https://my-app.vercel.app")
-        scenarios   — list of scenario dicts; defaults to build_default_scenarios
-        timeout_ms  — page navigation timeout in milliseconds
-        headless    — run the browser headless (default True)
+        base_url       — root URL to test (e.g. "https://my-app.vercel.app")
+        scenarios      — list of scenario dicts; defaults to build_default_scenarios
+        timeout_ms     — page navigation timeout in milliseconds
+        headless       — run the browser headless (default True)
+        screenshot_dir — directory failure screenshots are saved into
+                         (defaults to DEFAULT_SCREENSHOT_DIR)
 
     Returns:
         success  — True when all scenarios passed and no fatal error occurred
@@ -173,6 +248,7 @@ def run_e2e_suite(
     if scenarios is None:
         scenarios = build_default_scenarios(base_url)
 
+    target_dir = screenshot_dir or DEFAULT_SCREENSHOT_DIR
     results: list[dict] = []
     error_msg: Optional[str] = None
 
@@ -185,11 +261,13 @@ def run_e2e_suite(
             ctx.set_default_navigation_timeout(timeout_ms)
             page = ctx.new_page()
             for scenario in scenarios:
-                result = run_scenario(page, base_url, scenario)
+                result = run_scenario(page, base_url, scenario, screenshot_dir=target_dir)
                 results.append(result)
             browser.close()
     except Exception as exc:
         error_msg = str(exc)
+
+    enforce_screenshot_retention(target_dir)
 
     evaluation = evaluate_results(results)
     report = format_report(results, base_url)
