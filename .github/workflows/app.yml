@@ -80,9 +80,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # @supabase/supabase-js's realtime client requires native WebSocket
+      # support at construction time, even when realtime isn't used — this
+      # job needs Node 22+ (the `check` job doesn't touch Supabase, so it's
+      # unaffected and stays on 20).
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install (locked)
