@@ -402,6 +402,18 @@ def test_route_seed_queue_with_task_to_choose_worker():
     assert graph._route_after_seed_mission_queue(s) == "choose_worker"
 
 
+def test_route_seed_queue_exhausted_to_decide_continue_or_stop():
+    """Strict-mode exhaustion must route straight to the stop check, never the planner."""
+    s = RunnerState(current_task=None, stop_reason="seeded_queue_exhausted")
+    assert graph._route_after_seed_mission_queue(s) == "decide_continue_or_stop"
+
+
+def test_route_seed_queue_other_stop_reason_still_asks_chatgpt():
+    """Non-strict stop reasons (e.g. no_queued_tasks) must still fall through to the planner."""
+    s = RunnerState(current_task=None, stop_reason="no_queued_tasks")
+    assert graph._route_after_seed_mission_queue(s) == "ask_chatgpt_for_task_if_needed"
+
+
 # ---------------------------------------------------------------------------
 # Graph wiring
 # ---------------------------------------------------------------------------
@@ -545,6 +557,78 @@ def test_ask_chatgpt_next_task_not_skipped_when_strict_disabled():
             graph.ChatGPTWorker = original_graph_chatgpt
 
 
+def test_ask_chatgpt_for_task_if_needed_skipped_in_strict_mode():
+    """ask_chatgpt_for_task_if_needed must never consult the planner in strict mode.
+
+    This is the initial (first-task-of-the-run) planner entry point, distinct
+    from ask_chatgpt_next_task. It must honor the strict flag the same way.
+    """
+    original_enabled = graph.cfg.seeded_mission_queue_enabled
+    original_strict = graph.cfg.seeded_mission_queue_strict
+    try:
+        graph.cfg.seeded_mission_queue_enabled = True
+        graph.cfg.seeded_mission_queue_strict = True
+        state = _make_state(stop_reason="seeded_queue_exhausted")
+        out = graph.ask_chatgpt_for_task_if_needed(state)
+        # The node must exit early without calling the planner or touching
+        # the stop_reason that seed_mission_queue_if_needed already set.
+        assert out.stop_reason == "seeded_queue_exhausted"
+        assert out.current_task is None
+    finally:
+        graph.cfg.seeded_mission_queue_enabled = original_enabled
+        graph.cfg.seeded_mission_queue_strict = original_strict
+
+
+def test_strict_stop_reason_survives_full_routing_without_calling_planner():
+    """End-to-end reproduction of the M1 bug: strict mode + exhausted queue must
+    stop with seeded_queue_exhausted and never reach the ChatGPT planner, no
+    matter how routing chains the two seed/chatgpt nodes together.
+    """
+    original_enabled = graph.cfg.seeded_mission_queue_enabled
+    original_strict = graph.cfg.seeded_mission_queue_strict
+    captured = _stub_graph_seeded(mission=None, task_rows=[])
+
+    import workers.chatgpt_worker as cw_mod
+    original_cls = cw_mod.ChatGPTWorker
+    original_graph_chatgpt = getattr(graph, "ChatGPTWorker", None)
+    planner_called = []
+
+    class _FailIfCalledPlanner:
+        def ask_for_next_task(self, *a, **k):
+            planner_called.append(True)
+            return {"id": "should-not-happen", "title": "should not happen"}
+
+    try:
+        graph.cfg.seeded_mission_queue_enabled = True
+        graph.cfg.seeded_mission_queue_strict = True
+        type(graph.cfg).has_supabase = property(lambda self: True)
+        cw_mod.ChatGPTWorker = _FailIfCalledPlanner
+        graph.ChatGPTWorker = _FailIfCalledPlanner
+
+        state = _make_state()
+        state = graph.seed_mission_queue_if_needed(state)
+        assert state.stop_reason == "seeded_queue_exhausted"
+
+        next_node = graph._route_after_seed_mission_queue(state)
+        assert next_node == "decide_continue_or_stop", (
+            "strict-mode exhaustion must route straight to the stop check, "
+            "not to ask_chatgpt_for_task_if_needed"
+        )
+        assert planner_called == [], "planner must never be consulted in strict mode"
+        assert state.stop_reason == "seeded_queue_exhausted"
+    finally:
+        graph.cfg.seeded_mission_queue_enabled = original_enabled
+        graph.cfg.seeded_mission_queue_strict = original_strict
+        original_has_supabase = property(
+            lambda self: bool(graph.cfg.supabase_url and graph.cfg.supabase_service_role_key)
+        )
+        type(graph.cfg).has_supabase = original_has_supabase
+        cw_mod.ChatGPTWorker = original_cls
+        if original_graph_chatgpt is not None:
+            graph.ChatGPTWorker = original_graph_chatgpt
+        _restore_graph_seeded()
+
+
 # ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
@@ -583,6 +667,8 @@ if __name__ == "__main__":
         test_route_compile_with_task_to_choose_worker,
         test_route_seed_queue_no_task_to_chatgpt,
         test_route_seed_queue_with_task_to_choose_worker,
+        test_route_seed_queue_exhausted_to_decide_continue_or_stop,
+        test_route_seed_queue_other_stop_reason_still_asks_chatgpt,
         test_node_is_wired_into_graph,
         test_compile_still_routes_to_chatgpt_via_seed_node,
         test_strict_mode_sets_stop_reason_when_no_mission,
@@ -590,6 +676,8 @@ if __name__ == "__main__":
         test_strict_mode_does_not_stop_when_mission_exists,
         test_ask_chatgpt_next_task_skipped_in_strict_mode,
         test_ask_chatgpt_next_task_not_skipped_when_strict_disabled,
+        test_ask_chatgpt_for_task_if_needed_skipped_in_strict_mode,
+        test_strict_stop_reason_survives_full_routing_without_calling_planner,
     ]
     passed = failed = 0
     for t in tests:

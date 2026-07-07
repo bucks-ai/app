@@ -444,6 +444,11 @@ def seed_mission_queue_if_needed(state: RunnerState) -> RunnerState:
 def ask_chatgpt_for_task_if_needed(state: RunnerState) -> RunnerState:
     if state.current_task:
         return state
+    # In strict seeded queue mode the planner is never consulted: all tasks come
+    # from Supabase missions and the loop stops when the queue is exhausted (see
+    # seed_mission_queue_if_needed, which already set stop_reason in this case).
+    if cfg.seeded_mission_queue_enabled and cfg.seeded_mission_queue_strict:
+        return state
     summary_text = state.worker_summary_digest or build_run_summary_digest(state.worker_summary)
     log_event("next_task_requested", {"summary_preview": summary_text[:200]})
     planner = ChatGPTWorker()
@@ -2324,6 +2329,11 @@ def _route_after_compile_mission(state: RunnerState) -> str:
 
 
 def _route_after_seed_mission_queue(state: RunnerState) -> str:
+    # Strict mode already set stop_reason="seeded_queue_exhausted" in
+    # seed_mission_queue_if_needed; route straight to the stop check instead of
+    # falling through to the ChatGPT planner, which strict mode must never consult.
+    if state.stop_reason == "seeded_queue_exhausted":
+        return "decide_continue_or_stop"
     if state.current_task:
         return "choose_worker"
     return "ask_chatgpt_for_task_if_needed"
@@ -2448,6 +2458,7 @@ def build_graph():
     builder.add_conditional_edges("seed_mission_queue_if_needed", _route_after_seed_mission_queue, {
         "choose_worker": "choose_worker",
         "ask_chatgpt_for_task_if_needed": "ask_chatgpt_for_task_if_needed",
+        "decide_continue_or_stop": "decide_continue_or_stop",
     })
 
     builder.add_conditional_edges("ask_chatgpt_for_task_if_needed", _route_after_chatgpt, {
