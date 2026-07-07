@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
 const { requireUserMock, openaiCreateMock, openaiConstructorMock, limitMock } = vi.hoisted(() => ({
@@ -87,6 +87,8 @@ const validBlueprint = {
 };
 
 describe("POST /api/generate-blueprint", () => {
+  const originalFakeAiFlag = process.env.E2E_FAKE_AI;
+
   beforeEach(() => {
     requireUserMock.mockReset();
     openaiCreateMock.mockReset();
@@ -94,6 +96,14 @@ describe("POST /api/generate-blueprint", () => {
     limitMock.mockReset();
     limitMock.mockResolvedValue({ allowed: true, remaining: 4 });
     process.env.OPENAI_API_KEY = "test-key";
+    delete process.env.E2E_FAKE_AI;
+    vi.stubEnv("NODE_ENV", "test");
+  });
+
+  afterEach(() => {
+    if (originalFakeAiFlag === undefined) delete process.env.E2E_FAKE_AI;
+    else process.env.E2E_FAKE_AI = originalFakeAiFlag;
+    vi.unstubAllEnvs();
   });
 
   it("returns the standard 401 envelope and never calls OpenAI when unauthenticated", async () => {
@@ -280,5 +290,45 @@ describe("POST /api/generate-blueprint", () => {
     expect(payload.ok).toBe(false);
     expect(payload.code).toBe("parse_error");
     expect(payload.blueprint).toBeUndefined();
+  });
+
+  it("returns a deterministic fixture and never calls OpenAI when E2E_FAKE_AI=true outside production", async () => {
+    requireUserMock.mockResolvedValue({
+      user: { id: "user-1", email: "a@example.com" },
+      response: null,
+    });
+    delete process.env.OPENAI_API_KEY;
+    process.env.E2E_FAKE_AI = "true";
+    vi.stubEnv("NODE_ENV", "development");
+
+    const response = await POST(makeRequest(validIdea));
+
+    expect(response.status).toBe(200);
+    expect(openaiConstructorMock).not.toHaveBeenCalled();
+    expect(openaiCreateMock).not.toHaveBeenCalled();
+    const payload = await response.json();
+    expect(payload.blueprint).toBeDefined();
+    expect(payload.blueprint.businessSummary).toEqual(expect.any(String));
+  });
+
+  it("ignores E2E_FAKE_AI and calls OpenAI when NODE_ENV=production", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    requireUserMock.mockResolvedValue({
+      user: { id: "user-1", email: "a@example.com" },
+      response: null,
+    });
+    openaiCreateMock.mockResolvedValue({
+      choices: [{ message: { content: JSON.stringify(validBlueprint) } }],
+    });
+    process.env.E2E_FAKE_AI = "true";
+    vi.stubEnv("NODE_ENV", "production");
+
+    const response = await POST(makeRequest(validIdea));
+
+    expect(response.status).toBe(200);
+    expect(openaiCreateMock).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("NODE_ENV=production"));
+
+    warnSpy.mockRestore();
   });
 });
