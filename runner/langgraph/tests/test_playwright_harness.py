@@ -12,12 +12,15 @@ Run with:
 """
 import os
 import sys
+import time
 import unittest.mock as mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from tools.playwright_harness import (
     build_default_scenarios,
+    capture_screenshot,
+    enforce_screenshot_retention,
     evaluate_results,
     format_report,
     is_playwright_available,
@@ -311,6 +314,213 @@ def test_run_e2e_suite_sets_navigation_timeout_without_new_context_kwarg():
     assert result["error"] is None, result
     assert result["success"] is True, result
     assert result["results"], "expected at least the default scenario to run"
+
+
+# ---------------------------------------------------------------------------
+# capture_screenshot
+# ---------------------------------------------------------------------------
+
+class _FakeScreenshotPage:
+    def __init__(self, raise_on_screenshot=False):
+        self.raise_on_screenshot = raise_on_screenshot
+        self.screenshot_calls = []
+
+    def screenshot(self, path=None):
+        if self.raise_on_screenshot:
+            raise RuntimeError("page already closed")
+        self.screenshot_calls.append(path)
+        with open(path, "wb") as f:
+            f.write(b"fake-png-bytes")
+
+
+def test_capture_screenshot_writes_file_and_returns_path():
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        page = _FakeScreenshotPage()
+        result = capture_screenshot(page, tmp, "homepage loads")
+
+        assert result is not None
+        assert os.path.exists(result)
+        assert result.startswith(tmp)
+
+
+def test_capture_screenshot_filename_is_sanitized_and_timestamped():
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        page = _FakeScreenshotPage()
+        result = capture_screenshot(page, tmp, "login / signup flow!!")
+
+        filename = os.path.basename(result)
+        assert "/" not in filename
+        assert "!" not in filename
+        assert filename.startswith("login_signup_flow")
+        assert filename.endswith(".png")
+
+
+def test_capture_screenshot_creates_missing_directory():
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        target = os.path.join(tmp, "nested", "screenshots")
+        page = _FakeScreenshotPage()
+        result = capture_screenshot(page, target, "flow")
+
+        assert result is not None
+        assert os.path.isdir(target)
+
+
+def test_capture_screenshot_returns_none_on_failure():
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        page = _FakeScreenshotPage(raise_on_screenshot=True)
+        result = capture_screenshot(page, tmp, "flow")
+
+        assert result is None
+
+
+def test_capture_screenshot_unique_names_for_same_scenario():
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        page = _FakeScreenshotPage()
+        first = capture_screenshot(page, tmp, "flow")
+        time.sleep(0.001)
+        second = capture_screenshot(page, tmp, "flow")
+
+        assert first != second
+
+
+# ---------------------------------------------------------------------------
+# enforce_screenshot_retention
+# ---------------------------------------------------------------------------
+
+def test_enforce_screenshot_retention_under_cap_deletes_nothing():
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        for i in range(5):
+            with open(os.path.join(tmp, f"shot_{i}.png"), "wb") as f:
+                f.write(b"x")
+
+        deleted = enforce_screenshot_retention(tmp, max_count=100)
+
+        assert deleted == []
+        assert len(os.listdir(tmp)) == 5
+
+
+def test_enforce_screenshot_retention_deletes_oldest_beyond_cap():
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        paths = []
+        for i in range(5):
+            p = os.path.join(tmp, f"shot_{i}.png")
+            with open(p, "wb") as f:
+                f.write(b"x")
+            paths.append(p)
+            # ensure distinct mtimes so ordering is deterministic
+            os.utime(p, (i, i))
+
+        deleted = enforce_screenshot_retention(tmp, max_count=3)
+
+        assert len(deleted) == 2
+        assert set(deleted) == {paths[0], paths[1]}
+        remaining = sorted(os.listdir(tmp))
+        assert remaining == ["shot_2.png", "shot_3.png", "shot_4.png"]
+
+
+def test_enforce_screenshot_retention_exact_cap_deletes_nothing():
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        for i in range(3):
+            with open(os.path.join(tmp, f"shot_{i}.png"), "wb") as f:
+                f.write(b"x")
+
+        deleted = enforce_screenshot_retention(tmp, max_count=3)
+
+        assert deleted == []
+        assert len(os.listdir(tmp)) == 3
+
+
+def test_enforce_screenshot_retention_missing_directory_returns_empty():
+    deleted = enforce_screenshot_retention("/nonexistent/path/does_not_exist", max_count=100)
+    assert deleted == []
+
+
+def test_enforce_screenshot_retention_default_cap_is_100():
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        for i in range(105):
+            p = os.path.join(tmp, f"shot_{i:03d}.png")
+            with open(p, "wb") as f:
+                f.write(b"x")
+            os.utime(p, (i, i))
+
+        deleted = enforce_screenshot_retention(tmp)
+
+        assert len(deleted) == 5
+        assert len(os.listdir(tmp)) == 100
+
+
+# ---------------------------------------------------------------------------
+# run_scenario captures a screenshot on failure
+# ---------------------------------------------------------------------------
+
+def test_run_scenario_captures_screenshot_on_check_failure():
+    import tempfile
+    from tools.playwright_harness import run_scenario
+
+    class _Page(_FakeScreenshotPage):
+        def goto(self, url, wait_until=None):
+            pass
+
+        def title(self):
+            return "Wrong Title"
+
+        def content(self):
+            return "<html></html>"
+
+    scenario = {
+        "name": "homepage loads",
+        "path": "/",
+        "checks": [{"type": "title_contains", "value": "Expected"}],
+    }
+
+    with tempfile.TemporaryDirectory() as tmp:
+        result = run_scenario(_Page(), "https://example.com", scenario, screenshot_dir=tmp)
+
+        assert result["passed"] is False
+        assert result["screenshot_path"] is not None
+        assert os.path.exists(result["screenshot_path"])
+
+
+def test_run_scenario_no_screenshot_on_success():
+    import tempfile
+    from tools.playwright_harness import run_scenario
+
+    class _Page(_FakeScreenshotPage):
+        def goto(self, url, wait_until=None):
+            pass
+
+        def title(self):
+            return "My Title"
+
+        def content(self):
+            return "<html></html>"
+
+    scenario = {"name": "homepage loads", "path": "/", "checks": []}
+
+    with tempfile.TemporaryDirectory() as tmp:
+        result = run_scenario(_Page(), "https://example.com", scenario, screenshot_dir=tmp)
+
+        assert result["passed"] is True
+        assert result["screenshot_path"] is None
+        assert os.listdir(tmp) == []
 
 
 # ---------------------------------------------------------------------------

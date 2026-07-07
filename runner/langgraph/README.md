@@ -747,6 +747,8 @@ Each scenario dict:
 
 **Pure helpers** (`tools/playwright_harness.py`) — `build_default_scenarios`, `evaluate_results`, and `format_report` are side-effect free and fully unit-tested in `tests/test_playwright_harness.py`. Browser execution (`run_e2e_suite`, `run_scenario`) requires a real Playwright install.
 
+**Screenshot artifacts** — when a scenario fails (a check fails or navigation raises), `run_scenario` captures a screenshot of the page into `outbox/screenshots/` with a timestamped filename (`<sanitized-scenario-name>_<timestamp>.png`) and records the path on the result dict's `screenshot_path` key. The `e2e_failed` / `e2e_passed` log event includes a `screenshot_paths` array of every captured path. Screenshot capture is best-effort — a failure to capture (e.g. the browser already crashed) returns `None` rather than masking the real scenario failure. After each suite run, `enforce_screenshot_retention(dir_path, max_count=100)` deletes the oldest screenshots beyond the cap so `outbox/screenshots/` doesn't grow unbounded; this is a pure filesystem operation unit-tested without Playwright.
+
 ---
 
 ## UI Flow Validation Runner
@@ -813,6 +815,8 @@ The validator runs in the `run_ui_flow_validation_if_needed` node, immediately a
 - `E2E_HEADLESS=true` (default) — shared with the E2E harness; run Chromium headless.
 
 **Pure helpers** (`tools/ui_flow_validator.py`) — `build_default_flows`, `evaluate_flow_results`, `format_flow_report`, and `load_flows_from_file` are side-effect free and fully unit-tested in `tests/test_ui_flow_validator.py`. Browser execution (`run_flow`, `run_ui_flow_validation`) requires a real Playwright install.
+
+**Screenshot artifacts** — like the E2E harness, `run_flow` captures a screenshot into `outbox/screenshots/` on the first failing step and records it on the result's `screenshot_path` key (reusing `capture_screenshot` / `enforce_screenshot_retention` from `tools/playwright_harness.py`); the `ui_flow_failed` / `ui_flow_passed` log event includes a `screenshot_paths` array.
 
 ---
 

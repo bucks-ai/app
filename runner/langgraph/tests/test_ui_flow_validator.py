@@ -1,5 +1,6 @@
 """Tests for tools/ui_flow_validator.py — pure helper functions only."""
 import json
+import os
 
 import pytest
 
@@ -8,6 +9,7 @@ from tools.ui_flow_validator import (
     evaluate_flow_results,
     format_flow_report,
     load_flows_from_file,
+    run_flow,
 )
 
 
@@ -195,3 +197,49 @@ def test_load_flows_from_file_null_json(tmp_path):
     p.write_text("null")
     result = load_flows_from_file(str(p))
     assert result == []
+
+
+# ── run_flow screenshot capture ─────────────────────────────────────────────
+
+class _FakePage:
+    def goto(self, url, wait_until=None):
+        pass
+
+    def click(self, selector):
+        raise RuntimeError(f"element not found: {selector}")
+
+    def content(self):
+        return "<html></html>"
+
+    def screenshot(self, path=None):
+        with open(path, "wb") as f:
+            f.write(b"fake-png-bytes")
+
+
+def test_run_flow_captures_screenshot_on_step_failure(tmp_path):
+    flow = {
+        "name": "login flow",
+        "steps": [
+            {"action": "navigate", "value": "/login"},
+            {"action": "click", "selector": "button[type=submit]"},
+        ],
+    }
+
+    result = run_flow(_FakePage(), "https://example.com", flow, screenshot_dir=str(tmp_path))
+
+    assert result["passed"] is False
+    assert result["screenshot_path"] is not None
+    assert (tmp_path / os.path.basename(result["screenshot_path"])).exists()
+
+
+def test_run_flow_no_screenshot_on_success(tmp_path):
+    flow = {
+        "name": "homepage flow",
+        "steps": [{"action": "navigate", "value": "/"}],
+    }
+
+    result = run_flow(_FakePage(), "https://example.com", flow, screenshot_dir=str(tmp_path))
+
+    assert result["passed"] is True
+    assert result["screenshot_path"] is None
+    assert list(tmp_path.iterdir()) == []

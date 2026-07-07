@@ -32,7 +32,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
+
+from tools.playwright_harness import (
+    DEFAULT_SCREENSHOT_DIR,
+    capture_screenshot,
+    enforce_screenshot_retention,
+)
 
 
 def build_default_flows(base_url: str) -> list[dict]:  # noqa: ARG001
@@ -143,29 +149,46 @@ def _run_flow_step(page, base_url: str, step: dict) -> Optional[str]:
     return None
 
 
-def run_flow(page, base_url: str, flow: dict) -> dict:
+def run_flow(
+    page,
+    base_url: str,
+    flow: dict,
+    screenshot_dir: Union[str, Path, None] = None,
+) -> dict:
     """Execute a multi-step flow against an open Playwright page.
 
     Args:
-        page     — open Playwright Page object (inside a browser context)
-        base_url — root URL (e.g. "https://my-app.vercel.app")
-        flow     — flow dict with ``name`` and ``steps`` list
+        page           — open Playwright Page object (inside a browser context)
+        base_url       — root URL (e.g. "https://my-app.vercel.app")
+        flow           — flow dict with ``name`` and ``steps`` list
+        screenshot_dir — directory to save a screenshot into on failure
+                         (defaults to DEFAULT_SCREENSHOT_DIR)
 
     Returns:
-        {"name": str, "passed": bool, "error": Optional[str], "steps_run": int}
+        {"name": str, "passed": bool, "error": Optional[str], "steps_run": int,
+         "screenshot_path": Optional[str]}
     """
     name = flow.get("name", "unnamed")
     steps = flow.get("steps", [])
+    target_dir = screenshot_dir or DEFAULT_SCREENSHOT_DIR
     for i, step in enumerate(steps):
         error = _run_flow_step(page, base_url, step)
         if error:
+            screenshot_path = capture_screenshot(page, target_dir, name)
             return {
                 "name": name,
                 "passed": False,
                 "error": f"step {i + 1} ({step.get('action', '?')}): {error}",
                 "steps_run": i + 1,
+                "screenshot_path": screenshot_path,
             }
-    return {"name": name, "passed": True, "error": None, "steps_run": len(steps)}
+    return {
+        "name": name,
+        "passed": True,
+        "error": None,
+        "steps_run": len(steps),
+        "screenshot_path": None,
+    }
 
 
 def run_ui_flow_validation(
@@ -173,14 +196,17 @@ def run_ui_flow_validation(
     flows: Optional[list[dict]] = None,
     timeout_ms: int = 20000,
     headless: bool = True,
+    screenshot_dir: Union[str, Path, None] = None,
 ) -> dict:
     """Launch a Chromium browser and run all UI flows against base_url.
 
     Args:
-        base_url   — root URL to test (e.g. "https://my-app.vercel.app")
-        flows      — list of flow dicts; defaults to build_default_flows (empty)
-        timeout_ms — per-navigation/action timeout in milliseconds
-        headless   — run the browser headless (default True)
+        base_url       — root URL to test (e.g. "https://my-app.vercel.app")
+        flows          — list of flow dicts; defaults to build_default_flows (empty)
+        timeout_ms     — per-navigation/action timeout in milliseconds
+        headless       — run the browser headless (default True)
+        screenshot_dir — directory failure screenshots are saved into
+                         (defaults to DEFAULT_SCREENSHOT_DIR)
 
     Returns:
         success  — True when all flows passed (or no flows were defined)
@@ -209,6 +235,7 @@ def run_ui_flow_validation(
             "error": None,
         }
 
+    target_dir = screenshot_dir or DEFAULT_SCREENSHOT_DIR
     results: list[dict] = []
     error_msg: Optional[str] = None
 
@@ -221,11 +248,13 @@ def run_ui_flow_validation(
             ctx.set_default_navigation_timeout(timeout_ms)
             page = ctx.new_page()
             for flow in flows:
-                result = run_flow(page, base_url, flow)
+                result = run_flow(page, base_url, flow, screenshot_dir=target_dir)
                 results.append(result)
             browser.close()
     except Exception as exc:
         error_msg = str(exc)
+
+    enforce_screenshot_retention(target_dir)
 
     evaluation = evaluate_flow_results(results)
     report = format_flow_report(results, base_url)
