@@ -19,20 +19,23 @@ export function IntakeStep({
   children,
 }: IntakeStepProps) {
   return (
-    <OperatorPanel className="p-6 shadow-[0_20px_80px_rgba(0,0,0,0.22)] sm:p-8">
-      <div className="mb-8 flex flex-col gap-5 border-b border-[#1C1C1C] pb-6 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <SectionLabel>{`Step ${step} of ${totalSteps}`}</SectionLabel>
-          <h2 className="mt-3 text-2xl font-semibold tracking-tight text-[#F0F0F0] sm:text-3xl">
-            {title}
-          </h2>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-[#888888] sm:text-base">
-            {description}
-          </p>
+    <OperatorPanel className="p-6 sm:p-8">
+      {/* keyed on step so each step slides in; animation is disabled under reduced motion */}
+      <div key={step} className="step-in">
+        <div className="mb-8 flex flex-col gap-5 border-b border-border pb-6 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <SectionLabel>{`Step ${step} of ${totalSteps}`}</SectionLabel>
+            <h2 className="mt-3 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+              {title}
+            </h2>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-secondary sm:text-base">
+              {description}
+            </p>
+          </div>
+          <StatusPill label="Intake wizard" />
         </div>
-        <StatusPill label="Intake wizard" />
+        {children}
       </div>
-      {children}
     </OperatorPanel>
   );
 }

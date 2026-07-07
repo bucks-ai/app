@@ -1,3 +1,7 @@
+import { Reveal } from "@/components/ui/Reveal";
+import { SectionHeader } from "@/components/ui/SectionHeader";
+import { GlassCard } from "@/components/ui/GlassCard";
+
 const steps = [
   {
     n: "01",
@@ -25,34 +29,46 @@ export function WorkflowSteps() {
   return (
     <section id="how-it-works" className="px-6 py-20 sm:py-28">
       <div className="mx-auto max-w-6xl">
-        <div className="max-w-2xl">
-          <p className="text-xs font-medium uppercase tracking-widest text-accent">
-            How it works
-          </p>
-          <h2 className="mt-3 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
-            From a sentence to a working workspace
-          </h2>
-          <p className="mt-4 text-base leading-relaxed text-secondary">
-            Four steps run end to end. You stay in control and step in only where
-            judgment is needed.
-          </p>
-        </div>
+        <Reveal>
+          <SectionHeader
+            eyebrow="How it works"
+            title="From a sentence to a working workspace"
+            description="Four steps run end to end. You stay in control and step in only where judgment is needed."
+          />
+        </Reveal>
 
-        <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {steps.map((step) => (
-            <div
-              key={step.n}
-              className="rounded-card border border-border bg-surface p-6 transition-colors hover:border-accent/40"
-              style={{ borderRadius: "var(--radius)" }}
-            >
-              <span className="font-mono text-sm text-muted">{step.n}</span>
-              <h3 className="mt-4 text-base font-medium text-foreground">
-                {step.title}
-              </h3>
-              <p className="mt-2 text-sm leading-relaxed text-secondary">
-                {step.body}
-              </p>
-            </div>
+        <div className="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {steps.map((step, i) => (
+            <Reveal key={step.n} delay={i * 90}>
+              <GlassCard
+                interactive
+                delay={i * 0.04}
+                className={`h-full p-5 ${
+                  i === 1 ? "lg:translate-y-6" : i === 2 ? "lg:-translate-y-4" : ""
+                }`}
+              >
+                <div className="flex items-center">
+                  <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border border-accent/50 bg-accent-soft font-mono text-xs font-semibold text-accent-bright">
+                    {step.n}
+                  </span>
+                  {i < steps.length - 1 ? (
+                    <span
+                      aria-hidden
+                      className="ml-3 hidden h-px flex-1 flow-line-x lg:block"
+                    />
+                  ) : null}
+                </div>
+                <h3 className="mt-5 text-base font-semibold text-foreground">
+                  {step.title}
+                </h3>
+                <p className="mt-2 text-sm leading-relaxed text-secondary">
+                  {step.body}
+                </p>
+                <p className="mt-5 font-mono text-[10px] uppercase tracking-[0.18em] text-muted">
+                  {i < steps.length - 1 ? "Hands off to next step" : "Feeds Mission Control"}
+                </p>
+              </GlassCard>
+            </Reveal>
           ))}
         </div>
       </div>

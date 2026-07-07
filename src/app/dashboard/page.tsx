@@ -5,7 +5,9 @@ import { BusinessCard } from "@/components/dashboard/BusinessCard";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { HumanActionQueue } from "@/components/dashboard/HumanActionQueue";
 import {
+  demoActivity,
   demoBusinesses,
+  demoHumanActions,
   type ActivityItem,
   type DashboardBusiness,
   type HumanAction,
@@ -22,7 +24,8 @@ import type {
   BusinessRecord,
   HumanRequiredActionRecord,
 } from "@/types/database";
-import { OperatorPanel } from "@/components/ui/OperatorPanel";
+import { GlassCard } from "@/components/ui/GlassCard";
+import { KpiStat } from "@/components/ui/KpiStat";
 import { SectionLabel } from "@/components/ui/SectionLabel";
 import { StatusPill } from "@/components/ui/StatusPill";
 
@@ -35,9 +38,9 @@ export const metadata: Metadata = {
 };
 
 const primaryCta =
-  "inline-flex items-center justify-center gap-1.5 rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-accent-contrast shadow-[var(--shadow-soft)] transition-colors hover:bg-accent-hover";
+  "inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-accent-contrast shadow-[var(--shadow-soft)] transition-colors hover:bg-accent-hover";
 const secondaryCta =
-  "inline-flex items-center justify-center gap-1.5 rounded-lg border border-border bg-surface px-4 py-2.5 text-sm font-medium text-secondary transition-colors hover:border-accent/40 hover:text-foreground";
+  "inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg border border-border bg-surface px-4 py-2.5 text-sm font-medium text-secondary transition-colors hover:border-accent/40 hover:text-foreground";
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("en-US", {
@@ -116,32 +119,49 @@ function toHumanAction(
   };
 }
 
-function Metric({
-  label,
-  value,
-  tone = "neutral",
+function DashboardKpis({
+  projects,
+  approvals,
+  activeDeploys,
+  blockers,
+  sample = false,
 }: {
-  label: string;
-  value: string | number;
-  tone?: "neutral" | "accent" | "warning" | "success";
+  projects: number;
+  approvals: number;
+  activeDeploys: number;
+  blockers: number;
+  sample?: boolean;
 }) {
-  const toneClass =
-    tone === "accent"
-      ? "text-accent"
-      : tone === "warning"
-        ? "text-warning"
-        : tone === "success"
-          ? "text-success"
-          : "text-foreground";
-
   return (
-    <div className="rounded-xl border border-border bg-surface px-4 py-3 shadow-[var(--shadow-soft)]">
-      <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted">
-        {label}
-      </p>
-      <p className={`mt-1 text-2xl font-semibold tracking-tight ${toneClass}`}>
-        {value}
-      </p>
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <KpiStat
+        label={sample ? "Sample projects" : "Total projects"}
+        value={projects}
+        detail={sample ? "Preview workspace records" : "Saved MVP workspaces"}
+        tone="accent"
+        sparkline={[1, 2, 2, 3, projects + 1]}
+      />
+      <KpiStat
+        label="Open approvals"
+        value={approvals}
+        detail="Founder decisions waiting"
+        tone={approvals > 0 ? "warning" : "success"}
+        sparkline={[0, 1, approvals, approvals + 1, approvals]}
+      />
+      <KpiStat
+        label="Active deploys"
+        value={activeDeploys}
+        detail="Builds with live deployment state"
+        tone={activeDeploys > 0 ? "success" : "neutral"}
+        sparkline={[0, 0, 1, activeDeploys, activeDeploys]}
+      />
+      <KpiStat
+        label="Blockers"
+        value={blockers}
+        detail={blockers > 0 ? "Needs intervention" : "No hard stops"}
+        tone={blockers > 0 ? "danger" : "success"}
+        sparkline={[0, blockers, blockers, Math.max(0, blockers - 1), blockers]}
+      />
     </div>
   );
 }
@@ -158,7 +178,7 @@ function SidePanel({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-card border border-border bg-surface p-4 shadow-[var(--shadow-soft)] sm:p-5">
+    <GlassCard as="section" className="p-4 sm:p-5">
       <div className="flex items-center justify-between gap-3">
         <SectionLabel tone={tone === "warning" ? "warning" : "accent"}>
           {title}
@@ -176,16 +196,16 @@ function SidePanel({
         ) : null}
       </div>
       <div className="mt-4">{children}</div>
-    </section>
+    </GlassCard>
   );
 }
 
 function SetupPanel() {
   return (
-    <OperatorPanel className="p-6 sm:p-10">
+    <GlassCard as="section" className="p-6 sm:p-10">
       <StatusPill label="Setup required" variant="warning" />
       <h1 className="mt-5 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
-        Connect Supabase to see real projects.
+        Mission Control is ready. Connect Supabase for real projects.
       </h1>
       <p className="mt-5 max-w-3xl text-base leading-8 text-secondary">
         Mission Control builds without secrets, but real saved businesses need{" "}
@@ -198,51 +218,89 @@ function SetupPanel() {
         </code>{" "}
         in <code className="rounded bg-background px-1.5 py-0.5 font-mono">.env.local</code>.
       </p>
-    </OperatorPanel>
+    </GlassCard>
   );
 }
 
 function SignInPanel() {
   return (
-    <OperatorPanel className="p-6 sm:p-10">
-      <StatusPill label="Signed out" variant="neutral" />
-      <h1 className="mt-5 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
-        Sign in to load your saved businesses.
-      </h1>
-      <p className="mt-5 max-w-3xl text-base leading-8 text-secondary">
-        The dashboard reads from Supabase when a session is present. Until then,
-        the preview below is sample data only.
-      </p>
-      <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-        <Link href="/login" className={primaryCta}>
-          Sign in <span aria-hidden>&#8594;</span>
-        </Link>
-        <Link href="/signup" className={secondaryCta}>
-          Create account
-        </Link>
+    <GlassCard as="section" className="p-6 sm:p-10">
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-center">
+        <div>
+          <StatusPill label="Signed out" variant="neutral" />
+          <h1 className="mt-5 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
+            Mission Control for every startup workspace.
+          </h1>
+          <p className="mt-5 max-w-3xl text-base leading-8 text-secondary">
+            Sign in to load saved businesses from Supabase. Until then, this page
+            shows a clearly labeled sample preview of the operator console.
+          </p>
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+            <Link href="/login" className={primaryCta}>
+              Sign in <span aria-hidden>&#8594;</span>
+            </Link>
+            <Link href="/signup" className={secondaryCta}>
+              Create account
+            </Link>
+          </div>
+        </div>
+        <div className="rounded-xl border border-border bg-background/70 p-4">
+          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted">
+            Preview mode
+          </p>
+          <div className="mt-4 space-y-3">
+            {["Research complete", "Deploy running", "Validation queued"].map(
+              (item) => (
+                <div
+                  key={item}
+                  className="skeleton-shimmer rounded-lg border border-border bg-surface/70 px-3 py-2 text-sm text-secondary"
+                >
+                  {item}
+                </div>
+              )
+            )}
+          </div>
+        </div>
       </div>
-    </OperatorPanel>
+    </GlassCard>
   );
 }
 
 function DemoPreview() {
   return (
-    <section>
-      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+    <section className="space-y-5">
+      <DashboardKpis
+        projects={demoBusinesses.length}
+        approvals={demoHumanActions.length}
+        activeDeploys={1}
+        blockers={1}
+        sample
+      />
+
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <SectionLabel>Sample data</SectionLabel>
           <h2 className="mt-2 text-xl font-semibold tracking-tight text-foreground">
-            Dashboard preview
+            Clearly labeled dashboard preview
           </h2>
         </div>
         <p className="max-w-md text-sm leading-6 text-secondary">
           Connect Supabase and sign in to see your real projects here.
         </p>
       </div>
-      <div className="grid gap-4">
+      <div className="grid gap-4 xl:grid-cols-2">
         {demoBusinesses.map((business) => (
           <BusinessCard key={business.id} business={business} label="Sample business" />
         ))}
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-2">
+        <SidePanel title="Sample approvals" count={demoHumanActions.length} tone="warning">
+          <HumanActionQueue actions={demoHumanActions} />
+        </SidePanel>
+        <SidePanel title="Sample activity">
+          <ActivityLog items={demoActivity} />
+        </SidePanel>
       </div>
     </section>
   );
@@ -250,7 +308,7 @@ function DemoPreview() {
 
 function EmptyState() {
   return (
-    <div className="rounded-card border border-border bg-surface p-8 text-center shadow-[var(--shadow-soft)] sm:p-12">
+    <GlassCard className="p-8 text-center sm:p-12">
       <SectionLabel className="inline-block">Get started</SectionLabel>
       <h3 className="mt-4 text-2xl font-semibold tracking-tight text-foreground">
         Start your first business
@@ -263,7 +321,7 @@ function EmptyState() {
       <Link href="/intake" className={`${primaryCta} mt-6`}>
         Start with an idea <span aria-hidden>&#8594;</span>
       </Link>
-    </div>
+    </GlassCard>
   );
 }
 
@@ -295,7 +353,7 @@ export default async function DashboardPage() {
   if (businessesResult.error || !businessesResult.data) {
     return (
       <DashboardShell>
-        <OperatorPanel className="p-6 sm:p-10">
+        <GlassCard as="section" className="p-6 sm:p-10">
           <StatusPill label="Load failed" variant="danger" />
           <h1 className="mt-5 text-3xl font-semibold tracking-tight text-foreground">
             Mission Control could not load businesses.
@@ -303,7 +361,7 @@ export default async function DashboardPage() {
           <p className="mt-4 text-sm leading-7 text-error">
             {businessesResult.error ?? "No business data was returned."}
           </p>
-        </OperatorPanel>
+        </GlassCard>
       </DashboardShell>
     );
   }
@@ -348,10 +406,15 @@ export default async function DashboardPage() {
       activity: businessLogs.slice(0, 5).map(toActivityItem),
     };
   });
+  const activeDeploys = businessCards.filter((business) => business.vercelProject).length;
+  const blockerCount = humanActions.filter((action) => {
+    const value = `${action.status} ${action.reason}`.toLowerCase();
+    return value.includes("block") || value.includes("human-only");
+  }).length;
 
   return (
     <DashboardShell>
-      <div className="space-y-6">
+      <div className="space-y-7">
         <header className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-2xl">
             <div className="flex flex-wrap items-center gap-2.5">
@@ -376,15 +439,12 @@ export default async function DashboardPage() {
           </div>
         </header>
 
-        <div className="grid grid-cols-3 gap-3">
-          <Metric label="Businesses" value={businesses.length} tone="accent" />
-          <Metric
-            label="Approvals"
-            value={humanActions.length}
-            tone={humanActions.length > 0 ? "warning" : "neutral"}
-          />
-          <Metric label="Recent logs" value={activityItems.length} />
-        </div>
+        <DashboardKpis
+          projects={businesses.length}
+          approvals={humanActions.length}
+          activeDeploys={activeDeploys}
+          blockers={blockerCount}
+        />
 
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
           <section className="min-w-0">
@@ -399,7 +459,7 @@ export default async function DashboardPage() {
               ) : null}
             </div>
             {businessCards.length > 0 ? (
-              <div className="grid gap-4">
+              <div className="grid gap-4 xl:grid-cols-2">
                 {businessCards.map((business) => (
                   <BusinessCard key={business.id} business={business} />
                 ))}

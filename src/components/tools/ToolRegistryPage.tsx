@@ -6,7 +6,7 @@ import { BusinessPermissionSelector } from "@/components/tools/BusinessPermissio
 import { PermissionControlRoom } from "@/components/tools/PermissionControlRoom";
 import { ToolCard } from "@/components/tools/ToolCard";
 import { ToolStatusBadge } from "@/components/tools/ToolStatusBadge";
-import { DataTile } from "@/components/ui/DataTile";
+import { MetricStat } from "@/components/ui/MetricStat";
 import { OperatorPanel } from "@/components/ui/OperatorPanel";
 import { SectionLabel } from "@/components/ui/SectionLabel";
 import { autonomyConstitution } from "@/lib/autonomy-constitution";
@@ -123,14 +123,7 @@ export function ToolRegistryPage({
     <>
       <Navbar />
       <main className="relative min-h-screen overflow-hidden bg-background px-5 pb-20 pt-28 sm:px-6">
-        <div
-          className="pointer-events-none absolute inset-0"
-          style={{
-            backgroundImage:
-              "linear-gradient(rgba(79,70,229,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(79,70,229,0.025) 1px, transparent 1px)",
-            backgroundSize: "64px 64px",
-          }}
-        />
+        <div aria-hidden className="grid-backdrop pointer-events-none absolute inset-0" />
         <div className="relative mx-auto max-w-7xl space-y-10">
           <OperatorPanel className="overflow-hidden p-6 shadow-[0_30px_140px_rgba(0,0,0,0.38)] sm:p-10">
             <div className="max-w-4xl">
@@ -153,25 +146,25 @@ export function ToolRegistryPage({
               </p>
             </div>
 
-            <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <DataTile
+            <div className="mt-10 grid gap-x-8 gap-y-6 sm:grid-cols-2 xl:grid-cols-4">
+              <MetricStat
                 label="Preferred tools"
                 value={`${preferredTools.length}`}
                 detail="The default stack bucks.ai reaches for first when it can execute inside guardrails."
                 tone="accent"
               />
-              <DataTile
+              <MetricStat
                 label="Extended tools"
                 value={`${extendedTools.length}`}
                 detail="Approved or review-required alternatives for more specialized go-to-market or ops needs."
               />
-              <DataTile
+              <MetricStat
                 label="High-risk tools"
                 value={`${highRiskTools}`}
                 detail="Tools that touch spend, identity, customer data, or live acquisition channels."
                 tone="warning"
               />
-              <DataTile
+              <MetricStat
                 label="Human-only / blocked"
                 value={`${blockedOrHumanOnly}`}
                 detail="Destinations that remain off-limits or founder-controlled until future approval flows exist."

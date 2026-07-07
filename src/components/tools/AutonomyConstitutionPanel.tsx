@@ -1,6 +1,6 @@
 import type { AutonomyConstitution, AutonomyRuleCategory } from "@/types/tools";
 import { ToolStatusBadge } from "@/components/tools/ToolStatusBadge";
-import { DataTile } from "@/components/ui/DataTile";
+import { MetricStat } from "@/components/ui/MetricStat";
 import { OperatorPanel } from "@/components/ui/OperatorPanel";
 import { SectionLabel } from "@/components/ui/SectionLabel";
 
@@ -35,6 +35,10 @@ function getCategoryLabel(category: AutonomyRuleCategory) {
   }
 }
 
+/**
+ * The constitution reads like an operating document: numbered articles,
+ * ledger rows, and unmistakable hard-stop / escalate treatments.
+ */
 export function AutonomyConstitutionPanel({
   constitution,
 }: {
@@ -46,7 +50,7 @@ export function AutonomyConstitutionPanel({
   }));
 
   return (
-    <OperatorPanel className="p-6 shadow-[0_30px_120px_rgba(0,0,0,0.35)] sm:p-8">
+    <OperatorPanel className="p-6 sm:p-8">
       <div className="flex flex-col gap-4 border-b border-border pb-6">
         <SectionLabel>Default constitution</SectionLabel>
         <div>
@@ -61,51 +65,63 @@ export function AutonomyConstitutionPanel({
         </div>
       </div>
 
-      <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <DataTile
+      {/* headline caps */}
+      <div className="mt-8 grid gap-x-8 gap-y-6 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricStat
           label="Spend per action"
           value={formatUsd(constitution.maxSpendPerActionUsd)}
           tone="warning"
         />
-        <DataTile
+        <MetricStat
           label="Daily spend cap"
           value={formatUsd(constitution.maxDailySpendUsd)}
         />
-        <DataTile
+        <MetricStat
           label="Monthly spend cap"
           value={formatUsd(constitution.maxMonthlySpendUsd)}
           tone="warning"
         />
-        <DataTile
+        <MetricStat
           label="Sales discount limit"
           value={`${constitution.maxDiscountPercent}%`}
         />
       </div>
 
-      <div className="mt-8 grid gap-6 xl:grid-cols-2">
-        {groupedRules.map(({ category, rules }) => (
-          <div
-            key={category}
-            className="rounded-lg border border-border bg-background p-5 sm:p-6"
-          >
-            <div className="flex items-center justify-between gap-3">
-              <h3 className="text-lg font-semibold text-foreground">
-                {getCategoryLabel(category)}
-              </h3>
-              <ToolStatusBadge label={`${rules.length} rules`} variant="neutral" />
+      {/* articles */}
+      <div className="mt-10 space-y-8">
+        {groupedRules.map(({ category, rules }, articleIndex) => (
+          <section key={category}>
+            <div className="flex items-baseline justify-between gap-3 border-b border-border-subtle pb-3">
+              <div className="flex items-baseline gap-3">
+                <span className="font-mono text-xs font-semibold uppercase tracking-[0.24em] text-accent-bright">
+                  §{String(articleIndex + 1).padStart(2, "0")}
+                </span>
+                <h3 className="text-lg font-semibold text-foreground">
+                  {getCategoryLabel(category)}
+                </h3>
+              </div>
+              <span className="font-mono text-xs text-muted">
+                {rules.length} rules
+              </span>
             </div>
-            <div className="mt-5 space-y-3">
-              {rules.map((rule) => (
-                <div
-                  key={rule.id}
-                  className="rounded-md border border-border bg-surface p-4"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
+
+            <div className="mt-1 divide-y divide-border-subtle">
+              {rules.map((rule) => {
+                const edge = rule.hardStop
+                  ? "border-l-2 border-l-risk-critical/70"
+                  : rule.escalationRequired
+                    ? "border-l-2 border-l-risk-medium/70"
+                    : "border-l-2 border-l-transparent";
+                return (
+                  <div
+                    key={rule.id}
+                    className={`flex flex-wrap items-start justify-between gap-3 py-4 pl-4 ${edge}`}
+                  >
+                    <div className="min-w-0 max-w-xl">
                       <p className="text-sm font-semibold text-foreground">
                         {rule.title}
                       </p>
-                      <p className="mt-2 text-sm leading-6 text-secondary">
+                      <p className="mt-1.5 text-sm leading-6 text-secondary">
                         {rule.description}
                       </p>
                     </div>
@@ -115,17 +131,14 @@ export function AutonomyConstitutionPanel({
                         <ToolStatusBadge label="Hard stop" variant="danger" />
                       ) : null}
                       {rule.escalationRequired ? (
-                        <ToolStatusBadge
-                          label="Escalate"
-                          variant="warning"
-                        />
+                        <ToolStatusBadge label="Escalate" variant="warning" />
                       ) : null}
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
-          </div>
+          </section>
         ))}
       </div>
     </OperatorPanel>

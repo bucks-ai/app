@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Autonomous runner Python venv (contains JS bundles that are not app code)
     "runner/langgraph/.venv/**",
+    // Installed AI skills (bundled scripts are not app code)
+    ".claude/**",
   ]),
 ]);
 

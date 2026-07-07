@@ -1,5 +1,6 @@
 import type { RiskLevel, SetupStatus, ToolRegistryItem, ToolStatus } from "@/types/tools";
 import { OperatorPanel } from "@/components/ui/OperatorPanel";
+import { RiskBadge, type RiskTone } from "@/components/ui/RiskBadge";
 import { SectionLabel } from "@/components/ui/SectionLabel";
 import { ToolStatusBadge } from "@/components/tools/ToolStatusBadge";
 
@@ -18,16 +19,16 @@ function getStatusVariant(status: ToolStatus) {
   }
 }
 
-function getRiskVariant(riskLevel: RiskLevel) {
+function getRiskTone(riskLevel: RiskLevel): RiskTone {
   switch (riskLevel) {
     case "Low":
-      return "low" as const;
+      return "low";
     case "Medium":
-      return "medium" as const;
+      return "medium";
     case "High":
-      return "high" as const;
+      return "high";
     case "Critical":
-      return "critical" as const;
+      return "critical";
   }
 }
 
@@ -48,6 +49,10 @@ function getSetupVariant(setupStatus: SetupStatus) {
   }
 }
 
+/**
+ * Fixed card anatomy, top to bottom: category + connection state,
+ * mono tool name, risk row, purpose, permissions ledger, human gates.
+ */
 export function ToolCard({ tool }: { tool: ToolRegistryItem }) {
   const requirementBadges = [
     tool.requiresTermsAcceptance ? "Terms" : null,
@@ -56,11 +61,14 @@ export function ToolCard({ tool }: { tool: ToolRegistryItem }) {
   ].filter(Boolean) as string[];
 
   return (
-    <OperatorPanel className="flex h-full flex-col p-5 shadow-[0_24px_80px_rgba(0,0,0,0.3)] sm:p-6">
+    <OperatorPanel className="flex h-full flex-col p-5 sm:p-6">
+      {/* header: identity + connection state */}
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <SectionLabel tone="muted">{tool.category}</SectionLabel>
-          <h3 className="mt-2 text-xl font-semibold text-foreground">{tool.name}</h3>
+          <h3 className="mt-2 font-mono text-lg font-semibold tracking-tight text-foreground">
+            {tool.name}
+          </h3>
         </div>
         <ToolStatusBadge
           label={tool.status}
@@ -68,20 +76,9 @@ export function ToolCard({ tool }: { tool: ToolRegistryItem }) {
         />
       </div>
 
-      <p className="mt-4 text-sm leading-6 text-secondary">{tool.purpose}</p>
-      <p className="mt-3 text-sm leading-6 text-secondary">{tool.typicalUse}</p>
-
-      {tool.requiresPaymentSetup || tool.category === "Payments" ? (
-        <div className="mt-4 rounded-md border border-warning/25 bg-warning/10 px-3 py-2 text-sm leading-6 text-warning">
-          Payment setup and terms remain founder-controlled.
-        </div>
-      ) : null}
-
-      <div className="mt-5 flex flex-wrap gap-2">
-        <ToolStatusBadge
-          label={`${tool.riskLevel} risk`}
-          variant={getRiskVariant(tool.riskLevel)}
-        />
+      {/* risk + setup row */}
+      <div className="mt-4 flex flex-wrap gap-2">
+        <RiskBadge level={getRiskTone(tool.riskLevel)} />
         <ToolStatusBadge
           label={tool.setupStatus}
           variant={getSetupVariant(tool.setupStatus)}
@@ -92,15 +89,29 @@ export function ToolCard({ tool }: { tool: ToolRegistryItem }) {
         />
       </div>
 
-      <div className="mt-6 grid gap-4 border-t border-border pt-5">
+      <p className="mt-4 text-sm leading-6 text-secondary">{tool.purpose}</p>
+      <p className="mt-2 text-sm leading-6 text-secondary">{tool.typicalUse}</p>
+
+      {tool.requiresPaymentSetup || tool.category === "Payments" ? (
+        <div className="mt-4 rounded-md border border-warning/25 bg-warning/10 px-3 py-2 text-sm leading-6 text-warning">
+          Payment setup and terms remain founder-controlled.
+        </div>
+      ) : null}
+
+      {/* permissions ledger — pinned to the bottom so card anatomy aligns */}
+      <div aria-hidden className="min-h-5 flex-1" />
+      <div className="grid gap-4 border-t border-border pt-5">
         <div>
           <SectionLabel tone="muted">Default permissions</SectionLabel>
-          <ul className="mt-3 space-y-2">
+          <ul className="mt-3 divide-y divide-border-subtle rounded-md border border-border-subtle bg-background">
             {tool.defaultPermissions.map((permission) => (
               <li
                 key={permission}
-                className="rounded-md border border-border bg-background px-3 py-2 text-sm text-secondary"
+                className="flex items-baseline gap-2.5 px-3 py-2 font-mono text-xs leading-5 text-secondary"
               >
+                <span aria-hidden className="text-accent">
+                  ▸
+                </span>
                 {permission}
               </li>
             ))}
@@ -131,7 +142,7 @@ export function ToolCard({ tool }: { tool: ToolRegistryItem }) {
               {tool.humanOnlyReasons.map((reason) => (
                 <li
                   key={reason}
-                  className="rounded-md border border-warning/25 bg-warning/10 px-3 py-2 text-sm leading-6 text-warning"
+                  className="rounded-md border-l-2 border-warning/60 bg-warning/10 px-3 py-2 text-sm leading-6 text-warning"
                 >
                   {reason}
                 </li>

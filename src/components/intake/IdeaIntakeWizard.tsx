@@ -119,66 +119,120 @@ function validateStep(stepIndex: number, idea: StartupIdea): FieldErrors {
   return errors;
 }
 
+function StepNode({ state }: { state: "done" | "current" | "upcoming" }) {
+  if (state === "done") {
+    return (
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-status-done/40 bg-surface">
+        <svg
+          aria-hidden
+          viewBox="0 0 12 12"
+          className="h-3 w-3"
+          fill="none"
+          stroke="var(--status-done)"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M2 6.5 4.8 9 10 3.5" />
+        </svg>
+      </span>
+    );
+  }
+  if (state === "current") {
+    return (
+      <span className="pulse-ring flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-accent bg-accent-soft">
+        <span className="h-2 w-2 rounded-full bg-accent" />
+      </span>
+    );
+  }
+  return (
+    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-surface">
+      <span className="h-2 w-2 rounded-full bg-border-strong" />
+    </span>
+  );
+}
+
 function ProgressRail({
   currentStep,
 }: {
   currentStep: number;
 }) {
+  const progress = ((currentStep + 1) / steps.length) * 100;
+
   return (
-    <OperatorPanel className="p-4 shadow-[0_24px_80px_rgba(0,0,0,0.32)] sm:p-5">
+    <OperatorPanel className="p-4 sm:p-5">
       <div className="mb-4 flex items-center justify-between">
         <div>
           <SectionLabel>Launch Path</SectionLabel>
-          <h2 className="mt-2 text-lg font-semibold text-[#F0F0F0]">
+          <h2 className="mt-2 text-lg font-semibold text-foreground">
             Founder intake
           </h2>
         </div>
         <StatusPill label={`${currentStep + 1} / ${steps.length}`} />
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+      {/* progress rail — same motif as the home pipeline */}
+      <div
+        className="h-1 overflow-hidden rounded-full bg-border-subtle"
+        role="progressbar"
+        aria-valuenow={currentStep + 1}
+        aria-valuemin={1}
+        aria-valuemax={steps.length}
+        aria-label={`Step ${currentStep + 1} of ${steps.length}`}
+      >
+        <div
+          className="rail-fill h-full rounded-full bg-accent"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+
+      <ol className="mt-5 grid gap-0 sm:grid-cols-2 xl:grid-cols-1">
         {steps.map((step, index) => {
           const state =
             index < currentStep
-              ? "done"
+              ? ("done" as const)
               : index === currentStep
-                ? "current"
-                : "upcoming";
+                ? ("current" as const)
+                : ("upcoming" as const);
 
           return (
-            <div
-              key={step.title}
-              className={`rounded-lg border px-4 py-4 transition-colors ${
-                state === "current"
-                  ? "border-[#4F46E5]/60 bg-[#4F46E5]/10"
-                  : state === "done"
-                    ? "border-[#22C55E]/25 bg-[#22C55E]/10"
-                    : "border-[#1C1C1C] bg-[#080808]"
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <div
-                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md border font-mono text-xs font-semibold ${
-                    state === "current"
-                      ? "border-[#4F46E5] bg-[#4F46E5] text-[#F0F0F0]"
-                      : state === "done"
-                        ? "border-[#22C55E]/35 bg-[#22C55E]/10 text-[#86EFAC]"
-                        : "border-[#1C1C1C] bg-[#141414] text-[#888888]"
-                  }`}
-                >
-                  {state === "done" ? "OK" : `0${index + 1}`}
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-[#F0F0F0]">{step.title}</p>
-                  <p className="mt-1 text-xs leading-5 text-[#888888]">
-                    {step.description}
+            <li key={step.title} className="flex gap-3.5">
+              <div className="flex flex-col items-center">
+                <StepNode state={state} />
+                {index < steps.length - 1 ? (
+                  <span
+                    aria-hidden
+                    className={`my-1 hidden w-px flex-1 xl:block ${
+                      state === "done"
+                        ? "rail-line-done"
+                        : state === "current"
+                          ? "flow-line-y"
+                          : "rail-line-idle"
+                    }`}
+                  />
+                ) : null}
+              </div>
+              <div
+                className={`min-w-0 pb-6 transition-opacity duration-300 ${
+                  state === "upcoming" ? "opacity-55" : ""
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
+                    0{index + 1}
+                  </span>
+                  <p className="text-sm font-medium text-foreground">
+                    {step.title}
                   </p>
                 </div>
+                <p className="mt-1 text-xs leading-5 text-secondary">
+                  {step.description}
+                </p>
               </div>
-            </div>
+            </li>
           );
         })}
-      </div>
+      </ol>
     </OperatorPanel>
   );
 }
@@ -210,19 +264,21 @@ function FieldWrapper({
   return (
     <label className="block">
       <div className="mb-2 flex items-center gap-2">
-        <span className="text-sm font-medium text-[#F0F0F0]">{label}</span>
+        <span className="text-sm font-medium text-foreground">{label}</span>
         {required ? (
-          <span className="rounded-md border border-[#4F46E5]/35 bg-[#4F46E5]/10 px-2 py-0.5 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-[#A5B4FC]">
+          <span className="rounded-md border border-accent/35 bg-accent/10 px-2 py-0.5 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-accent-bright">
             Required
           </span>
         ) : null}
       </div>
       {children}
       {helper ? (
-        <p className="mt-2 text-xs leading-5 text-[#666666]">{helper}</p>
+        <p className="mt-2 text-xs leading-5 text-muted">{helper}</p>
       ) : null}
       {error ? (
-        <p className="mt-2 text-xs font-medium text-[#FCA5A5]">{error}</p>
+        <p role="alert" className="mt-2 text-xs font-medium text-error">
+          {error}
+        </p>
       ) : null}
     </label>
   );
@@ -241,10 +297,11 @@ function TextInput(props: BaseFieldProps) {
         value={props.value}
         onChange={(event) => props.onChange(props.name, event.target.value)}
         placeholder={props.placeholder}
-        className={`w-full rounded-md border bg-[#080808] px-4 py-3 text-sm text-[#F0F0F0] outline-none transition-colors placeholder:text-[#444444] ${
+        aria-invalid={props.error ? true : undefined}
+        className={`w-full rounded-md border bg-background px-4 py-3 text-sm text-foreground outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-muted ${
           props.error
-            ? "border-[#EF4444]/60"
-            : "border-[#1C1C1C] focus:border-[#4F46E5]"
+            ? "border-error/60"
+            : "border-border hover:border-border-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--accent-soft)]"
         }`}
       />
     </FieldWrapper>
@@ -264,10 +321,11 @@ function TextArea(props: BaseFieldProps) {
         onChange={(event) => props.onChange(props.name, event.target.value)}
         placeholder={props.placeholder}
         rows={5}
-        className={`w-full rounded-md border bg-[#080808] px-4 py-3 text-sm text-[#F0F0F0] outline-none transition-colors placeholder:text-[#444444] ${
+        aria-invalid={props.error ? true : undefined}
+        className={`w-full rounded-md border bg-background px-4 py-3 text-sm text-foreground outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-muted ${
           props.error
-            ? "border-[#EF4444]/60"
-            : "border-[#1C1C1C] focus:border-[#4F46E5]"
+            ? "border-error/60"
+            : "border-border hover:border-border-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--accent-soft)]"
         }`}
       />
     </FieldWrapper>
@@ -288,14 +346,15 @@ function SelectField({
       <select
         value={props.value}
         onChange={(event) => props.onChange(props.name, event.target.value)}
-        className={`w-full rounded-md border bg-[#080808] px-4 py-3 text-sm text-[#F0F0F0] outline-none transition-colors ${
+        aria-invalid={props.error ? true : undefined}
+        className={`w-full cursor-pointer rounded-md border bg-background px-4 py-3 text-sm text-foreground outline-none transition-[border-color,box-shadow] duration-200 ${
           props.error
-            ? "border-[#EF4444]/60"
-            : "border-[#1C1C1C] focus:border-[#4F46E5]"
+            ? "border-error/60"
+            : "border-border hover:border-border-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--accent-soft)]"
         }`}
       >
         {options.map((option) => (
-          <option key={option} value={option} className="bg-[#080808]">
+          <option key={option} value={option} className="bg-background">
             {option}
           </option>
         ))}
@@ -501,14 +560,14 @@ export function IdeaIntakeWizard() {
       </div>
 
       <div className="space-y-6">
-        <OperatorPanel className="overflow-hidden p-6 shadow-[0_30px_120px_rgba(0,0,0,0.45)] sm:p-8">
+        <OperatorPanel className="overflow-hidden p-6 sm:p-8">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-2xl">
               <SectionLabel>Bucks.ai intake</SectionLabel>
-              <h1 className="mt-4 text-3xl font-semibold tracking-tight text-[#F0F0F0] sm:text-5xl">
+              <h1 className="mt-4 text-3xl font-semibold tracking-tight text-foreground sm:text-5xl">
                 Turn an idea into a launch blueprint.
               </h1>
-              <p className="mt-4 text-sm leading-7 text-[#888888] sm:text-base">
+              <p className="mt-4 text-sm leading-7 text-secondary sm:text-base">
                 bucks.ai will generate an execution-ready startup plan: stack,
                 GTM, analytics, permissions, and next autonomous actions.
               </p>
@@ -522,7 +581,7 @@ export function IdeaIntakeWizard() {
               ].map((item) => (
                 <div
                   key={item}
-                  className="rounded-lg border border-[#1C1C1C] bg-[#080808] px-4 py-4 font-mono text-xs uppercase tracking-[0.16em] text-[#888888]"
+                  className="rounded-lg border border-border bg-background px-4 py-4 font-mono text-xs uppercase tracking-[0.16em] text-secondary"
                 >
                   {item}
                 </div>
@@ -532,26 +591,26 @@ export function IdeaIntakeWizard() {
         </OperatorPanel>
 
         {generateState.status === "missing_key" ? (
-          <div className="rounded-lg border border-[#F59E0B]/35 bg-[#F59E0B]/10 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.3)]">
+          <div className="rounded-lg border border-warning/35 bg-warning/10 p-6">
             <div className="mb-3 flex items-center gap-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-md border border-[#F59E0B]/35 bg-[#080808] font-mono text-xs text-[#FCD34D]">
+              <div className="flex h-8 w-8 items-center justify-center rounded-md border border-warning/35 bg-background font-mono text-xs text-warning">
                 !
               </div>
-              <h3 className="text-sm font-semibold text-[#FCD34D]">
+              <h3 className="text-sm font-semibold text-warning">
                 OPENAI_API_KEY not configured
               </h3>
             </div>
-            <p className="mb-4 text-sm leading-6 text-[#FDE68A]/80">
+            <p className="mb-4 text-sm leading-6 text-secondary">
               To enable real AI blueprint generation, add your OpenAI API key to{" "}
-              <code className="rounded bg-[#080808] px-1.5 py-0.5 font-mono text-[#FCD34D]">
+              <code className="rounded bg-background px-1.5 py-0.5 font-mono text-warning">
                 .env.local
               </code>
               :
             </p>
-            <pre className="mb-4 overflow-x-auto rounded-md border border-[#1C1C1C] bg-[#080808] px-4 py-3 font-mono text-sm text-[#A5B4FC]">
+            <pre className="mb-4 overflow-x-auto rounded-md border border-border bg-background px-4 py-3 font-mono text-sm text-accent-bright">
               {`OPENAI_API_KEY=sk-...`}
             </pre>
-            <p className="mb-5 text-sm leading-6 text-[#888888]">
+            <p className="mb-5 text-sm leading-6 text-secondary">
               Restart the dev server after adding the key. In the meantime you
               can explore the demo blueprint below.
             </p>
@@ -559,14 +618,14 @@ export function IdeaIntakeWizard() {
               <button
                 type="button"
                 onClick={handleUseDemoBlueprint}
-                className="rounded-md border border-[#F59E0B]/35 bg-[#F59E0B]/10 px-5 py-2.5 text-sm font-medium text-[#FCD34D] transition-colors hover:bg-[#F59E0B]/15"
+                className="cursor-pointer rounded-md border border-warning/35 bg-warning/10 px-5 py-2.5 text-sm font-medium text-warning transition-colors duration-200 hover:bg-warning/15"
               >
                 Use demo blueprint
               </button>
               <button
                 type="button"
                 onClick={() => setGenerateState({ status: "idle" })}
-                className="rounded-md border border-[#1C1C1C] bg-[#0F0F0F] px-5 py-2.5 text-sm font-medium text-[#888888] transition-colors hover:text-[#F0F0F0]"
+                className="cursor-pointer rounded-md border border-border bg-surface px-5 py-2.5 text-sm font-medium text-secondary transition-colors duration-200 hover:text-foreground"
               >
                 Dismiss
               </button>
@@ -575,30 +634,30 @@ export function IdeaIntakeWizard() {
         ) : null}
 
         {generateState.status === "error" ? (
-          <div className="rounded-lg border border-[#EF4444]/35 bg-[#EF4444]/10 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.3)]">
+          <div role="alert" className="rounded-lg border border-error/35 bg-error/10 p-6">
             <div className="mb-3 flex items-center gap-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-md border border-[#EF4444]/35 bg-[#080808] font-mono text-xs text-[#FCA5A5]">
+              <div className="flex h-8 w-8 items-center justify-center rounded-md border border-error/35 bg-background font-mono text-xs text-error">
                 X
               </div>
-              <h3 className="text-sm font-semibold text-[#FCA5A5]">
+              <h3 className="text-sm font-semibold text-error">
                 Blueprint generation failed
               </h3>
             </div>
-            <p className="mb-5 text-sm leading-6 text-[#FECACA]/80">
+            <p className="mb-5 text-sm leading-6 text-secondary">
               {generateState.message}
             </p>
             <div className="flex flex-col gap-3 sm:flex-row">
               <button
                 type="button"
                 onClick={() => void handleGenerateBlueprint()}
-                className="rounded-md bg-[#4F46E5] px-5 py-2.5 text-sm font-semibold text-[#F0F0F0] transition-colors hover:bg-[#6366F1]"
+                className="cursor-pointer rounded-md bg-accent px-5 py-2.5 text-sm font-semibold text-accent-contrast transition-colors duration-200 hover:bg-accent-hover"
               >
                 Try again
               </button>
               <button
                 type="button"
                 onClick={handleUseDemoBlueprint}
-                className="rounded-md border border-[#F59E0B]/35 bg-[#F59E0B]/10 px-5 py-2.5 text-sm font-medium text-[#FCD34D] transition-colors hover:bg-[#F59E0B]/15"
+                className="cursor-pointer rounded-md border border-warning/35 bg-warning/10 px-5 py-2.5 text-sm font-medium text-warning transition-colors duration-200 hover:bg-warning/15"
               >
                 Use demo blueprint
               </button>
@@ -778,12 +837,12 @@ export function IdeaIntakeWizard() {
             </div>
           ) : null}
 
-          <div className="mt-10 flex flex-col gap-3 border-t border-[#1C1C1C] pt-6 sm:flex-row sm:items-center sm:justify-between">
+          <div className="mt-10 flex flex-col gap-3 border-t border-border pt-6 sm:flex-row sm:items-center sm:justify-between">
             <button
               type="button"
               onClick={handleBack}
               disabled={currentStep === 0 || isLoading}
-              className="rounded-md border border-[#1C1C1C] bg-[#141414] px-5 py-3 text-sm font-medium text-[#F0F0F0] transition-colors hover:border-[#2A2A2A] hover:bg-[#191919] disabled:cursor-not-allowed disabled:opacity-40"
+              className="cursor-pointer rounded-md border border-border bg-surface px-5 py-3 text-sm font-medium text-foreground transition-colors duration-200 hover:border-border-strong hover:bg-elevated disabled:cursor-not-allowed disabled:opacity-40"
             >
               Back
             </button>
@@ -793,31 +852,44 @@ export function IdeaIntakeWizard() {
                 type="button"
                 onClick={handleContinue}
                 disabled={isLoading}
-                className="rounded-md bg-[#4F46E5] px-6 py-3 text-sm font-semibold text-[#F0F0F0] transition-colors hover:bg-[#6366F1] disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-md bg-accent px-6 py-3 text-sm font-semibold text-accent-contrast transition-colors duration-200 hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Continue
+                <span aria-hidden className="opacity-80">
+                  &#8594;
+                </span>
               </button>
             ) : (
               <button
                 type="button"
                 onClick={() => void handleGenerateBlueprint()}
                 disabled={isLoading}
-                className="rounded-md bg-[#4F46E5] px-6 py-3 text-sm font-semibold text-[#F0F0F0] transition-colors hover:bg-[#6366F1] disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-md bg-accent px-6 py-3 text-sm font-semibold text-accent-contrast transition-colors duration-200 hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {isLoading ? "Building your blueprint…" : "Generate Blueprint"}
+                {isLoading ? (
+                  <>
+                    <span
+                      aria-hidden
+                      className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-accent-contrast/60 border-t-transparent"
+                    />
+                    Building your blueprint…
+                  </>
+                ) : (
+                  "Generate Blueprint"
+                )}
               </button>
             )}
           </div>
 
           {isLoading ? (
-            <div className="mt-4 rounded-lg border border-[#4F46E5]/35 bg-[#4F46E5]/10 p-4">
+            <div className="mt-4 rounded-lg border border-accent/35 bg-accent/10 p-4">
               <div className="flex items-center gap-3">
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#A5B4FC] border-t-transparent" />
-                <p className="text-sm font-medium text-[#A5B4FC]">
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-accent-bright border-t-transparent" />
+                <p className="text-sm font-medium text-accent-bright">
                   bucks.ai is building your launch blueprint...
                 </p>
               </div>
-              <div className="mt-4 grid gap-2 font-mono text-xs text-[#888888] sm:grid-cols-2">
+              <div className="mt-4 grid gap-2 font-mono text-xs text-secondary sm:grid-cols-2">
                 {[
                   "Classifying business model",
                   "Selecting startup stack",
@@ -827,8 +899,9 @@ export function IdeaIntakeWizard() {
                 ].map((item) => (
                   <div
                     key={item}
-                    className="rounded-md border border-[#1C1C1C] bg-[#080808] px-3 py-2"
+                    className="flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2"
                   >
+                    <span aria-hidden className="pulse-dot h-1 w-1 rounded-full bg-accent" />
                     {item}
                   </div>
                 ))}
