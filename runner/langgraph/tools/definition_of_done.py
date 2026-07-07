@@ -1,21 +1,28 @@
 """Definition of Done enforcement gate.
 
 Validates that a completed worker run demonstrates the task is truly done.
-Checks four conditions against the parsed worker summary and raw worker output:
+Checks five conditions against the parsed worker summary and raw worker output:
 
 1. files_touched      — at least one file was created or modified
 2. check_not_failed   — worker did not explicitly report check.sh as failed
 3. output_present     — worker produced meaningful output (above a minimum length)
 4. success_evidence   — when the task defines acceptance_criteria.success_evidence,
                         the worker output references it (keyword match)
+5. file_claims_exist  — every file the worker claims to have created or modified
+                        actually exists in the working tree or the diff; a
+                        mismatch is flagged as issue type ``dod_file_claim_mismatch``
 
 Gate behaviour (controlled from config.py):
 - DEFINITION_OF_DONE_GATE_ENABLED=true (default): validates every completed run
 - DEFINITION_OF_DONE_STRICT_MODE=false (default): DoD failure is logged as a
   warning and the loop continues; set to true to mark the task failed and halt.
 """
+import os
 import re
+from tools.independent_code_review import _extract_changed_files
 from tools.log_tools import log_event
+
+DOD_FILE_CLAIM_MISMATCH = "dod_file_claim_mismatch"
 
 _MIN_OUTPUT_LENGTH = 50  # credible worker output is not a few words
 
@@ -32,6 +39,45 @@ def _check_files_touched(summary: dict) -> tuple[bool, str]:
     if created or modified:
         return True, ""
     return False, "no files created or modified reported in worker output"
+
+
+def _check_file_claims_exist(summary: dict, repo_path: str, diff_text: str) -> tuple[bool, str]:
+    """Fail when a claimed file is neither on disk nor present in the diff.
+
+    A worker can claim to have created or modified a file it never actually
+    touched (M0.9 finding). This cross-references every claimed path against
+    the working tree first, then the diff, so a file that was created and
+    later removed (but still shows up in the diff) is not flagged.
+
+    Skipped entirely when no ``repo_path`` is supplied — callers that don't
+    wire in a repo (e.g. existing unit tests) get the same behaviour as before.
+    """
+    if not repo_path:
+        return True, ""
+
+    claimed = _meaningful_items(
+        (summary.get("files_created") or []) + (summary.get("files_modified") or [])
+    )
+    if not claimed:
+        return True, ""
+
+    diff_files = set(_extract_changed_files(diff_text or ""))
+
+    missing = []
+    for raw_path in claimed:
+        rel_path = raw_path.lstrip("./")
+        if rel_path in diff_files:
+            continue
+        if os.path.exists(os.path.join(repo_path, rel_path)):
+            continue
+        missing.append(raw_path)
+
+    if missing:
+        return False, (
+            f"{DOD_FILE_CLAIM_MISMATCH}: claimed file(s) not found in working "
+            f"tree or diff: {', '.join(missing)}"
+        )
+    return True, ""
 
 
 def _check_not_failed(summary: dict) -> tuple[bool, str]:
@@ -80,6 +126,8 @@ def validate_definition_of_done(
     summary: dict,
     task: dict,
     raw_output: str = "",
+    repo_path: str = "",
+    diff_text: str = "",
 ) -> tuple[bool, list[str]]:
     """Check whether a worker run meets the task's definition of done.
 
@@ -90,6 +138,7 @@ def validate_definition_of_done(
         _check_not_failed(summary),
         _check_output_present(raw_output),
         _check_success_evidence(raw_output, task),
+        _check_file_claims_exist(summary, repo_path, diff_text),
     ]
     issues = [msg for ok, msg in checks if not ok]
     return len(issues) == 0, issues
@@ -102,6 +151,8 @@ def guard_definition_of_done(
     context: str = "",
     *,
     strict_mode: bool = False,
+    repo_path: str = "",
+    diff_text: str = "",
 ) -> dict:
     """Run the DoD gate and log the result.
 
@@ -114,7 +165,7 @@ def guard_definition_of_done(
     ``task_definition_of_done_rejected`` (strict mode) /
     ``task_definition_of_done_warned`` (non-strict) on failure.
     """
-    ok, issues = validate_definition_of_done(summary, task, raw_output)
+    ok, issues = validate_definition_of_done(summary, task, raw_output, repo_path, diff_text)
     task_id = task.get("id")
 
     if ok:
