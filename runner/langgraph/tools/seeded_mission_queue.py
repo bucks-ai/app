@@ -167,6 +167,8 @@ def seed_tasks_from_mission(mission: dict, mission_tasks: list[dict]) -> list[di
         }
         if row.get("preferred_worker"):
             task["preferred_worker"] = row["preferred_worker"]
+        if row.get("description"):
+            task["description"] = row["description"]
 
         tasks.append(task)
 

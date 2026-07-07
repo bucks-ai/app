@@ -156,6 +156,20 @@ def test_seed_tasks_empty_list():
     assert tasks == []
 
 
+def test_seed_tasks_description_included():
+    tasks_with_description = [dict(_TASKS[0], description="Do the thing carefully.")]
+    tasks = seed_tasks_from_mission(_MISSION, tasks_with_description)
+    assert tasks[0]["description"] == "Do the thing carefully."
+
+
+def test_seed_tasks_no_description_excluded():
+    tasks = seed_tasks_from_mission(_MISSION, _TASKS)
+    # _TASKS rows carry no "description" key → the field must not be set,
+    # matching the existing preferred_worker convention.
+    assert "description" not in tasks[0]
+    assert "description" not in tasks[1]
+
+
 # ---------------------------------------------------------------------------
 # check_mission_completion (Supabase stubbed)
 # ---------------------------------------------------------------------------
@@ -552,6 +566,8 @@ if __name__ == "__main__":
         test_seed_tasks_uses_db_task_id,
         test_seed_tasks_generates_task_id_when_empty,
         test_seed_tasks_empty_list,
+        test_seed_tasks_description_included,
+        test_seed_tasks_no_description_excluded,
         test_check_completion_all_complete,
         test_check_completion_one_failed,
         test_check_completion_still_running,

@@ -123,7 +123,7 @@ _TASK_PROMPT_TEMPLATE = """You are working inside the bucks.ai repo at {repo_pat
 Task: {title}
 Type: {type}
 Branch: {branch}
-
+{description_section}
 Complete this task fully. When done, output a structured summary including:
 - Files Created: (bullet list)
 - Files Modified: (bullet list)
@@ -546,11 +546,14 @@ def resolve_model_node(state: RunnerState) -> RunnerState:
 def generate_worker_prompt(state: RunnerState) -> RunnerState:
     state = _compress_context_if_needed(state, reason="before_worker_prompt")
     task = state.current_task or {}
+    description = (task.get("description") or "").strip()
+    description_section = f"\nDescription:\n{description}\n" if description else ""
     prompt = _TASK_PROMPT_TEMPLATE.format(
         repo_path=cfg.repo_path,
         title=task.get("title", ""),
         type=task.get("type", "general"),
         branch=task.get("branch", f"feature/{task.get('id', 'task')}"),
+        description_section=description_section,
     )
 
     if cfg.fast_engineering_mode_enabled:
