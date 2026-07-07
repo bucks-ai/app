@@ -3,7 +3,7 @@ import OpenAI from "openai";
 import type { StartupIdea } from "@/types/startup";
 import { buildBlueprintPrompt } from "@/lib/blueprint-prompt";
 import { requireUser } from "@/lib/api-auth";
-import { apiError, badRequest, zodIssuesToFields } from "@/lib/api-error";
+import { aiOutputInvalid, apiError, badRequest, zodIssuesToFields } from "@/lib/api-error";
 import { generateBlueprintBodySchema } from "@/lib/schemas/generate-blueprint";
 import { businessBlueprintOutputSchema } from "@/lib/schemas/blueprint-output";
 import { limit, tooManyRequests, RATE_LIMITS } from "@/lib/rate-limit";
@@ -16,13 +16,10 @@ export async function POST(request: NextRequest) {
   if (!rateLimitResult.allowed) return tooManyRequests();
 
   if (!process.env.OPENAI_API_KEY) {
-    return Response.json(
-      {
-        error: "missing_api_key",
-        message:
-          "OPENAI_API_KEY is not set. Add it to .env.local to enable real blueprint generation.",
-      },
-      { status: 503 },
+    return apiError(
+      "OPENAI_API_KEY is not set. Add it to .env.local to enable real blueprint generation.",
+      "missing_api_key",
+      503,
     );
   }
 
@@ -61,22 +58,17 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unknown OpenAI API error.";
-    return Response.json(
-      { error: "model_error", message: `Blueprint generation failed: ${message}` },
-      { status: 500 },
-    );
+    return apiError(`Blueprint generation failed: ${message}`, "model_error", 500);
   }
 
   let rawBlueprint: unknown;
   try {
     rawBlueprint = JSON.parse(rawContent);
   } catch {
-    return Response.json(
-      {
-        error: "parse_error",
-        message: "The AI returned a response that could not be parsed as JSON.",
-      },
-      { status: 500 },
+    return apiError(
+      "The AI returned a response that could not be parsed as JSON.",
+      "parse_error",
+      500,
     );
   }
 
@@ -87,11 +79,7 @@ export async function POST(request: NextRequest) {
       rawContent,
       parsedBlueprint.error.issues,
     );
-    return apiError(
-      "The AI returned a blueprint that failed validation.",
-      "AI_OUTPUT_INVALID",
-      502,
-    );
+    return aiOutputInvalid("The AI returned a blueprint that failed validation.");
   }
 
   return Response.json({ blueprint: parsedBlueprint.data }, { status: 200 });

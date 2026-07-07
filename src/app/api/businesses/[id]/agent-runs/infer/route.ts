@@ -17,20 +17,16 @@ import { hasSupabaseEnv } from "@/lib/supabase/env";
 import { getBusinessById } from "@/lib/projects";
 import { requireUser } from "@/lib/api-auth";
 import { inferAgentRunsFromActivityLogs } from "@/lib/agents/runs";
-import { badRequest, zodIssuesToFields } from "@/lib/api-error";
+import { apiError, badRequest, notFound, zodIssuesToFields } from "@/lib/api-error";
 import { agentRunsInferParamsSchema } from "@/lib/schemas/infra";
 import { limit, tooManyRequests, RATE_LIMITS } from "@/lib/rate-limit";
-
-function errorResponse(error: string, code: string, status: number) {
-  return Response.json({ ok: false, error, code }, { status });
-}
 
 export async function POST(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   if (!hasSupabaseEnv()) {
-    return errorResponse("Supabase is not configured.", "missing_supabase_env", 503);
+    return apiError("Supabase is not configured.", "missing_supabase_env", 503);
   }
 
   const rawParams = await params;
@@ -53,11 +49,11 @@ export async function POST(
 
   const businessResult = await getBusinessById(id);
   if (businessResult.error || !businessResult.data) {
-    return errorResponse("Business not found.", "business_not_found", 404);
+    return notFound("Business not found.", "business_not_found");
   }
 
   if (businessResult.data.user_id !== user.id) {
-    return errorResponse("Access denied.", "forbidden", 403);
+    return apiError("Access denied.", "forbidden", 403);
   }
 
   const result = await inferAgentRunsFromActivityLogs(id);
@@ -65,7 +61,7 @@ export async function POST(
   if (result.error || !result.data) {
     const code = result.code ?? "agent_runs_infer_failed";
     const httpStatus = code === "agent_runs_schema_missing" ? 503 : 500;
-    return errorResponse(
+    return apiError(
       result.error ?? "Inference failed.",
       code,
       httpStatus

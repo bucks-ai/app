@@ -10,27 +10,9 @@ import {
   ScaffoldPreparationError,
 } from "@/lib/github/next-scaffold";
 import { sanitizeVercelProjectName, createVercelProjectWithSetup } from "@/lib/vercel/client";
-import { badRequest, zodIssuesToFields } from "@/lib/api-error";
+import { apiError, badRequest, notFound, zodIssuesToFields } from "@/lib/api-error";
 import { createVercelProjectBodySchema } from "@/lib/schemas/infra";
 import { limit, tooManyRequests, RATE_LIMITS } from "@/lib/rate-limit";
-
-type ErrorDetail = {
-  failedFile?: string;
-  githubStatusCode?: number;
-  githubMessage?: string;
-};
-
-function errorResponse(
-  error: string,
-  code: string,
-  status: number,
-  detail?: ErrorDetail
-) {
-  return Response.json(
-    { ok: false, error, code, ...(detail ? { detail } : {}) },
-    { status }
-  );
-}
 
 function scaffoldErrorResponse(error: unknown) {
   const detail =
@@ -44,11 +26,11 @@ function scaffoldErrorResponse(error: unknown) {
         }
       : undefined;
 
-  return errorResponse(
+  return apiError(
     "Starter scaffold could not be written to GitHub.",
     "scaffold_failed",
     500,
-    detail
+    detail ? { detail } : undefined,
   );
 }
 
@@ -58,7 +40,7 @@ function scaffoldErrorResponse(error: unknown) {
 
 export async function POST(request: NextRequest) {
   if (!hasSupabaseEnv()) {
-    return errorResponse(
+    return apiError(
       "Supabase is not configured.",
       "missing_supabase_env",
       503
@@ -66,7 +48,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (!hasVercelEnv()) {
-    return errorResponse(
+    return apiError(
       "Vercel token is not configured. Add VERCEL_TOKEN to .env.local.",
       "vercel_env_missing",
       503
@@ -107,17 +89,17 @@ export async function POST(request: NextRequest) {
   // Business ownership
   const businessResult = await getBusinessById(businessId);
   if (businessResult.error || !businessResult.data) {
-    return errorResponse("Business not found.", "business_not_found", 404);
+    return notFound("Business not found.", "business_not_found");
   }
   const business = businessResult.data;
   if (business.user_id !== user.id) {
-    return errorResponse("Access denied.", "forbidden", 403);
+    return apiError("Access denied.", "forbidden", 403);
   }
 
   // Vercel permission gate
   const permissionsResult = await getToolPermissionsForBusiness(businessId);
   if (permissionsResult.error || !permissionsResult.data) {
-    return errorResponse(
+    return apiError(
       "Could not read tool permissions.",
       "vercel_not_approved",
       403
@@ -129,7 +111,7 @@ export async function POST(request: NextRequest) {
   );
   const approvedStatuses = new Set(["approved", "connected_demo"]);
   if (!vercelPermission || !approvedStatuses.has(vercelPermission.status)) {
-    return errorResponse(
+    return apiError(
       `Vercel permission must be approved or connected_demo before creating a project.`,
       "vercel_not_approved",
       403
@@ -139,10 +121,9 @@ export async function POST(request: NextRequest) {
   // Require existing GitHub repo
   const repoResult = await getLatestGitHubRepoForBusiness(businessId);
   if (repoResult.error || !repoResult.data) {
-    return errorResponse(
+    return badRequest(
       "No GitHub repository found for this business. Create a repo first.",
       "github_repo_missing",
-      400
     );
   }
   const repo = repoResult.data;
@@ -168,10 +149,9 @@ export async function POST(request: NextRequest) {
 
   const projectName = sanitizeVercelProjectName(rawName);
   if (!projectName) {
-    return errorResponse(
+    return badRequest(
       "Could not derive a valid Vercel project name from the business name.",
       "invalid_input",
-      400
     );
   }
 
@@ -185,7 +165,7 @@ export async function POST(request: NextRequest) {
       createDeployment,
     });
   } catch (e) {
-    return errorResponse(
+    return apiError(
       e instanceof Error ? e.message : "Vercel project creation failed.",
       "vercel_create_failed",
       500

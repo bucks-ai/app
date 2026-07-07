@@ -7,13 +7,9 @@ import {
   seedToolPermissionsForBusiness,
   createToolPermissionActivityLog,
 } from "@/lib/tool-permissions";
-import { badRequest, zodIssuesToFields } from "@/lib/api-error";
+import { apiError, badRequest, notFound, zodIssuesToFields } from "@/lib/api-error";
 import { seedToolPermissionsBodySchema } from "@/lib/schemas/infra";
 import { limit, tooManyRequests, RATE_LIMITS } from "@/lib/rate-limit";
-
-function errorResponse(error: string, code: string, status: number) {
-  return Response.json({ ok: false, error, code }, { status });
-}
 
 // ---------------------------------------------------------------------------
 // GET /api/tool-permissions?businessId=...
@@ -23,7 +19,7 @@ function errorResponse(error: string, code: string, status: number) {
 
 export async function GET(request: NextRequest) {
   if (!hasSupabaseEnv()) {
-    return errorResponse(
+    return apiError(
       "Supabase is not configured.",
       "missing_supabase_env",
       503
@@ -34,7 +30,7 @@ export async function GET(request: NextRequest) {
   const businessId = searchParams.get("businessId");
 
   if (!businessId) {
-    return errorResponse("businessId query parameter is required.", "invalid_input", 400);
+    return badRequest("businessId query parameter is required.", "invalid_input");
   }
 
   const { user, response } = await requireUser();
@@ -43,15 +39,15 @@ export async function GET(request: NextRequest) {
   // Verify ownership
   const businessResult = await getBusinessById(businessId);
   if (businessResult.error || !businessResult.data) {
-    return errorResponse("Business not found.", "not_found", 404);
+    return notFound("Business not found.", "not_found");
   }
   if (businessResult.data.user_id !== user.id) {
-    return errorResponse("Access denied.", "forbidden", 403);
+    return apiError("Access denied.", "forbidden", 403);
   }
 
   const result = await getToolPermissionsForBusiness(businessId);
   if (result.error) {
-    return errorResponse(result.error, "not_found", 500);
+    return apiError(result.error, "not_found", 500);
   }
 
   const permissions = result.data ?? [];
@@ -72,7 +68,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   if (!hasSupabaseEnv()) {
-    return errorResponse(
+    return apiError(
       "Supabase is not configured.",
       "missing_supabase_env",
       503
@@ -106,15 +102,15 @@ export async function POST(request: NextRequest) {
   // Verify ownership
   const businessResult = await getBusinessById(businessId);
   if (businessResult.error || !businessResult.data) {
-    return errorResponse("Business not found.", "not_found", 404);
+    return notFound("Business not found.", "not_found");
   }
   if (businessResult.data.user_id !== user.id) {
-    return errorResponse("Access denied.", "forbidden", 403);
+    return apiError("Access denied.", "forbidden", 403);
   }
 
   const seedResult = await seedToolPermissionsForBusiness(businessId, user.id);
   if (seedResult.error || !seedResult.data) {
-    return errorResponse(
+    return apiError(
       seedResult.error ?? "Seed failed.",
       "seed_failed",
       500

@@ -6,13 +6,9 @@ import {
   updateToolPermissionStatus,
   createToolPermissionActivityLog,
 } from "@/lib/tool-permissions";
-import { badRequest, zodIssuesToFields } from "@/lib/api-error";
+import { apiError, badRequest, notFound, zodIssuesToFields } from "@/lib/api-error";
 import { updateToolPermissionBodySchema } from "@/lib/schemas/infra";
 import { limit, tooManyRequests, RATE_LIMITS } from "@/lib/rate-limit";
-
-function errorResponse(error: string, code: string, status: number) {
-  return Response.json({ ok: false, error, code }, { status });
-}
 
 // ---------------------------------------------------------------------------
 // PATCH /api/tool-permissions/[id]
@@ -24,7 +20,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   if (!hasSupabaseEnv()) {
-    return errorResponse(
+    return apiError(
       "Supabase is not configured.",
       "missing_supabase_env",
       503
@@ -33,7 +29,7 @@ export async function PATCH(
 
   const { id } = await params;
   if (!id) {
-    return errorResponse("Permission id is required.", "invalid_input", 400);
+    return badRequest("Permission id is required.", "invalid_input");
   }
 
   const { user, response } = await requireUser();
@@ -63,12 +59,12 @@ export async function PATCH(
   // Fetch the record so we know the business_id for the activity log
   const fetchResult = await getToolPermissionById(id);
   if (fetchResult.error || !fetchResult.data) {
-    return errorResponse("Tool permission not found.", "not_found", 404);
+    return notFound("Tool permission not found.", "not_found");
   }
 
   const existing = fetchResult.data;
   if (existing.user_id !== user.id) {
-    return errorResponse("Access denied.", "forbidden", 403);
+    return apiError("Access denied.", "forbidden", 403);
   }
 
   const updateResult = await updateToolPermissionStatus({
@@ -78,7 +74,7 @@ export async function PATCH(
   });
 
   if (updateResult.error || !updateResult.data) {
-    return errorResponse(
+    return apiError(
       updateResult.error ?? "Update failed.",
       "update_failed",
       500

@@ -11,17 +11,13 @@ import {
 } from "@/lib/tool-permissions";
 import { hasSupabaseEnv } from "@/lib/supabase/env";
 import { requireUser } from "@/lib/api-auth";
-import { badRequest, zodIssuesToFields } from "@/lib/api-error";
+import { apiError, badRequest, zodIssuesToFields } from "@/lib/api-error";
 import { saveBlueprintBodySchema } from "@/lib/schemas/save-blueprint";
 import { limit, tooManyRequests, RATE_LIMITS } from "@/lib/rate-limit";
 
-function errorResponse(error: string, code: string, status: number) {
-  return Response.json({ ok: false, error, code }, { status });
-}
-
 export async function POST(request: NextRequest) {
   if (!hasSupabaseEnv()) {
-    return errorResponse(
+    return apiError(
       "Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local.",
       "supabase_not_configured",
       503
@@ -73,7 +69,7 @@ export async function POST(request: NextRequest) {
   });
 
   if (businessResult.error || !businessResult.data) {
-    return errorResponse(
+    return apiError(
       businessResult.error ?? "Failed to create business.",
       "business_create_failed",
       500
@@ -88,7 +84,7 @@ export async function POST(request: NextRequest) {
   });
 
   if (blueprintResult.error || !blueprintResult.data) {
-    return errorResponse(
+    return apiError(
       blueprintResult.error ?? "Failed to save blueprint.",
       "blueprint_save_failed",
       500
@@ -102,7 +98,7 @@ export async function POST(request: NextRequest) {
   );
 
   if (actionsResult.error || !actionsResult.data) {
-    return errorResponse(
+    return apiError(
       actionsResult.error ?? "Failed to create human-required actions.",
       "human_actions_create_failed",
       500
@@ -121,7 +117,7 @@ export async function POST(request: NextRequest) {
   });
 
   if (activityResult.error || !activityResult.data) {
-    return errorResponse(
+    return apiError(
       activityResult.error ?? "Failed to create activity log.",
       "activity_log_create_failed",
       500

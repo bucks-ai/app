@@ -8,13 +8,9 @@ import {
   createGitHubRepository,
   createStarterRepositoryFiles,
 } from "@/lib/github/client";
-import { badRequest, zodIssuesToFields } from "@/lib/api-error";
+import { apiError, badRequest, notFound, zodIssuesToFields } from "@/lib/api-error";
 import { createGitHubRepoBodySchema } from "@/lib/schemas/infra";
 import { limit, tooManyRequests, RATE_LIMITS } from "@/lib/rate-limit";
-
-function errorResponse(error: string, code: string, status: number) {
-  return Response.json({ ok: false, error, code }, { status });
-}
 
 // Converts an arbitrary string into a valid GitHub repo name:
 // lowercase, alphanumeric + hyphens only, max 100 chars, no leading/trailing hyphens.
@@ -33,7 +29,7 @@ function sanitizeRepoName(raw: string): string {
 
 export async function POST(request: NextRequest) {
   if (!hasSupabaseEnv()) {
-    return errorResponse(
+    return apiError(
       "Supabase is not configured.",
       "missing_supabase_env",
       503
@@ -41,7 +37,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (!hasGitHubEnv()) {
-    return errorResponse(
+    return apiError(
       "GitHub token is not configured. Add GITHUB_PERSONAL_ACCESS_TOKEN to .env.local.",
       "missing_github_env",
       503
@@ -82,17 +78,17 @@ export async function POST(request: NextRequest) {
   // Business ownership
   const businessResult = await getBusinessById(businessId);
   if (businessResult.error || !businessResult.data) {
-    return errorResponse("Business not found.", "business_not_found", 404);
+    return notFound("Business not found.", "business_not_found");
   }
   const business = businessResult.data;
   if (business.user_id !== user.id) {
-    return errorResponse("Access denied.", "forbidden", 403);
+    return apiError("Access denied.", "forbidden", 403);
   }
 
   // GitHub permission gate
   const permissionsResult = await getToolPermissionsForBusiness(businessId);
   if (permissionsResult.error || !permissionsResult.data) {
-    return errorResponse(
+    return apiError(
       "Could not read tool permissions.",
       "github_permission_missing",
       403
@@ -104,7 +100,7 @@ export async function POST(request: NextRequest) {
   );
 
   if (!githubPermission) {
-    return errorResponse(
+    return apiError(
       "GitHub tool permission has not been set up for this business. Seed tool permissions first.",
       "github_permission_missing",
       403
@@ -113,7 +109,7 @@ export async function POST(request: NextRequest) {
 
   const approvedStatuses = new Set(["approved", "connected_demo"]);
   if (!approvedStatuses.has(githubPermission.status)) {
-    return errorResponse(
+    return apiError(
       `GitHub permission status is "${githubPermission.status}". It must be approved or connected_demo before creating a repository.`,
       "github_not_approved",
       403
@@ -125,11 +121,7 @@ export async function POST(request: NextRequest) {
 
   const repoName = sanitizeRepoName(rawName);
   if (!repoName) {
-    return errorResponse(
-      "Could not derive a valid repo name from the business name.",
-      "invalid_input",
-      400
-    );
+    return badRequest("Could not derive a valid repo name from the business name.", "invalid_input");
   }
 
   // Determine owner
@@ -146,7 +138,7 @@ export async function POST(request: NextRequest) {
       owner,
     });
   } catch (e) {
-    return errorResponse(
+    return apiError(
       e instanceof Error ? e.message : "GitHub repo creation failed.",
       "github_create_failed",
       500

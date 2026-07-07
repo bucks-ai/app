@@ -15,17 +15,14 @@ import { hasSupabaseEnv } from "@/lib/supabase/env";
 import { getBusinessById } from "@/lib/projects";
 import { requireUser } from "@/lib/api-auth";
 import { getAgentRegistryForBusiness } from "@/lib/agents/status";
-
-function errorResponse(error: string, code: string, status: number) {
-  return Response.json({ ok: false, error, code }, { status });
-}
+import { apiError, badRequest, notFound } from "@/lib/api-error";
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   if (!hasSupabaseEnv()) {
-    return errorResponse(
+    return apiError(
       "Supabase is not configured.",
       "missing_supabase_env",
       503
@@ -34,7 +31,7 @@ export async function GET(
 
   const { id } = await params;
   if (!id) {
-    return errorResponse("Business id is required.", "invalid_input", 400);
+    return badRequest("Business id is required.", "invalid_input");
   }
 
   const { user, response } = await requireUser();
@@ -42,16 +39,16 @@ export async function GET(
 
   const businessResult = await getBusinessById(id);
   if (businessResult.error || !businessResult.data) {
-    return errorResponse("Business not found.", "business_not_found", 404);
+    return notFound("Business not found.", "business_not_found");
   }
 
   if (businessResult.data.user_id !== user.id) {
-    return errorResponse("Access denied.", "forbidden", 403);
+    return apiError("Access denied.", "forbidden", 403);
   }
 
   const registryResult = await getAgentRegistryForBusiness(id);
   if (registryResult.error || !registryResult.data) {
-    return errorResponse(
+    return apiError(
       registryResult.error ?? "Could not build agent registry.",
       registryResult.code ?? "agent_registry_unavailable",
       500
