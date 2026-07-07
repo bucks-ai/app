@@ -128,3 +128,71 @@ jobs:
           name: test-results
           path: test-results/
           retention-days: 14
+
+  e2e-preview:
+    name: E2E (Playwright, Vercel preview) [informational]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.event_name == 'pull_request'
+    # Informational only — a failure here must never block the PR. The
+    # local-build `e2e` job above remains the blocking gate.
+    continue-on-error: true
+    # Requires the same five E2E_* Supabase secrets as the `e2e` job above,
+    # plus two more to resolve the PR's preview deployment via the Vercel
+    # API. The founder must add these under
+    # Settings > Secrets and variables > Actions before this job can run:
+    #   VERCEL_TOKEN      -> Vercel API token with access to the project
+    #   VERCEL_PROJECT_ID -> Vercel project id for this app
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.E2E_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.E2E_SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.E2E_SUPABASE_SERVICE_ROLE_KEY }}
+      TEST_USER_EMAIL: ${{ secrets.E2E_TEST_USER_EMAIL }}
+      TEST_USER_PASSWORD: ${{ secrets.E2E_TEST_USER_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install (locked)
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install chromium --with-deps
+
+      - name: Resolve Vercel preview URL
+        id: preview
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
+        run: ./scripts/wait-for-vercel-preview.sh
+
+      - name: Seed E2E test user + demo business
+        if: steps.preview.outputs.found == 'true'
+        run: npm run seed:e2e
+
+      - name: Run E2E tests against preview
+        if: steps.preview.outputs.found == 'true'
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ steps.preview.outputs.url }}
+        run: npm run test:e2e
+
+      - name: Upload Playwright report
+        if: failure() && steps.preview.outputs.found == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-preview
+          path: playwright-report/
+          retention-days: 14
+
+      - name: Upload test results
+        if: failure() && steps.preview.outputs.found == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-preview
+          path: test-results/
+          retention-days: 14
