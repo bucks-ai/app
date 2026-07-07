@@ -8,7 +8,10 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: isCI,
   retries: isCI ? 2 : 0,
-  reporter: [["html"], ["line"]],
+  // On CI, the "github" reporter turns failures into inline annotations on
+  // the PR diff/checks tab so an auth-flow break is visible without opening
+  // the HTML report artifact.
+  reporter: isCI ? [["html"], ["line"], ["github"]] : [["html"], ["line"]],
   use: {
     baseURL,
     trace: "on-first-retry",

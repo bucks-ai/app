@@ -16,6 +16,9 @@ on:
       - ".github/workflows/app.yml"
   pull_request:
     branches: [main]
+  # Lets us re-run the same checks on demand (e.g. to verify e2e reliability
+  # across repeated runs) without needing a new push or PR event.
+  workflow_dispatch: {}
 
 jobs:
   check:
@@ -110,7 +113,10 @@ jobs:
           cat next-start.log || true
           exit 1
 
-      - name: Run E2E tests
+      - name: Run E2E tests (auth flows — fail-fast gate)
+        run: npx playwright test e2e/auth.spec.ts
+
+      - name: Run E2E tests (full suite)
         run: npm run test:e2e
 
       - name: Upload Playwright report
