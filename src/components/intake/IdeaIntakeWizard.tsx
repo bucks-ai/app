@@ -238,6 +238,7 @@ function TextInput(props: BaseFieldProps) {
     >
       <input
         type="text"
+        name={props.name}
         value={props.value}
         onChange={(event) => props.onChange(props.name, event.target.value)}
         placeholder={props.placeholder}
@@ -260,6 +261,7 @@ function TextArea(props: BaseFieldProps) {
       error={props.error}
     >
       <textarea
+        name={props.name}
         value={props.value}
         onChange={(event) => props.onChange(props.name, event.target.value)}
         placeholder={props.placeholder}
@@ -286,6 +288,7 @@ function SelectField({
       error={props.error}
     >
       <select
+        name={props.name}
         value={props.value}
         onChange={(event) => props.onChange(props.name, event.target.value)}
         className={`w-full rounded-md border bg-[#080808] px-4 py-3 text-sm text-[#F0F0F0] outline-none transition-colors ${
