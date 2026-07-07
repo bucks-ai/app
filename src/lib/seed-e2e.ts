@@ -87,7 +87,10 @@ export const DEMO_BLUEPRINT: BusinessBlueprintOutput = businessBlueprintOutputSc
   killCriteria: ["Fewer than 5 survey responses after 2 weeks"],
 });
 
-async function findUserIdByEmail(admin: SupabaseClient, email: string): Promise<string | null> {
+// Exported for reuse by e2e/auth.spec.ts, which needs to confirm a
+// freshly-signed-up user via the admin API on projects where email
+// confirmation is required.
+export async function findUserIdByEmail(admin: SupabaseClient, email: string): Promise<string | null> {
   const perPage = 200;
   for (let page = 1; ; page++) {
     const { data, error } = await admin.auth.admin.listUsers({ page, perPage });
