@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { resetDemoBusiness, seedE2E, upsertTestUser } from "@/lib/seed-e2e";
+import {
+  DEMO_PENDING_TOOL_PERMISSIONS,
+  resetDemoBusiness,
+  seedE2E,
+  upsertTestUser,
+} from "@/lib/seed-e2e";
 
 function makeAdminMock() {
   const businessesDelete = vi.fn().mockReturnValue({ eq: vi.fn().mockResolvedValue({ error: null }) });
@@ -7,6 +12,7 @@ function makeAdminMock() {
   const businessesInsertSelect = vi.fn().mockReturnValue({ single: businessesInsertSingle });
   const businessesInsert = vi.fn().mockReturnValue({ select: businessesInsertSelect });
   const blueprintsInsert = vi.fn().mockResolvedValue({ error: null });
+  const toolPermissionsInsert = vi.fn().mockResolvedValue({ error: null });
 
   const from = vi.fn((table: string) => {
     if (table === "businesses") {
@@ -14,6 +20,9 @@ function makeAdminMock() {
     }
     if (table === "business_blueprints") {
       return { insert: blueprintsInsert };
+    }
+    if (table === "tool_permissions") {
+      return { insert: toolPermissionsInsert };
     }
     throw new Error(`Unexpected table: ${table}`);
   });
@@ -25,7 +34,16 @@ function makeAdminMock() {
   return {
     from,
     auth: { admin: { listUsers, createUser, updateUserById } },
-    _spies: { from, businessesDelete, businessesInsert, blueprintsInsert, listUsers, createUser, updateUserById },
+    _spies: {
+      from,
+      businessesDelete,
+      businessesInsert,
+      blueprintsInsert,
+      toolPermissionsInsert,
+      listUsers,
+      createUser,
+      updateUserById,
+    },
   };
 }
 
@@ -87,6 +105,16 @@ describe("resetDemoBusiness", () => {
     expect(admin._spies.blueprintsInsert).toHaveBeenCalledWith(
       expect.objectContaining({ business_id: "business-1", user_id: "user-1" })
     );
+    expect(admin._spies.toolPermissionsInsert).toHaveBeenCalledWith(
+      DEMO_PENDING_TOOL_PERMISSIONS.map((permission) => ({
+        ...permission,
+        user_id: "user-1",
+        business_id: "business-1",
+      }))
+    );
+    expect(
+      DEMO_PENDING_TOOL_PERMISSIONS.every((permission) => permission.status === "approval_requested")
+    ).toBe(true);
   });
 
   it("throws when the delete step fails, without inserting a new business", async () => {
