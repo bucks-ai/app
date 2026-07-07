@@ -8,7 +8,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BusinessBlueprintOutput } from "@/lib/schemas/blueprint-output";
 import { businessBlueprintOutputSchema } from "@/lib/schemas/blueprint-output";
-import type { NewBusinessInput } from "@/types/database";
+import { toolRegistry } from "@/lib/tool-registry";
+import type { NewBusinessInput, NewToolPermissionInput } from "@/types/database";
 
 export interface SeedE2EConfig {
   email: string;
@@ -87,6 +88,33 @@ export const DEMO_BLUEPRINT: BusinessBlueprintOutput = businessBlueprintOutputSc
   killCriteria: ["Fewer than 5 survey responses after 2 weeks"],
 });
 
+// Two deterministic pending (`approval_requested`) tool_permissions rows for
+// the demo business, so e2e/tools.spec.ts always has a known pending queue to
+// approve/reject without depending on the live "seed setup queue" API call.
+// Neither tool requires payment or identity setup, so they render with plain
+// approve/reject controls rather than the founder-controlled human gate.
+function pendingPermissionForTool(
+  toolId: string
+): Omit<NewToolPermissionInput, "user_id" | "business_id"> {
+  const tool = toolRegistry.find((item) => item.id === toolId);
+  if (!tool) {
+    throw new Error(`Unknown tool id in DEMO_PENDING_TOOL_PERMISSIONS: ${toolId}`);
+  }
+
+  return {
+    tool_id: tool.id,
+    tool_name: tool.name,
+    status: "approval_requested",
+    setup_status: "awaiting_founder_approval",
+    risk_level: tool.riskLevel.toLowerCase(),
+    permissions: tool.defaultPermissions,
+  };
+}
+
+export const DEMO_PENDING_TOOL_PERMISSIONS = ["github", "sentry"].map(
+  pendingPermissionForTool
+);
+
 // Exported for reuse by e2e/auth.spec.ts, which needs to confirm a
 // freshly-signed-up user via the admin API on projects where email
 // confirmation is required.
@@ -156,6 +184,20 @@ export async function resetDemoBusiness(admin: SupabaseClient, userId: string): 
   });
   if (blueprintError) {
     throw new Error(`Failed to insert demo blueprint: ${blueprintError.message}`);
+  }
+
+  const pendingToolPermissions: NewToolPermissionInput[] = DEMO_PENDING_TOOL_PERMISSIONS.map(
+    (permission) => ({
+      ...permission,
+      user_id: userId,
+      business_id: business.id,
+    })
+  );
+  const { error: toolPermissionsError } = await admin
+    .from("tool_permissions")
+    .insert(pendingToolPermissions);
+  if (toolPermissionsError) {
+    throw new Error(`Failed to insert demo tool permissions: ${toolPermissionsError.message}`);
   }
 
   return business.id;
