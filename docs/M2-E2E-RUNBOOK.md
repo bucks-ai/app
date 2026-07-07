@@ -154,10 +154,35 @@ On CI, `playwright.config.ts` adds the `github` reporter alongside `html`/`line`
 so a failure also surfaces as an inline annotation on the PR's Checks/Files tab
 pointing at the failing assertion's file and line.
 
-Reliability was verified by re-running this workflow three consecutive times via
-`workflow_dispatch` (Actions tab → **Run workflow**, or `gh workflow run app.yml
---ref feature/m2/required-check`) against the same, unchanged commit — all three
-runs must be green before this is trusted as a required check.
+Reliability was checked by re-running this workflow via `workflow_dispatch`
+(Actions tab → **Run workflow**, or `gh workflow run app.yml --ref
+<branch>`) against the same, unchanged commit. Doing this surfaced two real,
+100%-reproducible (not flaky) bugs, both now fixed on this branch:
+
+- **Node 20 vs. supabase-js realtime** — `@supabase/supabase-js`'s realtime
+  client requires native `WebSocket` support at construction time even when
+  realtime isn't used, which needs Node 22+. The `e2e` job's `setup-node` step
+  now pins `node-version: 22` (the `check` job doesn't touch Supabase and stays
+  on 20).
+- **`bucks.ai` has no MX record** — Supabase's public `signUp()` validates that
+  the email domain has a real MX record, and `bucks.ai` doesn't have one, so
+  every throwaway signup in `auth.spec.ts` / `dashboard.spec.ts` was rejected
+  as "invalid". Both now use `@gmail.com` for their random throwaway addresses
+  (nothing is ever actually delivered — the local part is a random UUID).
+
+**Known fragility — Supabase's built-in mailer rate limit:** after those two
+fixes, a further re-run failed with "email rate limit exceeded". Supabase's
+built-in/free email service caps outbound auth emails at roughly 2/hour, and
+`auth.spec.ts`'s signup test sends one real confirmation email per run (times
+up to 3 with Playwright's CI retries). One `e2e` run per push/PR is normally
+well under that cap, but back-to-back manual re-runs (as required to verify
+this section) or a burst of PRs in the same hour can exhaust it and fail the
+required check for reasons that have nothing to do with the code under test.
+**Before relying on `e2e` as an always-green required check, configure a
+custom SMTP provider for the E2E Supabase project** (Dashboard → Authentication
+→ Emails → SMTP Settings) — this removes the built-in cap. Until that's done,
+a red `e2e` run should be checked against this failure text before assuming a
+real regression.
 
 ## 9. Founder step: making `e2e` a required check
 
@@ -172,6 +197,9 @@ The check name is stable and documented: **`E2E (Playwright)`** (the `e2e` job's
    to be advisory and would otherwise block merges on Vercel flakiness.
 4. Confirm the five `E2E_*` secrets from §5 are set, then open a throwaway PR to
    verify the check appears and passes before relying on it.
+5. Configure custom SMTP for the E2E Supabase project (see §8) so the built-in
+   mailer's ~2 emails/hour cap can't fail this check for reasons unrelated to
+   the code under test.
 
 This is a human-only step (GitHub repo settings access) — it's the completion
 handoff for this task.
