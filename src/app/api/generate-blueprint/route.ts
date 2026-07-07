@@ -7,6 +7,7 @@ import { aiOutputInvalid, apiError, badRequest, zodIssuesToFields } from "@/lib/
 import { generateBlueprintBodySchema } from "@/lib/schemas/generate-blueprint";
 import { businessBlueprintOutputSchema } from "@/lib/schemas/blueprint-output";
 import { limit, tooManyRequests, RATE_LIMITS } from "@/lib/rate-limit";
+import { buildFakeBlueprint, isFakeAiEnabled } from "@/lib/e2e-fake-ai";
 
 export async function POST(request: NextRequest) {
   const { user, response } = await requireUser();
@@ -15,7 +16,9 @@ export async function POST(request: NextRequest) {
   const rateLimitResult = await limit(`${user.id}:generate-blueprint`, RATE_LIMITS.blueprintGenerate);
   if (!rateLimitResult.allowed) return tooManyRequests();
 
-  if (!process.env.OPENAI_API_KEY) {
+  const fakeAi = isFakeAiEnabled();
+
+  if (!fakeAi && !process.env.OPENAI_API_KEY) {
     return apiError(
       "OPENAI_API_KEY is not set. Add it to .env.local to enable real blueprint generation.",
       "missing_api_key",
@@ -40,6 +43,20 @@ export async function POST(request: NextRequest) {
   }
 
   const idea = parsed.data;
+
+  if (fakeAi) {
+    const fixture = buildFakeBlueprint(idea);
+    const parsedFixture = businessBlueprintOutputSchema.safeParse(fixture);
+    if (!parsedFixture.success) {
+      console.error(
+        "generate-blueprint: E2E_FAKE_AI fixture failed schema validation.",
+        JSON.stringify(fixture),
+        parsedFixture.error.issues,
+      );
+      return aiOutputInvalid("The AI returned a blueprint that failed validation.");
+    }
+    return Response.json({ blueprint: parsedFixture.data }, { status: 200 });
+  }
 
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const prompt = buildBlueprintPrompt(idea as StartupIdea);
