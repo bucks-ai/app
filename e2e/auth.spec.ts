@@ -45,7 +45,10 @@ test.describe("auth", () => {
       "SUPABASE_SERVICE_ROLE_KEY not set — required to confirm the new signup on a project with email confirmation enabled."
     );
 
-    const email = `e2e-signup-${randomUUID()}@bucks.ai`;
+    // Supabase's public signUp validates that the domain has a real MX
+    // record (bucks.ai has none), so the throwaway address needs a domain
+    // that does — gmail.com — even though nothing is ever actually delivered.
+    const email = `e2e-signup-${randomUUID()}@gmail.com`;
     const password = `Signup-${randomUUID()}!`;
     let userId: string | null = null;
 
