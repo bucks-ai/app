@@ -814,6 +814,7 @@ def check_definition_of_done(state: RunnerState) -> RunnerState:
     summary = state.worker_summary or {}
     task = state.current_task or {}
     raw_output = result.get("output") or ""
+    diff_text = get_diff_text(cfg.repo_path)
 
     decision = guard_definition_of_done(
         summary=summary,
@@ -821,6 +822,8 @@ def check_definition_of_done(state: RunnerState) -> RunnerState:
         raw_output=raw_output,
         context="check_definition_of_done",
         strict_mode=cfg.definition_of_done_strict_mode,
+        repo_path=cfg.repo_path,
+        diff_text=diff_text,
     )
 
     if decision["passed"]:
