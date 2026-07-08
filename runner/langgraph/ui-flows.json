@@ -1,0 +1,62 @@
+[
+  {
+    "name": "login flow",
+    "steps": [
+      {"action": "navigate", "value": "/login"},
+      {"action": "assert_element", "selector": "input[name=\"email\"]"},
+      {"action": "assert_element", "selector": "input[name=\"password\"]"},
+      {"action": "fill", "selector": "input[name=\"email\"]", "value": "ui-flow-smoke@bucks.ai"},
+      {"action": "fill", "selector": "input[name=\"password\"]", "value": "not-a-real-password"},
+      {"action": "click", "selector": "button[type=\"submit\"]"},
+      {"action": "assert_text", "value": "Invalid login credentials"},
+      {"action": "assert_url", "value": "/login"}
+    ]
+  },
+  {
+    "name": "signup flow",
+    "steps": [
+      {"action": "navigate", "value": "/signup"},
+      {"action": "assert_element", "selector": "input[name=\"email\"]"},
+      {"action": "assert_element", "selector": "input[name=\"password\"]"},
+      {"action": "assert_element", "selector": "input[name=\"confirmPassword\"]"},
+      {"action": "fill", "selector": "input[name=\"email\"]", "value": "ui-flow-smoke@bucks.ai"},
+      {"action": "fill", "selector": "input[name=\"password\"]", "value": "Sm0keTest!"},
+      {"action": "fill", "selector": "input[name=\"confirmPassword\"]", "value": "does-not-match"},
+      {"action": "click", "selector": "button[type=\"submit\"]"},
+      {"action": "assert_text", "value": "Passwords must match."},
+      {"action": "assert_url", "value": "/signup"}
+    ]
+  },
+  {
+    "name": "intake to blueprint flow",
+    "steps": [
+      {"action": "navigate", "value": "/intake"},
+      {"action": "assert_element", "selector": "input[name=\"ideaName\"]"},
+      {"action": "assert_element", "selector": "input[name=\"oneLineIdea\"]"},
+      {"action": "click", "selector": "button:has-text(\"Continue\")"},
+      {"action": "assert_text", "value": "Idea name is required."},
+      {"action": "assert_text", "value": "A one-line idea is required."},
+      {"action": "assert_url", "value": "/intake"}
+    ]
+  },
+  {
+    "name": "dashboard render flow",
+    "steps": [
+      {"action": "navigate", "value": "/dashboard"},
+      {"action": "assert_text", "value": "Sign in to load your saved businesses."}
+    ]
+  },
+  {
+    "name": "business tabs render flow",
+    "steps": [
+      {"action": "navigate", "value": "/dashboard/businesses/ui-flow-smoke-test?tab=research"},
+      {"action": "assert_text", "value": "Sign in to view this business."},
+      {"action": "navigate", "value": "/dashboard/businesses/ui-flow-smoke-test?tab=validation"},
+      {"action": "assert_text", "value": "Sign in to view this business."},
+      {"action": "navigate", "value": "/dashboard/businesses/ui-flow-smoke-test?tab=actions"},
+      {"action": "assert_text", "value": "Sign in to view this business."},
+      {"action": "navigate", "value": "/dashboard/businesses/ui-flow-smoke-test?tab=team"},
+      {"action": "assert_text", "value": "Sign in to view this business."}
+    ]
+  }
+]
