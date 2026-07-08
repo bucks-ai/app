@@ -18,6 +18,8 @@ from tools.task_tools import (
     mark_task_complete,
     mark_task_failed,
     mark_task_blocked,
+    next_retry_eta,
+    requeue_fulfilled_blocked_tasks,
     requeue_task,
     add_task,
     update_task_branch,
@@ -252,7 +254,32 @@ def check_launch_readiness_if_needed(state: RunnerState) -> RunnerState:
 
 
 def load_next_task(state: RunnerState) -> RunnerState:
+    # Auto-requeue any blocked task whose resource fulfillment file has
+    # landed in inbox/ (written by the approvals daemon or by hand).
+    for _tid in requeue_fulfilled_blocked_tasks(_RUNNER_DIR / "inbox"):
+        log_event("resource_request_fulfilled_requeued", {
+            "task_id": _tid,
+            "message": "fulfillment file found in inbox/; task requeued",
+        }, task_id=_tid)
     task = get_next_queued_task()
+    if not task:
+        # Every queued task may simply be inside its retry-backoff window —
+        # there IS work, it's just ineligible for a few more seconds. Wait
+        # out the shortest backoff (capped at 30 min) instead of falling
+        # through to the planner and stopping the loop with chatgpt_no_task.
+        eta = next_retry_eta()
+        if eta:
+            try:
+                remaining = (datetime.fromisoformat(eta) - datetime.utcnow()).total_seconds()
+            except (ValueError, TypeError):
+                remaining = 0
+            if 0 < remaining <= 1800:
+                log_event("retry_backoff_waiting", {
+                    "resume_at": eta,
+                    "wait_seconds": round(remaining, 1),
+                })
+                time.sleep(remaining + 1)
+                task = get_next_queued_task()
     if not task and cfg.has_github and cfg.github_repo:
         sync_open_issues_to_tasks(cfg.github_repo)
         task = get_next_queued_task()
@@ -443,6 +470,11 @@ def seed_mission_queue_if_needed(state: RunnerState) -> RunnerState:
 
 def ask_chatgpt_for_task_if_needed(state: RunnerState) -> RunnerState:
     if state.current_task:
+        return state
+    # In strict seeded queue mode the planner is never consulted: all tasks come
+    # from Supabase missions and the loop stops when the queue is exhausted (see
+    # seed_mission_queue_if_needed, which already set stop_reason in this case).
+    if cfg.seeded_mission_queue_enabled and cfg.seeded_mission_queue_strict:
         return state
     summary_text = state.worker_summary_digest or build_run_summary_digest(state.worker_summary)
     log_event("next_task_requested", {"summary_preview": summary_text[:200]})
@@ -814,6 +846,7 @@ def check_definition_of_done(state: RunnerState) -> RunnerState:
     summary = state.worker_summary or {}
     task = state.current_task or {}
     raw_output = result.get("output") or ""
+    diff_text = get_diff_text(cfg.repo_path)
 
     decision = guard_definition_of_done(
         summary=summary,
@@ -821,6 +854,8 @@ def check_definition_of_done(state: RunnerState) -> RunnerState:
         raw_output=raw_output,
         context="check_definition_of_done",
         strict_mode=cfg.definition_of_done_strict_mode,
+        repo_path=cfg.repo_path,
+        diff_text=diff_text,
     )
 
     if decision["passed"]:
@@ -2321,6 +2356,11 @@ def _route_after_compile_mission(state: RunnerState) -> str:
 
 
 def _route_after_seed_mission_queue(state: RunnerState) -> str:
+    # Strict mode already set stop_reason="seeded_queue_exhausted" in
+    # seed_mission_queue_if_needed; route straight to the stop check instead of
+    # falling through to the ChatGPT planner, which strict mode must never consult.
+    if state.stop_reason == "seeded_queue_exhausted":
+        return "decide_continue_or_stop"
     if state.current_task:
         return "choose_worker"
     return "ask_chatgpt_for_task_if_needed"
@@ -2445,6 +2485,7 @@ def build_graph():
     builder.add_conditional_edges("seed_mission_queue_if_needed", _route_after_seed_mission_queue, {
         "choose_worker": "choose_worker",
         "ask_chatgpt_for_task_if_needed": "ask_chatgpt_for_task_if_needed",
+        "decide_continue_or_stop": "decide_continue_or_stop",
     })
 
     builder.add_conditional_edges("ask_chatgpt_for_task_if_needed", _route_after_chatgpt, {

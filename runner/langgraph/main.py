@@ -143,8 +143,14 @@ def cmd_run_loop(args):
 
     saved = read_state()
     init = RunnerState(**{k: v for k, v in saved.items() if k in RunnerState.model_fields})
-    if not init.started_at:
-        init.started_at = datetime.utcnow().isoformat()
+    # Every run-loop invocation is a fresh session. A stop_reason, loop_count,
+    # failure streak, or started_at left over from a previous run would
+    # otherwise stop this run on its first cycle (instant "awaiting_resources"
+    # / "max_loop_tasks" / "max_runtime" stops after a restart).
+    init.stop_reason = None
+    init.loop_count = 0
+    init.consecutive_failures = 0
+    init.started_at = datetime.utcnow().isoformat()
     init.status = "running"
 
     print("Starting autonomous loop (Ctrl+C to stop)...")

@@ -6,12 +6,13 @@ Runs standalone (no pytest dependency):
 
 Covers:
 - validate_definition_of_done: files_touched, check_not_failed,
-  output_present, success_evidence checks.
+  output_present, success_evidence, file_claims_exist checks.
 - guard_definition_of_done: strict vs non-strict mode logging.
 - Config fields: gate enabled/disabled, strict mode flag.
 """
 import os
 import sys
+import tempfile
 import traceback
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -19,7 +20,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from tools.definition_of_done import (
     validate_definition_of_done,
     guard_definition_of_done,
+    _check_file_claims_exist,
     _MIN_OUTPUT_LENGTH,
+    DOD_FILE_CLAIM_MISMATCH,
 )
 
 import tools.definition_of_done as _dod
@@ -198,6 +201,93 @@ def test_multiple_failures_reported():
 
 
 # ---------------------------------------------------------------------------
+# _check_file_claims_exist / file_claims_exist wiring
+# ---------------------------------------------------------------------------
+
+def test_file_claim_no_repo_path_skips_check():
+    ok, msg = _check_file_claims_exist(
+        _summary(files_created=["does/not/exist.py"]), "", ""
+    )
+    assert ok is True
+    assert msg == ""
+
+
+def test_file_claim_no_claimed_files_skips_check():
+    ok, msg = _check_file_claims_exist(
+        _summary(files_created=[], files_modified=[]), "/tmp", ""
+    )
+    assert ok is True
+
+
+def test_file_claim_exists_on_disk_passes():
+    with tempfile.TemporaryDirectory() as repo:
+        open(os.path.join(repo, "foo.py"), "w").close()
+        ok, msg = _check_file_claims_exist(
+            _summary(files_created=["foo.py"]), repo, ""
+        )
+        assert ok is True
+        assert msg == ""
+
+
+def test_file_claim_missing_from_disk_and_diff_fails():
+    with tempfile.TemporaryDirectory() as repo:
+        ok, msg = _check_file_claims_exist(
+            _summary(files_created=["ghost.py"]), repo, ""
+        )
+        assert ok is False
+        assert DOD_FILE_CLAIM_MISMATCH in msg
+        assert "ghost.py" in msg
+
+
+def test_file_claim_present_in_diff_but_not_disk_passes():
+    with tempfile.TemporaryDirectory() as repo:
+        diff = "+++ b/deleted_after.py\n--- a/deleted_after.py\n+line\n"
+        ok, msg = _check_file_claims_exist(
+            _summary(files_created=["deleted_after.py"]), repo, diff
+        )
+        assert ok is True
+
+
+def test_file_claim_multiple_missing_all_listed():
+    with tempfile.TemporaryDirectory() as repo:
+        ok, msg = _check_file_claims_exist(
+            _summary(files_created=["ghost1.py"], files_modified=["ghost2.py"]),
+            repo, "",
+        )
+        assert ok is False
+        assert "ghost1.py" in msg
+        assert "ghost2.py" in msg
+
+
+def test_file_claim_mixed_real_and_ghost_fails_on_ghost_only():
+    with tempfile.TemporaryDirectory() as repo:
+        open(os.path.join(repo, "real.py"), "w").close()
+        ok, msg = _check_file_claims_exist(
+            _summary(files_created=["real.py", "ghost.py"]), repo, ""
+        )
+        assert ok is False
+        assert "ghost.py" in msg
+        assert "real.py" not in msg
+
+
+def test_validate_definition_of_done_fails_on_file_claim_mismatch():
+    with tempfile.TemporaryDirectory() as repo:
+        ok, issues = validate_definition_of_done(
+            _summary(files_created=["ghost.py"]), _task(), _GOOD_OUTPUT,
+            repo_path=repo, diff_text="",
+        )
+        assert ok is False
+        assert any(DOD_FILE_CLAIM_MISMATCH in i for i in issues)
+
+
+def test_validate_definition_of_done_passes_without_repo_path():
+    ok, issues = validate_definition_of_done(
+        _summary(files_created=["ghost.py"]), _task(), _GOOD_OUTPUT
+    )
+    assert ok is True
+
+
+# ---------------------------------------------------------------------------
 # guard_definition_of_done
 # ---------------------------------------------------------------------------
 
@@ -236,6 +326,28 @@ def test_guard_context_accepted():
         _summary(), _task(), _GOOD_OUTPUT, context="post-worker-run"
     )
     assert result["passed"] is True
+
+
+def test_guard_file_claim_mismatch_is_warn_only_in_non_strict_mode():
+    with tempfile.TemporaryDirectory() as repo:
+        result = guard_definition_of_done(
+            _summary(files_created=["ghost.py"]), _task(), _GOOD_OUTPUT,
+            repo_path=repo, diff_text="", strict_mode=False,
+        )
+        assert result["passed"] is False
+        assert any(DOD_FILE_CLAIM_MISMATCH in i for i in result["issues"])
+        # non-strict: guard reports the failure but does not raise or halt
+
+
+def test_guard_file_claim_mismatch_reported_in_strict_mode_too():
+    with tempfile.TemporaryDirectory() as repo:
+        result = guard_definition_of_done(
+            _summary(files_created=["ghost.py"]), _task(), _GOOD_OUTPUT,
+            repo_path=repo, diff_text="", strict_mode=True,
+        )
+        assert result["passed"] is False
+        assert result["strict_mode"] is True
+        assert any(DOD_FILE_CLAIM_MISMATCH in i for i in result["issues"])
 
 
 # ---------------------------------------------------------------------------
@@ -322,11 +434,22 @@ if __name__ == "__main__":
         test_no_ac_field_skips_evidence_check,
         test_ac_not_dict_skips_evidence_check,
         test_multiple_failures_reported,
+        test_file_claim_no_repo_path_skips_check,
+        test_file_claim_no_claimed_files_skips_check,
+        test_file_claim_exists_on_disk_passes,
+        test_file_claim_missing_from_disk_and_diff_fails,
+        test_file_claim_present_in_diff_but_not_disk_passes,
+        test_file_claim_multiple_missing_all_listed,
+        test_file_claim_mixed_real_and_ghost_fails_on_ghost_only,
+        test_validate_definition_of_done_fails_on_file_claim_mismatch,
+        test_validate_definition_of_done_passes_without_repo_path,
         test_guard_returns_passed_true_on_success,
         test_guard_returns_passed_false_on_failure,
         test_guard_strict_mode_flag_mirrored,
         test_guard_non_strict_still_returns_issues,
         test_guard_context_accepted,
+        test_guard_file_claim_mismatch_is_warn_only_in_non_strict_mode,
+        test_guard_file_claim_mismatch_reported_in_strict_mode_too,
         test_config_has_gate_enabled_field,
         test_config_has_strict_mode_field,
         test_config_gate_enabled_by_default,

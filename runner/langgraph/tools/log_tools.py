@@ -67,6 +67,18 @@ def _maybe_notify_slack(event_type: str, payload: dict, task_id: str = None):
     notification failure can never break the flight recorder."""
     try:
         from tools.slack_tools import notify_event
+        # Never fan out to the REAL Slack channel from inside the test suite:
+        # mocked failures ("simulated db error", "connection refused", ...)
+        # logged by code under test would otherwise ping the team channel on
+        # every check.sh / pytest run. config's load_dotenv() resurrects .env
+        # values, so env-stripping in conftest.py alone is not sufficient.
+        # A test-provided stub (monkeypatched onto slack_tools) has a
+        # different __module__, so tests that assert the fan-out still work.
+        if (
+            os.environ.get("PYTEST_CURRENT_TEST")
+            and getattr(notify_event, "__module__", "") == "tools.slack_tools"
+        ):
+            return
         notify_event(event_type, payload, task_id)
     except Exception:
         pass
