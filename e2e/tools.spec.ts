@@ -32,8 +32,13 @@ async function login(page: Page) {
 // present there regardless of the permission's current status, so pairing
 // it with the heading uniquely and stably identifies the queue card.
 function permissionCard(page: Page, toolName: string) {
+  // `section:not(:has(section))` restricts the match to leaf sections: an
+  // outer wrapper <section> around the whole queue also contains the tool's
+  // heading and a "Request approval" button, so without it the filter can
+  // resolve to the wrapper and see every card's status text at once (strict
+  // mode violation when more than one seeded card is pending).
   return page
-    .locator("section")
+    .locator("section:not(:has(section))")
     .filter({ has: page.getByRole("heading", { name: toolName, exact: true }) })
     .filter({ has: page.getByRole("button", { name: "Request approval", exact: true }) });
 }

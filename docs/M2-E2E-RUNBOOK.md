@@ -79,9 +79,12 @@ Defined in `.github/workflows/app.yml`, on every PR into `main`:
 
 - **`check`** — lint, `next typegen`, `tsc --noEmit`, `npm test`, `npm run build`.
   No E2E-specific secrets needed.
-- **`e2e`** (blocking gate) — builds the app, seeds the E2E user, starts it with
-  `npm run start`, waits for `http://localhost:3000` to respond, then runs
-  `npm run test:e2e` with `E2E_FAKE_AI=true`.
+- **`e2e`** (blocking gate, check name **`E2E (Playwright)`** — see §8) — builds the
+  app, seeds the E2E user, starts it with `npm run start`, waits for
+  `http://localhost:3000` to respond, then runs `e2e/auth.spec.ts` alone as a
+  fail-fast gate before the full suite (see §8), both with `E2E_FAKE_AI=true`.
+  Also runnable on demand via `workflow_dispatch` (Actions tab → **Run workflow**)
+  to re-verify reliability without needing a new commit.
 - **`e2e-preview`** (informational, `continue-on-error: true` — see §6) — resolves
   the PR's Vercel preview URL and runs the same suite against it.
 
@@ -103,9 +106,10 @@ Actions), pointing at the **dedicated E2E Supabase project**, never production:
 | `VERCEL_TOKEN` | Vercel API token with access to the project |
 | `VERCEL_PROJECT_ID` | Vercel project id for this app |
 
-> These CI jobs currently live on `feature/m2/ci-e2e` / `feature/m2/e2e-preview` and
-> are not yet merged to `main`. Once merged, the founder must add the secrets above
-> before the `e2e` job can pass (it will fail closed, not skip, if they're missing).
+> The `e2e-preview` job currently lives on `feature/m2/e2e-preview` and is not yet
+> merged to `main`. The five `E2E_*` secrets above are already configured in the
+> repo (required for the `e2e` job in this doc's own PR to pass); `e2e-preview`
+> additionally needs the two Vercel secrets below once it merges.
 
 ## 6. The preview-URL job
 
@@ -136,17 +140,66 @@ The local-build `e2e` job (§5) remains the blocking gate.
 - The `e2e-preview` job is exempt from this policy by design (§6) — it's
   informational and expected to occasionally skip on Vercel-side timing.
 
-## 8. Founder step: making `e2e` a required check
+## 8. Fail-fast on auth breakage, and reliability
 
-Once `feature/m2/ci-e2e` (and the secrets in §5) are merged/configured, the `e2e`
-job needs to be added to branch protection so it actually blocks merges, matching
-how `Lint, typecheck, build` and `Runner tests` are already required:
+The `e2e` job runs `e2e/auth.spec.ts` as its own step ("auth flows — fail-fast
+gate") before the full suite. `auth.spec.ts` covers signup, login, bad-password,
+and logout — the flows every other spec's `login()` helper depends on. If auth is
+broken, this step fails in well under a minute and the job stops there, instead of
+grinding through the full ~20-minute suite only to have every other spec fail for
+the same underlying reason. The step name makes the root cause obvious in the
+Actions summary without opening any artifact.
+
+On CI, `playwright.config.ts` adds the `github` reporter alongside `html`/`line`,
+so a failure also surfaces as an inline annotation on the PR's Checks/Files tab
+pointing at the failing assertion's file and line.
+
+Reliability was checked by re-running this workflow via `workflow_dispatch`
+(Actions tab → **Run workflow**, or `gh workflow run app.yml --ref
+<branch>`) against the same, unchanged commit. Doing this surfaced two real,
+100%-reproducible (not flaky) bugs, both now fixed on this branch:
+
+- **Node 20 vs. supabase-js realtime** — `@supabase/supabase-js`'s realtime
+  client requires native `WebSocket` support at construction time even when
+  realtime isn't used, which needs Node 22+. The `e2e` job's `setup-node` step
+  now pins `node-version: 22` (the `check` job doesn't touch Supabase and stays
+  on 20).
+- **`bucks.ai` has no MX record** — Supabase's public `signUp()` validates that
+  the email domain has a real MX record, and `bucks.ai` doesn't have one, so
+  every throwaway signup in `auth.spec.ts` / `dashboard.spec.ts` was rejected
+  as "invalid". Both now use `@gmail.com` for their random throwaway addresses
+  (nothing is ever actually delivered — the local part is a random UUID).
+
+**Known fragility — Supabase's built-in mailer rate limit:** after those two
+fixes, a further re-run failed with "email rate limit exceeded". Supabase's
+built-in/free email service caps outbound auth emails at roughly 2/hour, and
+`auth.spec.ts`'s signup test sends one real confirmation email per run (times
+up to 3 with Playwright's CI retries). One `e2e` run per push/PR is normally
+well under that cap, but back-to-back manual re-runs (as required to verify
+this section) or a burst of PRs in the same hour can exhaust it and fail the
+required check for reasons that have nothing to do with the code under test.
+**Before relying on `e2e` as an always-green required check, configure a
+custom SMTP provider for the E2E Supabase project** (Dashboard → Authentication
+→ Emails → SMTP Settings) — this removes the built-in cap. Until that's done,
+a red `e2e` run should be checked against this failure text before assuming a
+real regression.
+
+## 9. Founder step: making `e2e` a required check
+
+The check name is stable and documented: **`E2E (Playwright)`** (the `e2e` job's
+`name:` in `.github/workflows/app.yml`).
 
 1. GitHub repo → **Settings → Branches → Branch protection rules** → edit the rule
    for `main`.
 2. Under **Require status checks to pass before merging**, add **`E2E (Playwright)`**
-   (the `e2e` job's `name:`) to the required list.
+   to the required list.
 3. Do **not** add `E2E (Playwright, Vercel preview) [informational]` — it's designed
    to be advisory and would otherwise block merges on Vercel flakiness.
 4. Confirm the five `E2E_*` secrets from §5 are set, then open a throwaway PR to
    verify the check appears and passes before relying on it.
+5. Configure custom SMTP for the E2E Supabase project (see §8) so the built-in
+   mailer's ~2 emails/hour cap can't fail this check for reasons unrelated to
+   the code under test.
+
+This is a human-only step (GitHub repo settings access) — it's the completion
+handoff for this task.

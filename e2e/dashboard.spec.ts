@@ -65,7 +65,9 @@ test.describe("dashboard", () => {
       "SUPABASE_SERVICE_ROLE_KEY not set — required to create a throwaway user for the empty-state assertion."
     );
 
-    const email = `e2e-empty-${randomUUID()}@bucks.ai`;
+    // Match auth.spec.ts: use a domain with a real MX record (bucks.ai has
+    // none) so Supabase's email validation doesn't reject the throwaway user.
+    const email = `e2e-empty-${randomUUID()}@gmail.com`;
     const password = `Empty-${randomUUID()}!`;
     let userId: string | null = null;
 

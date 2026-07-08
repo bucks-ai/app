@@ -108,6 +108,54 @@ def mark_task_failed(task_id: str, error: str):
     save_tasks(tasks)
 
 
+def requeue_fulfilled_blocked_tasks(inbox_dir) -> list[str]:
+    """Requeue blocked tasks whose resource-fulfillment file has landed.
+
+    The resource gate blocks a task and waits for
+    ``inbox/{task_id}_resources_provided.txt``. The approvals daemon (or a
+    human) creates that file, but nothing flipped the task back to ``queued``
+    — so the loop restarted into an empty queue and stalled. This scan closes
+    that gap. Only file *existence* is checked; contents are never read.
+
+    Returns the list of requeued task ids.
+    """
+    inbox_dir = Path(inbox_dir)
+    requeued = []
+    tasks = load_tasks()
+    for task in tasks:
+        if task.get("status") != "blocked":
+            continue
+        task_id = task.get("id")
+        if task_id and (inbox_dir / f"{task_id}_resources_provided.txt").exists():
+            task["status"] = "queued"
+            task["error"] = None
+            task["updated_at"] = _now()
+            requeued.append(task_id)
+    if requeued:
+        save_tasks(tasks)
+    return requeued
+
+
+def next_retry_eta() -> Optional[str]:
+    """Earliest future ``retry_not_before`` among queued tasks, or None.
+
+    When every queued task is inside its retry-backoff window,
+    ``get_next_queued_task`` returns None even though work exists — it's just
+    ineligible for a few more seconds. The loop uses this ETA to wait out the
+    shortest backoff instead of falling through to the planner and stopping
+    with ``chatgpt_no_task``.
+    """
+    now_iso = _now()
+    etas = [
+        t["retry_not_before"]
+        for t in load_tasks()
+        if t.get("status") == "queued"
+        and t.get("retry_not_before")
+        and t["retry_not_before"] > now_iso
+    ]
+    return min(etas) if etas else None
+
+
 def mark_task_blocked(task_id: str, reason: str):
     """Mark a task as blocked on a human action (e.g. awaiting resources).
 
