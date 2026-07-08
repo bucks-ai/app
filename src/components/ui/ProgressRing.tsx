@@ -46,7 +46,7 @@ export function ProgressRing({
           strokeWidth={stroke}
           pathLength="1"
           strokeDasharray="1"
-          initial={reducedMotion ? false : { strokeDashoffset: 1 }}
+          initial={false}
           animate={{ strokeDashoffset: 1 - normalized / 100 }}
           transition={{ duration: reducedMotion ? 0 : 0.7, ease: [0.16, 1, 0.3, 1] }}
           style={{ rotate: -90, transformOrigin: "center" }}

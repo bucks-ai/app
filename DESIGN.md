@@ -1,4 +1,4 @@
-# bucks.ai design system — Mission Control Glass
+# bucks.ai design system — Black Card + Mission Console
 
 Generated with the installed `ui-ux-pro-max` design-system workflow for:
 `AI startup operator SaaS dashboard execution workspace dark glass bento`
@@ -7,37 +7,38 @@ project's existing Next.js + Tailwind stack.
 
 ## Direction
 
-**Style:** dark-first refined glassmorphism with dense bento composition. The
-interface should feel like an operator console for founders: calm, premium,
-instrumented, and decisive. Glass is used for nav, cards, overlays, and major
-dashboard tiles; it is never so transparent that content competes with the
-background.
+**Style:** near-black mission-console interface with mature glass panels,
+instrument-grade cards, and restrained 3D depth. The interface should feel like
+an operating system for startup execution: precise, technical, confident, and
+premium. Glass is concentrated in the hero console, agent registry, checkpoints,
+and tool mesh; ordinary narrative blocks stay dark and quiet.
 
 **Product fit:** bucks.ai turns a one-sentence idea into a managed MVP
-workspace, so the design centers on state, pipeline movement, and the next
-recommended action. The UI borrows the confidence of Linear/Vercel/Attio and
-the data clarity of a mission-control dashboard.
+workspace, so the design centers on state, agent work, tool permissions,
+deployment checkpoints, and the next operator decision. The UI borrows the
+confidence of Linear/Vercel/Attio and the data clarity of a mission-control
+dashboard without using generic AI imagery.
 
 ## Palette
 
-Dark surfaces avoid pure black to reduce OLED smear and make frosted panels
-legible. Teal/cyan owns "live action" and CTAs. Green, amber, rose, and slate
-are semantic status colors only.
+Dark surfaces sit in the `#050506` / `#080808` range. Electric indigo/violet
+owns command, focus, telemetry, and CTAs. Cyan/green are system-state colors,
+not decoration. Amber and rose indicate checkpoints and risk.
 
 | Token | Dark value | Role |
 | --- | --- | --- |
-| `--background` | `#07090f` | page base |
-| `--surface` | `#0b1018` | stable panel fallback |
-| `--surface-elevated` | `#111827` | elevated glass fallback |
-| `--surface-glass` | `rgba(10, 16, 26, 0.68)` | frosted cards/nav |
+| `--background` | `#050506` | page base |
+| `--surface` | `#08080a` | stable panel fallback |
+| `--surface-elevated` | `#101014` | elevated glass fallback |
+| `--surface-glass` | `rgba(12, 12, 17, 0.72)` | frosted cards/nav |
 | `--foreground` | `#f4f7fb` | primary text |
-| `--text-secondary` | `#a8b3c7` | body/supporting text |
-| `--text-muted` | `#6f7a90` | metadata |
-| `--accent` | `#2dd4bf` | primary CTA/live flow |
-| `--accent-hover` | `#5eead4` | active CTA |
-| `--accent-bright` | `#67e8f9` | glow/line accent |
+| `--text-secondary` | `#aeb4c4` | body/supporting text |
+| `--text-muted` | `#747b8d` | metadata |
+| `--accent` | `#6d5dfc` | CTA/focus/telemetry |
+| `--accent-hover` | `#8378ff` | active CTA |
+| `--accent-bright` | `#a6b4ff` | glow/line accent |
 
-Status tokens: `done #34d399`, `running #2dd4bf`, `queued #8b97aa`,
+Status tokens: `done #38e8a7`, `running #22d3ee`, `queued #8b97aa`,
 `blocked #fb7185`, `pending #fbbf24`.
 
 Risk tokens: `low #34d399`, `medium #fbbf24`, `high #fb923c`,
@@ -60,10 +61,13 @@ Type rules:
 ## Layout
 
 Homepage:
-- Hero centers the live execution workspace, not a decorative illustration.
-- "How it works" is a connected 01-04 bento rail.
-- The six-part system uses asymmetrical tiles with hover reveal.
-- Agent cards are phase-tinted and motion-light.
+- Hero headline is direct: "Your startup, operating itself."
+- Mission Console shows active agent state, current run, execution log, tool
+  permissions, deployment state, and a human checkpoint.
+- Live Execution section turns a startup idea into Strategy, Research,
+  Validation, Build, and Deploy states.
+- Agent Registry, Autonomy Layer, Human Checkpoints, Tool Mesh, and Build Log
+  sections prove the product is execution infrastructure, not a chatbot.
 
 Dashboard:
 - Top strip is a bento KPI row: projects, approvals, active deploys, blockers.
@@ -90,13 +94,17 @@ All motion respects `prefers-reduced-motion`.
 
 Shared primitives:
 - `GlassCard`: frosted panel with solid fallback and optional hover lift.
+- `GlassPanel`: black-card glass wrapper for the mission-console system.
 - `BentoGrid`: responsive, stable grid tracks for dense tiles.
 - `StatusChip`: `done / running / queued / blocked / pending`.
+- `StatusPill`: text-first system/status label.
 - `RiskBadge`: `low / medium / high / critical`.
 - `ProgressRing`: accessible SVG progress with animation.
 - `KpiStat`: count-up metric tile with optional mini sparkline.
 - `NextActionBlock`: the AI recommendation as the focal action surface.
 - `AnimatedPipeline`: reusable pipeline with flowing connector states.
+- `MissionConsole`, `ExecutionLog`, `AgentCard`, `ToolTile`, and
+  `AnimatedProgressRail`: landing-specific product proof primitives.
 - `Navbar` and `Footer`: shared glass shell.
 
 ## Accessibility & Performance

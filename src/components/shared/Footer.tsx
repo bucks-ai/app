@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-const pipeline = ["Research", "Build", "Deploy", "Validate", "Agents"];
+const pipeline = ["Strategy", "Research", "Validate", "Build", "Deploy", "Learn"];
 
 export function Footer() {
   return (
@@ -16,17 +16,16 @@ export function Footer() {
               bucks<span className="text-accent">.ai</span>
             </Link>
             <p className="mt-2 max-w-xs text-xs leading-relaxed text-muted">
-              The AI startup operator. One sentence in, a launched MVP
-              workspace out.
+              Autonomous execution infrastructure for AI software businesses.
             </p>
           </div>
 
           <nav aria-label="Footer" className="flex flex-wrap items-center justify-center gap-3 sm:gap-6">
             <Link
-              href="/intake"
+              href="/dashboard"
               className="inline-flex min-h-11 items-center text-xs text-secondary transition-colors duration-200 hover:text-foreground"
             >
-              Start building
+              Enter console
             </Link>
             <Link
               href="/tools"
@@ -35,10 +34,10 @@ export function Footer() {
               Tool registry
             </Link>
             <Link
-              href="/#how-it-works"
+              href="/#execution-flow"
               className="inline-flex min-h-11 items-center text-xs text-secondary transition-colors duration-200 hover:text-foreground"
             >
-              How it works
+              Execution flow
             </Link>
           </nav>
         </div>

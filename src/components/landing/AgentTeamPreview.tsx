@@ -1,44 +1,49 @@
+import { AgentCard, type AgentCardData } from "@/components/landing/AgentCard";
 import { Reveal } from "@/components/ui/Reveal";
 import { SectionHeader } from "@/components/ui/SectionHeader";
-import { GlassCard } from "@/components/ui/GlassCard";
 
-type Agent = {
-  name: string;
-  code: string;
-  role: string;
-  tag: string;
-  /** phase color drawn from the pipeline the agent serves */
-  color: string;
-};
-
-const agents: Agent[] = [
+const agents: AgentCardData[] = [
   {
-    name: "Market Research Agent",
-    code: "MR",
-    role: "Sizes the opportunity and maps competitors.",
-    tag: "Research",
-    color: "var(--accent-bright)",
+    name: "Strategy Agent",
+    purpose: "Converts a founder brief into a business model, wedge, constraints, and measurable operating plan.",
+    permissions: ["read blueprint", "write strategy", "request approval"],
+    state: "Complete",
+    lastRun: "priced wedge and ICP in 04m 12s",
   },
   {
-    name: "Scaffold Agent",
-    code: "SC",
-    role: "Generates the starter repo and deploy.",
-    tag: "Build",
-    color: "var(--status-done)",
+    name: "Research Agent",
+    purpose: "Maps competitors, market evidence, buyer budgets, risks, and customer segments before build starts.",
+    permissions: ["read web", "write evidence", "no outbound"],
+    state: "Running",
+    lastRun: "clustered 31 market signals",
   },
   {
-    name: "Persona Agent",
-    code: "PE",
-    role: "Runs customer interviews to test demand.",
-    tag: "Validate",
-    color: "var(--risk-medium)",
+    name: "Validation Agent",
+    purpose: "Creates customer test plans, interview scripts, persona assumptions, and validation gates.",
+    permissions: ["draft outreach", "write hypotheses", "approval gated"],
+    state: "Waiting",
+    lastRun: "queued 12 founder interviews",
   },
   {
-    name: "Next Action Agent",
-    code: "NA",
-    role: "Reads the workspace and proposes the next move.",
-    tag: "Guidance",
-    color: "var(--status-blocked)",
+    name: "Build Agent",
+    purpose: "Turns approved scope into GitHub tasks, scaffold decisions, acceptance criteria, and deploy steps.",
+    permissions: ["prepare repo", "write issues", "no production push"],
+    state: "Waiting",
+    lastRun: "prepared preview task",
+  },
+  {
+    name: "Deploy Agent",
+    purpose: "Coordinates Vercel preview readiness, deployment state, rollback notes, and release checkpoints.",
+    permissions: ["read deploys", "prepare preview", "human approve"],
+    state: "Blocked",
+    lastRun: "paused public preview",
+  },
+  {
+    name: "Learning Agent",
+    purpose: "Reads validation outcomes and updates the next action loop instead of letting a plan go stale.",
+    permissions: ["read metrics", "write next action", "no billing access"],
+    state: "Complete",
+    lastRun: "updated decision log",
   },
 ];
 
@@ -48,54 +53,16 @@ export function AgentTeamPreview() {
       <div className="mx-auto max-w-6xl">
         <Reveal>
           <SectionHeader
-            eyebrow="Operating team"
-            title="A team of agents, already on the job"
-            description="Specialized agents handle the legwork and report back through the workspace."
+            eyebrow="Agent Registry"
+            title="Infrastructure-grade agents, not toy assistants"
+            description="Each agent has a job, a permission boundary, a current state, and a traceable last run."
           />
         </Reveal>
 
-        <div className="mt-12 grid gap-4 sm:grid-cols-2">
-          {agents.map((agent, i) => (
-            <Reveal key={agent.name} delay={i * 80}>
-              <GlassCard
-                interactive
-                delay={i * 0.05}
-                className="h-full p-6"
-                innerClassName="flex h-full items-start justify-between gap-4"
-              >
-                <div className="flex items-start gap-4">
-                  <span
-                    className="mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md border font-mono text-xs font-semibold"
-                    style={{
-                      color: agent.color,
-                      borderColor: `color-mix(in srgb, ${agent.color} 35%, transparent)`,
-                      background: `color-mix(in srgb, ${agent.color} 10%, transparent)`,
-                    }}
-                  >
-                    {agent.code}
-                  </span>
-                  <div>
-                    <h3 className="text-base font-medium text-foreground">
-                      {agent.name}
-                    </h3>
-                    <p className="mt-1 text-sm leading-relaxed text-secondary">
-                      {agent.role}
-                    </p>
-                    <p className="mt-4 font-mono text-[10px] uppercase tracking-[0.18em] text-muted">
-                      Phase owner
-                    </p>
-                  </div>
-                </div>
-                <span
-                  className="flex-shrink-0 rounded-full border px-2.5 py-1 font-mono text-[11px] font-medium uppercase tracking-wider"
-                  style={{
-                    color: agent.color,
-                    borderColor: `color-mix(in srgb, ${agent.color} 30%, transparent)`,
-                  }}
-                >
-                  {agent.tag}
-                </span>
-              </GlassCard>
+        <div className="mt-12 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {agents.map((agent, index) => (
+            <Reveal key={agent.name} delay={index * 70}>
+              <AgentCard agent={agent} />
             </Reveal>
           ))}
         </div>

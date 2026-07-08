@@ -1,6 +1,6 @@
 "use client";
 
-import { motion, useReducedMotion } from "framer-motion";
+import { motion } from "framer-motion";
 import { StatusChip, type PipelineStatus } from "@/components/ui/StatusChip";
 
 export type PipelineStage = {
@@ -38,8 +38,6 @@ function connectorClass(status: PipelineStatus) {
 }
 
 export function AnimatedPipeline({ stages, className = "" }: AnimatedPipelineProps) {
-  const reducedMotion = useReducedMotion();
-
   return (
     <div className={className}>
       <div className="hidden sm:block">
@@ -48,7 +46,7 @@ export function AnimatedPipeline({ stages, className = "" }: AnimatedPipelinePro
             <motion.div
               key={stage.label}
               className="flex flex-1 items-center last:flex-none"
-              initial={reducedMotion ? false : { opacity: 0, y: 10 }}
+              initial={false}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.08, duration: 0.35 }}
             >

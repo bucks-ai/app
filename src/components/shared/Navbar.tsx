@@ -77,10 +77,10 @@ export function Navbar() {
             Tools
           </Link>
           <Link
-            href="/#how-it-works"
+            href="/#execution-flow"
             className="hidden min-h-11 items-center text-sm text-secondary transition-colors hover:text-foreground sm:inline-flex"
           >
-            How it works
+            Execution flow
           </Link>
           {isAuthenticated ? (
             <LogoutButton />
@@ -94,11 +94,11 @@ export function Navbar() {
           )}
           <ThemeToggle />
           <Link
-            href="/intake"
+            href="/dashboard"
             className="inline-flex min-h-11 cursor-pointer items-center rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-accent-contrast transition-colors hover:bg-accent-hover sm:px-4"
           >
-            <span className="hidden sm:inline">Start building</span>
-            <span className="sm:hidden">Start</span>
+            <span className="hidden sm:inline">Enter console</span>
+            <span className="sm:hidden">Console</span>
           </Link>
         </div>
       </div>

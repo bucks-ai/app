@@ -3,23 +3,21 @@
 import type { ReactNode } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 
-type GlassCardProps = {
+type GlassPanelProps = {
   children: ReactNode;
   className?: string;
   innerClassName?: string;
   interactive?: boolean;
-  delay?: number;
   as?: "div" | "section" | "article";
 };
 
-export function GlassCard({
+export function GlassPanel({
   children,
   className = "",
   innerClassName = "",
   interactive = false,
-  delay = 0,
   as = "div",
-}: GlassCardProps) {
+}: GlassPanelProps) {
   const reducedMotion = useReducedMotion();
   const MotionTag =
     as === "section" ? motion.section : as === "article" ? motion.article : motion.div;
@@ -27,22 +25,22 @@ export function GlassCard({
   return (
     <MotionTag
       className={`glass-surface glass-highlight relative overflow-hidden rounded-card ${
-        interactive ? "cursor-pointer" : ""
+        interactive ? "group" : ""
       } ${className}`}
       initial={false}
-      animate={reducedMotion ? undefined : { opacity: 1, y: 0 }}
-      whileInView={reducedMotion ? undefined : { opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-8% 0px" }}
+      whileInView={reducedMotion ? undefined : { opacity: 1, y: 0, rotateX: 0 }}
+      viewport={{ once: true, margin: "-10% 0px" }}
       whileHover={
         interactive && !reducedMotion
           ? {
-              y: -5,
-              scale: 1.01,
+              y: -4,
+              borderColor: "rgba(166, 180, 255, 0.38)",
               transition: { duration: 0.2, ease: [0.16, 1, 0.3, 1] },
             }
           : undefined
       }
-      transition={{ duration: 0.5, delay, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+      style={{ transformPerspective: 1200 }}
     >
       <div className={`relative z-10 ${innerClassName}`}>{children}</div>
     </MotionTag>

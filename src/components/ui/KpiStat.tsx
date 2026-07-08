@@ -66,7 +66,7 @@ export function KpiStat({
   return (
     <motion.div
       className={`glass-surface glass-highlight relative min-h-[9.5rem] overflow-hidden rounded-card p-5 ${className}`}
-      initial={reducedMotion ? false : { opacity: 0, y: 12 }}
+      initial={false}
       whileInView={reducedMotion ? undefined : { opacity: 1, y: 0 }}
       viewport={{ once: true }}
       transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}

@@ -3,10 +3,10 @@
 /*
   bucks.ai design foundation — "Operator Console"
   ------------------------------------------------
-  Mission Control Glass: refined translucent surfaces, dense bento grids,
-  monospace accents for machine-readable values, and one confident teal/cyan
-  accent reserved for flow / running state. Green, amber, orange, and rose are
-  semantic only (status + risk), never decoration.
+  Black Card + Mission Console: near-black base surfaces, restrained glass,
+  monospace accents for machine-readable values, and one confident indigo/violet
+  accent reserved for CTAs, focus, and active telemetry. Cyan/green/amber/rose
+  are semantic only (status + risk), never decoration.
 
   Semantic tokens drive the public marketing surfaces (home, intake, auth,
   tools) and adapt to light / dark. The signed-in dashboard hardcodes its own
@@ -19,33 +19,33 @@
 :root {
   color-scheme: dark;
 
-  /* surfaces — deep space-slate, never pure black */
-  --background: #07090f;
-  --surface: #0b1018;
-  --surface-elevated: #111827;
-  --surface-glass: rgba(10, 16, 26, 0.68);
+  /* surfaces — black card base, never generic gray */
+  --background: #050506;
+  --surface: #08080a;
+  --surface-elevated: #101014;
+  --surface-glass: rgba(12, 12, 17, 0.72);
 
   /* text */
   --foreground: #f4f7fb;
-  --text-secondary: #a8b3c7;
-  --text-muted: #6f7a90;
+  --text-secondary: #aeb4c4;
+  --text-muted: #747b8d;
 
   /* hairlines */
-  --border: #1d2331;
-  --border-subtle: #151a26;
-  --border-strong: #2b3348;
+  --border: #242532;
+  --border-subtle: #171820;
+  --border-strong: #3a3c4d;
 
-  /* brand — teal owns flow, running state, and CTAs */
-  --accent: #2dd4bf;
-  --accent-hover: #5eead4;
-  --accent-bright: #67e8f9;
-  --accent-contrast: #041112;
-  --accent-soft: rgba(45, 212, 191, 0.12);
-  --accent-ring: rgba(45, 212, 191, 0.36);
+  /* brand — indigo/violet owns command and telemetry */
+  --accent: #6d5dfc;
+  --accent-hover: #8378ff;
+  --accent-bright: #a6b4ff;
+  --accent-contrast: #ffffff;
+  --accent-soft: rgba(109, 93, 252, 0.13);
+  --accent-ring: rgba(109, 93, 252, 0.38);
 
   /* status — pipeline states */
-  --status-done: #34d399;
-  --status-running: #2dd4bf;
+  --status-done: #38e8a7;
+  --status-running: #22d3ee;
   --status-queued: #8b97aa;
   --status-blocked: #fb7185;
   --status-pending: #fbbf24;
@@ -57,7 +57,7 @@
   --risk-critical: #fb7185;
 
   /* legacy semantic aliases */
-  --success: #34d399;
+  --success: #38e8a7;
   --warning: #fbbf24;
   --error: #f87171;
 
@@ -70,13 +70,13 @@
   /* ambient glow — reserved for live state, not decoration */
   --glow: radial-gradient(
     60% 60% at 50% 0%,
-    rgba(45, 212, 191, 0.14) 0%,
-    rgba(103, 232, 249, 0.07) 38%,
-    rgba(45, 212, 191, 0) 72%
+    rgba(109, 93, 252, 0.16) 0%,
+    rgba(34, 211, 238, 0.06) 38%,
+    rgba(109, 93, 252, 0) 72%
   );
 
   /* hairline grid backdrop */
-  --grid-line: rgba(103, 232, 249, 0.04);
+  --grid-line: rgba(166, 180, 255, 0.035);
 
   /* shape + depth */
   --radius: 0.75rem;
@@ -191,7 +191,10 @@ html {
 }
 
 body {
-  background: var(--background);
+  background:
+    radial-gradient(circle at 18% 0%, rgba(109, 93, 252, 0.08), transparent 26rem),
+    radial-gradient(circle at 82% 12%, rgba(34, 211, 238, 0.045), transparent 24rem),
+    var(--background);
   color: var(--foreground);
   font-family: var(--font-dm-sans), system-ui, sans-serif;
   text-rendering: optimizeLegibility;
@@ -224,6 +227,19 @@ h2 {
   background-size: 64px 64px;
 }
 
+.noise-backdrop::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.12;
+  background-image:
+    radial-gradient(circle at 20% 30%, rgba(255, 255, 255, 0.12) 0 1px, transparent 1px),
+    radial-gradient(circle at 70% 60%, rgba(255, 255, 255, 0.08) 0 1px, transparent 1px);
+  background-size: 38px 38px, 54px 54px;
+  mix-blend-mode: soft-light;
+}
+
 .glass-surface {
   background: color-mix(in srgb, var(--surface-glass) 88%, var(--surface) 12%);
   border: 1px solid color-mix(in srgb, var(--border) 78%, white 8%);
@@ -253,7 +269,7 @@ h2 {
     ),
     radial-gradient(
       circle at var(--glow-x, 18%) var(--glow-y, 0%),
-      rgba(103, 232, 249, 0.14),
+      rgba(166, 180, 255, 0.14),
       transparent 42%
     );
   opacity: 0.8;
@@ -376,10 +392,10 @@ h2 {
     box-shadow: 0 0 0 0 var(--accent-ring);
   }
   70% {
-    box-shadow: 0 0 0 7px rgba(45, 212, 191, 0);
+    box-shadow: 0 0 0 7px rgba(109, 93, 252, 0);
   }
   100% {
-    box-shadow: 0 0 0 0 rgba(45, 212, 191, 0);
+    box-shadow: 0 0 0 0 rgba(109, 93, 252, 0);
   }
 }
 

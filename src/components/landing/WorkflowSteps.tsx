@@ -1,75 +1,89 @@
+import { AnimatedProgressRail, type RailStage } from "@/components/landing/AnimatedProgressRail";
+import { ExecutionLog, type ExecutionLogItem } from "@/components/landing/ExecutionLog";
+import { GlassPanel } from "@/components/ui/GlassPanel";
 import { Reveal } from "@/components/ui/Reveal";
 import { SectionHeader } from "@/components/ui/SectionHeader";
-import { GlassCard } from "@/components/ui/GlassCard";
+import { StatusPill } from "@/components/ui/StatusPill";
 
-const steps = [
+const stages: RailStage[] = [
   {
-    n: "01",
-    title: "Enter your idea",
-    body: "Describe the product, your goal, budget, and any boundaries. That's the whole brief.",
+    label: "Strategy Agent",
+    detail: "Mapping business model, ICP, wedge, and launch constraints.",
+    status: "Complete",
   },
   {
-    n: "02",
-    title: "Generate research + blueprint",
-    body: "bucks.ai scans the market, sizes the opportunity, and drafts a strategy you can edit.",
+    label: "Research Agent",
+    detail: "Analyzing market signals, competitors, budgets, and evidence.",
+    status: "Running",
   },
   {
-    n: "03",
-    title: "Build & deploy the workspace",
-    body: "It scaffolds the starter repo and ships a live deploy on GitHub and Vercel.",
+    label: "Validation Agent",
+    detail: "Creating customer test plan and interview prompts.",
+    status: "Waiting for approval",
   },
   {
-    n: "04",
-    title: "Validate with customers",
-    body: "Persona interviews and agent runs pressure-test the idea and surface the next move.",
+    label: "Build Agent",
+    detail: "Preparing GitHub task scope for a shippable preview.",
+    status: "Waiting for approval",
   },
+  {
+    label: "Deploy Agent",
+    detail: "Vercel preview ready behind founder checkpoint.",
+    status: "Blocked",
+  },
+];
+
+const executionEvents: ExecutionLogItem[] = [
+  { time: "12:08", actor: "strategy", event: "Locked wedge: workflow ops for AI-native agencies.", tone: "accent" },
+  { time: "12:11", actor: "research", event: "Clustered 31 market signals into 4 validation bets.", tone: "success" },
+  { time: "12:16", actor: "validation", event: "Created customer test plan for 12 founder interviews.", tone: "accent" },
+  { time: "12:19", actor: "build", event: "Prepared GitHub issue with acceptance criteria.", tone: "neutral" },
+  { time: "12:21", actor: "deploy", event: "Preview deployment ready; awaiting founder approval.", tone: "warning" },
 ];
 
 export function WorkflowSteps() {
   return (
-    <section id="how-it-works" className="px-6 py-20 sm:py-28">
+    <section id="execution-flow" className="px-6 py-20 sm:py-28">
       <div className="mx-auto max-w-6xl">
         <Reveal>
           <SectionHeader
-            eyebrow="How it works"
-            title="From a sentence to a working workspace"
-            description="Four steps run end to end. You stay in control and step in only where judgment is needed."
+            eyebrow="Mission Console"
+            title="A startup idea becomes an execution pipeline"
+            description="The interface is not a chat thread. It is a control plane: agents advance the work, tools stay permissioned, and human checkpoints interrupt risky moves."
           />
         </Reveal>
 
-        <div className="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {steps.map((step, i) => (
-            <Reveal key={step.n} delay={i * 90}>
-              <GlassCard
-                interactive
-                delay={i * 0.04}
-                className={`h-full p-5 ${
-                  i === 1 ? "lg:translate-y-6" : i === 2 ? "lg:-translate-y-4" : ""
-                }`}
-              >
-                <div className="flex items-center">
-                  <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border border-accent/50 bg-accent-soft font-mono text-xs font-semibold text-accent-bright">
-                    {step.n}
-                  </span>
-                  {i < steps.length - 1 ? (
-                    <span
-                      aria-hidden
-                      className="ml-3 hidden h-px flex-1 flow-line-x lg:block"
-                    />
-                  ) : null}
-                </div>
-                <h3 className="mt-5 text-base font-semibold text-foreground">
-                  {step.title}
+        <div className="mt-14 grid gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(22rem,0.85fr)]">
+          <GlassPanel as="section" className="p-5 sm:p-6">
+            <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted">
+                  Current run
+                </p>
+                <h3 className="mt-2 text-xl font-semibold tracking-tight text-foreground">
+                  ClipForge AI launch loop
                 </h3>
-                <p className="mt-2 text-sm leading-relaxed text-secondary">
-                  {step.body}
-                </p>
-                <p className="mt-5 font-mono text-[10px] uppercase tracking-[0.18em] text-muted">
-                  {i < steps.length - 1 ? "Hands off to next step" : "Feeds Mission Control"}
-                </p>
-              </GlassCard>
-            </Reveal>
-          ))}
+              </div>
+              <StatusPill label="Running" variant="accent" />
+            </div>
+            <AnimatedProgressRail stages={stages} />
+          </GlassPanel>
+
+          <GlassPanel as="section" className="p-5 sm:p-6">
+            <div className="mb-4 rounded-xl border border-status-pending/30 bg-status-pending/10 p-4">
+              <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-status-pending">
+                Operator checkpoint
+              </p>
+              <p className="mt-2 text-sm font-semibold text-foreground">
+                Founder approval required before preview goes public.
+              </p>
+              <p className="mt-2 text-sm leading-6 text-secondary">
+                Vercel is prepared. Deployment remains gated until permissions
+                and customer-facing copy are approved.
+              </p>
+            </div>
+            <ExecutionLog items={executionEvents} />
+          </GlassPanel>
         </div>
       </div>
     </section>
