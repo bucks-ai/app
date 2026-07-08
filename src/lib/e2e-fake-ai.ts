@@ -18,7 +18,23 @@ const DEFAULT_AUTONOMY_PREFERENCE: AutonomyPreference = "Ask before major action
 export function isFakeAiEnabled(): boolean {
   if (process.env.E2E_FAKE_AI !== "true") return false;
 
-  if (process.env.NODE_ENV === "production") {
+  // Never on a deployed environment: Vercel sets VERCEL=1 on every deploy.
+  // A misconfigured env can never serve fixture data to real users.
+  if (process.env.VERCEL) {
+    console.warn(
+      "E2E_FAKE_AI is set but this is a Vercel deployment; ignoring the flag and using the real AI provider.",
+    );
+    return false;
+  }
+
+  // `next build && next start` sets NODE_ENV=production even for a local/CI
+  // production build, so CI must opt in explicitly to use the fixture there.
+  // (The CI e2e job sets E2E_FAKE_AI_ALLOW_PRODUCTION_BUILD=true; deployed
+  // production is already excluded by the VERCEL check above.)
+  if (
+    process.env.NODE_ENV === "production" &&
+    process.env.E2E_FAKE_AI_ALLOW_PRODUCTION_BUILD !== "true"
+  ) {
     console.warn(
       "E2E_FAKE_AI is set but NODE_ENV=production; ignoring the flag and using the real AI provider.",
     );

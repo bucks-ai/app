@@ -77,6 +77,10 @@ jobs:
       TEST_USER_EMAIL: ${{ secrets.E2E_TEST_USER_EMAIL }}
       TEST_USER_PASSWORD: ${{ secrets.E2E_TEST_USER_PASSWORD }}
       E2E_FAKE_AI: "true"
+      # The job tests a production build (next build && next start), which
+      # sets NODE_ENV=production — opt in so the fake-AI fixture still works.
+      # Deployed (Vercel) environments ignore the flag regardless.
+      E2E_FAKE_AI_ALLOW_PRODUCTION_BUILD: "true"
     steps:
       - uses: actions/checkout@v4
 

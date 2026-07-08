@@ -75,6 +75,27 @@ describe("isFakeAiEnabled", () => {
       expect.stringContaining("NODE_ENV=production"),
     );
   });
+
+  it("is true for a production build when E2E_FAKE_AI_ALLOW_PRODUCTION_BUILD=true (CI)", () => {
+    process.env.E2E_FAKE_AI = "true";
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("E2E_FAKE_AI_ALLOW_PRODUCTION_BUILD", "true");
+
+    expect(isFakeAiEnabled()).toBe(true);
+  });
+
+  it("ignores the flag on a Vercel deployment even with the production-build opt-in", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    process.env.E2E_FAKE_AI = "true";
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("E2E_FAKE_AI_ALLOW_PRODUCTION_BUILD", "true");
+    vi.stubEnv("VERCEL", "1");
+
+    expect(isFakeAiEnabled()).toBe(false);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Vercel deployment"),
+    );
+  });
 });
 
 describe("buildFakeBlueprint", () => {
