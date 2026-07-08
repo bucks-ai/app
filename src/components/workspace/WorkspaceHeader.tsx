@@ -4,21 +4,14 @@ import {
   deploymentStatusLabel,
 } from "@/components/deployment/DeploymentStatusBadge";
 import { StatusPill } from "@/components/ui/StatusPill";
-import { PrimaryActionStrip } from "@/components/workspace/PrimaryActionStrip";
 import type { DashboardBusiness } from "@/components/dashboard/mock-data";
 import type { BusinessExecutionStatus } from "@/types/execution-ui";
 import type { DeploymentStatus } from "@/types/deployment-ui";
-import type {
-  WorkspaceAgentState,
-  WorkspaceActionTarget,
-} from "@/components/workspace/next-action";
 
 type WorkspaceHeaderProps = {
   business: DashboardBusiness;
   executionStatus?: BusinessExecutionStatus | null;
-  agentState?: WorkspaceAgentState;
   onBlueprintOpen?: () => void;
-  onTabChange?: (tab: WorkspaceActionTarget) => void;
 };
 
 function healthVariant(health: string): "success" | "warning" | "danger" | "accent" {
@@ -64,9 +57,7 @@ const assetLink =
 export function WorkspaceHeader({
   business,
   executionStatus,
-  agentState,
   onBlueprintOpen,
-  onTabChange,
 }: WorkspaceHeaderProps) {
   const phase = executionStatus?.currentPhase ?? "blueprint";
   const health = executionStatus?.health ?? "on_track";
@@ -106,15 +97,6 @@ export function WorkspaceHeader({
 
         {/* Right: asset shortcuts + blueprint */}
         <div className="flex shrink-0 items-center gap-1.5">
-          {onTabChange ? (
-            <PrimaryActionStrip
-              business={business}
-              executionStatus={executionStatus}
-              agentState={agentState}
-              onTabChange={onTabChange}
-              className="hidden w-64 2xl:block"
-            />
-          ) : null}
           {business.githubRepo ? (
             <a
               href={business.githubRepo.repoUrl}

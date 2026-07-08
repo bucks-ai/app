@@ -201,9 +201,7 @@ export function BusinessWorkspace({
             <WorkspaceHeader
               business={business}
               executionStatus={executionStatus}
-              agentState={agentState}
               onBlueprintOpen={() => setBlueprintOpen(true)}
-              onTabChange={handleTabChange}
             />
 
             {/* Tabs — mobile / tablet */}
