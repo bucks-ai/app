@@ -89,6 +89,10 @@ All motion respects `prefers-reduced-motion`.
 | Progress ring/bar | card paint | 650ms ease-out | project maturity | final value |
 | KPI count-up | dashboard paint | 700ms ease-out | live metrics resolving | final value |
 | Tile hover lift | pointer hover/focus | 180-250ms | reveal secondary detail | no transform |
+| Execution loop step | step crosses viewport midline | instant state + 280ms crossfade | scroll position drives loop stage | instant swap, no transforms |
+| Loop stage map | active step change | dash flow 1.2s loop on active segment | which handoff is live | static solid segments |
+| Ambient aurora drift | page load | 14s ease loop | atmosphere, sub-1% contrast shift | static gradient |
+| CTA press | pointer down | 0.98 scale, 200ms | tactile confirmation | allowed (discrete, user-initiated) |
 
 ## Component Contract
 
@@ -105,6 +109,13 @@ Shared primitives:
 - `AnimatedPipeline`: reusable pipeline with flowing connector states.
 - `MissionConsole`, `ExecutionLog`, `AgentCard`, `ToolTile`, and
   `AnimatedProgressRail`: landing-specific product proof primitives.
+- `ExecutionLoop`: scroll-driven loop story — IntersectionObserver picks the
+  active step; a sticky `LoopConsole` re-renders stage map, artifact,
+  permissions, and log line per step.
+- `ApprovalCheckpoint`: a human gate rendered honestly — state, risk label,
+  verbatim permission prompt, and rollback path. No fake approve buttons.
+- `CTAButton`: the one CTA (primary/secondary) with press feedback.
+- `BackgroundAtmosphere`: shared aurora + grid + noise, pointer-transparent.
 - `Navbar` and `Footer`: shared glass shell.
 
 ## Accessibility & Performance

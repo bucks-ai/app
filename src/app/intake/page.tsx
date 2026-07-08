@@ -13,7 +13,7 @@ export default function IntakePage() {
   return (
     <>
       <Navbar />
-      <main className="relative min-h-screen overflow-hidden bg-background px-5 pb-20 pt-28 sm:px-6">
+      <main className="relative min-h-screen overflow-clip bg-background px-5 pb-20 pt-28 sm:px-6">
         <div aria-hidden className="grid-backdrop pointer-events-none absolute inset-0" />
         <div className="relative mx-auto max-w-7xl">
           <IdeaIntakeWizard />

@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { ExecutionLog, type ExecutionLogItem } from "@/components/landing/ExecutionLog";
+import { CTAButton } from "@/components/ui/CTAButton";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { Reveal } from "@/components/ui/Reveal";
 import { SectionHeader } from "@/components/ui/SectionHeader";
@@ -46,19 +46,16 @@ export function ClosingCTA() {
               learning.
             </p>
             <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
-              <Link
-                href="/dashboard"
-                className="inline-flex min-h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-semibold text-accent-contrast shadow-soft transition-colors duration-200 hover:bg-accent-hover sm:w-auto"
-              >
+              <CTAButton href="/dashboard" arrow className="w-full sm:w-auto">
                 Enter the console
-                <span aria-hidden>&#8594;</span>
-              </Link>
-              <Link
+              </CTAButton>
+              <CTAButton
                 href="/intake"
-                className="inline-flex min-h-12 w-full cursor-pointer items-center justify-center rounded-lg border border-border bg-background/70 px-6 py-3 text-sm font-medium text-secondary transition-colors duration-200 hover:border-accent/45 hover:text-foreground sm:w-auto"
+                variant="secondary"
+                className="w-full sm:w-auto"
               >
                 Start a new run
-              </Link>
+              </CTAButton>
             </div>
           </GlassPanel>
         </Reveal>

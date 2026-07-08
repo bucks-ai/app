@@ -87,7 +87,7 @@ export function Navbar() {
           ) : (
             <Link
               href="/login"
-              className="inline-flex min-h-11 items-center text-sm text-secondary transition-colors hover:text-foreground"
+              className="inline-flex min-h-11 items-center whitespace-nowrap text-sm text-secondary transition-colors hover:text-foreground"
             >
               Sign in
             </Link>
