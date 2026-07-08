@@ -18,6 +18,8 @@ from tools.task_tools import (
     mark_task_complete,
     mark_task_failed,
     mark_task_blocked,
+    next_retry_eta,
+    requeue_fulfilled_blocked_tasks,
     requeue_task,
     add_task,
     update_task_branch,
@@ -252,7 +254,32 @@ def check_launch_readiness_if_needed(state: RunnerState) -> RunnerState:
 
 
 def load_next_task(state: RunnerState) -> RunnerState:
+    # Auto-requeue any blocked task whose resource fulfillment file has
+    # landed in inbox/ (written by the approvals daemon or by hand).
+    for _tid in requeue_fulfilled_blocked_tasks(_RUNNER_DIR / "inbox"):
+        log_event("resource_request_fulfilled_requeued", {
+            "task_id": _tid,
+            "message": "fulfillment file found in inbox/; task requeued",
+        }, task_id=_tid)
     task = get_next_queued_task()
+    if not task:
+        # Every queued task may simply be inside its retry-backoff window —
+        # there IS work, it's just ineligible for a few more seconds. Wait
+        # out the shortest backoff (capped at 30 min) instead of falling
+        # through to the planner and stopping the loop with chatgpt_no_task.
+        eta = next_retry_eta()
+        if eta:
+            try:
+                remaining = (datetime.fromisoformat(eta) - datetime.utcnow()).total_seconds()
+            except (ValueError, TypeError):
+                remaining = 0
+            if 0 < remaining <= 1800:
+                log_event("retry_backoff_waiting", {
+                    "resume_at": eta,
+                    "wait_seconds": round(remaining, 1),
+                })
+                time.sleep(remaining + 1)
+                task = get_next_queued_task()
     if not task and cfg.has_github and cfg.github_repo:
         sync_open_issues_to_tasks(cfg.github_repo)
         task = get_next_queued_task()

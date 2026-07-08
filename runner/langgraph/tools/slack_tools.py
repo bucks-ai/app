@@ -125,6 +125,11 @@ def notify_event(event_type: str, payload: dict = None, task_id: str = None) -> 
     event isn't one of ``cfg.slack_notify_events`` — so it's safe to call for
     every flight-recorder event.
     """
+    import os
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        # Running inside the test suite: mock/simulated errors must never be
+        # fanned out to the real Slack channel.
+        return {"available": False, "reason": "pytest run"}
     cfg = get_config()
     if not cfg.slack_notify or not cfg.has_slack:
         return {"available": False, "reason": "slack notifications disabled"}
