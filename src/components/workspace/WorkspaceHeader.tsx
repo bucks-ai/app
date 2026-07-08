@@ -1,12 +1,6 @@
 import Link from "next/link";
-import {
-  DeploymentStatusBadge,
-  deploymentStatusLabel,
-} from "@/components/deployment/DeploymentStatusBadge";
-import { StatusPill } from "@/components/ui/StatusPill";
 import type { DashboardBusiness } from "@/components/dashboard/mock-data";
 import type { BusinessExecutionStatus } from "@/types/execution-ui";
-import type { DeploymentStatus } from "@/types/deployment-ui";
 
 type WorkspaceHeaderProps = {
   business: DashboardBusiness;
@@ -14,41 +8,11 @@ type WorkspaceHeaderProps = {
   onBlueprintOpen?: () => void;
 };
 
-function healthVariant(health: string): "success" | "warning" | "danger" | "accent" {
-  if (health === "complete" || health === "on_track") return "success";
-  if (health === "needs_attention") return "warning";
-  if (health === "blocked") return "danger";
-  return "accent";
-}
-
-function healthLabel(health: string): string {
-  if (health === "on_track") return "On track";
-  if (health === "needs_attention") return "Needs attention";
-  if (health === "blocked") return "Blocked";
-  if (health === "complete") return "Complete";
-  return health;
-}
-
 function phaseLabel(phase: string): string {
   return phase
     .split("_")
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(" ");
-}
-
-function deploymentStatusFromBusiness(
-  business: DashboardBusiness,
-  executionStatus?: BusinessExecutionStatus | null
-): DeploymentStatus {
-  const deploymentMilestone = executionStatus?.milestones.find(
-    (milestone) => milestone.id === "deployment"
-  );
-
-  if (business.vercelProject?.deploymentUrl) return "live";
-  if (deploymentMilestone?.status === "blocked") return "failed";
-  if (deploymentMilestone?.status === "in_progress") return "building";
-  if (business.vercelProject) return "not_deployed";
-  return "no_project";
 }
 
 const assetLink =
@@ -60,11 +24,7 @@ export function WorkspaceHeader({
   onBlueprintOpen,
 }: WorkspaceHeaderProps) {
   const phase = executionStatus?.currentPhase ?? "blueprint";
-  const health = executionStatus?.health ?? "on_track";
   const progress = executionStatus?.progressPercent ?? 0;
-  const latestRun =
-    executionStatus?.timeline?.[0]?.status ?? executionStatus?.timeline?.[0]?.category;
-  const deploymentStatus = deploymentStatusFromBusiness(business, executionStatus);
 
   return (
     <div className="px-4 py-2.5 sm:px-6">
@@ -85,13 +45,6 @@ export function WorkspaceHeader({
             <p className="mt-0.5 truncate font-mono text-[10px] uppercase tracking-[0.18em] text-muted">
               {phaseLabel(phase)} &middot; {progress}%
             </p>
-          </div>
-          <div className="ml-1 hidden items-center gap-1.5 md:flex">
-            <StatusPill label={healthLabel(health)} variant={healthVariant(health)} />
-            {latestRun ? (
-              <StatusPill label={`Run: ${phaseLabel(latestRun)}`} variant="accent" />
-            ) : null}
-            <DeploymentStatusBadge status={deploymentStatus} />
           </div>
         </div>
 
@@ -126,11 +79,7 @@ export function WorkspaceHeader({
             >
               Live
             </a>
-          ) : (
-            <span className="hidden items-center rounded-lg border border-border bg-elevated px-2.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-muted lg:inline-flex">
-              {deploymentStatusLabel(deploymentStatus)}
-            </span>
-          )}
+          ) : null}
           {onBlueprintOpen ? (
             <button
               type="button"

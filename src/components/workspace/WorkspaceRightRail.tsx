@@ -6,10 +6,6 @@ import {
 import type { BusinessExecutionStatus } from "@/types/execution-ui";
 import type { DeploymentStatus } from "@/types/deployment-ui";
 import { AssetQuickLinks } from "@/components/workspace/AssetQuickLinks";
-import {
-  resolvePrimaryNextAction,
-  type WorkspaceAgentState,
-} from "@/components/workspace/next-action";
 
 type TabKey =
   | "overview"
@@ -26,7 +22,6 @@ type TabKey =
 type WorkspaceRightRailProps = {
   business: DashboardBusiness;
   executionStatus?: BusinessExecutionStatus | null;
-  agentState?: WorkspaceAgentState;
   onTabChange: (tab: TabKey) => void;
 };
 
@@ -48,34 +43,15 @@ function deploymentStatusFromBusiness(
 export function WorkspaceRightRail({
   business,
   executionStatus,
-  agentState,
   onTabChange,
 }: WorkspaceRightRailProps) {
   const blockers = executionStatus?.blockers ?? [];
   const pendingApprovals = business.humanActionItems ?? [];
-  const primaryAction = resolvePrimaryNextAction(business, executionStatus, agentState);
   const deploymentStatus = deploymentStatusFromBusiness(business, executionStatus);
   const progress = executionStatus?.progressPercent ?? 0;
 
   return (
     <aside className="space-y-3">
-      {/* Next action */}
-      <button
-        type="button"
-        onClick={() => onTabChange(primaryAction.target)}
-        className="block w-full rounded-xl border border-warning/30 bg-warning/10 p-4 text-left shadow-[var(--shadow-soft)] transition-colors hover:border-warning/50"
-      >
-        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-warning">
-          Next action
-        </p>
-        <p className="mt-2 text-sm font-semibold text-foreground">
-          {primaryAction.label}
-        </p>
-        <p className="mt-1 line-clamp-2 text-xs leading-5 text-secondary">
-          {primaryAction.description}
-        </p>
-      </button>
-
       {/* Progress snapshot */}
       <div className="rounded-xl border border-border bg-surface p-4 shadow-[var(--shadow-soft)]">
         <div className="flex items-center justify-between gap-3">

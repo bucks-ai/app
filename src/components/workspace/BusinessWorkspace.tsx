@@ -8,17 +8,12 @@ import {
   fetchBusinessExecutionStatus,
   fetchExecutionTimeline,
 } from "@/lib/execution-client";
-import { fetchAgentRegistry, fetchAgentRuns } from "@/lib/agents-client";
 import { WorkspaceHeader } from "@/components/workspace/WorkspaceHeader";
 import { WorkspaceTabs } from "@/components/workspace/WorkspaceTabs";
 import type { TabKey } from "@/components/workspace/WorkspaceTabs";
 import { WorkspaceSidebar } from "@/components/workspace/WorkspaceSidebar";
 import { WorkspaceRightRail } from "@/components/workspace/WorkspaceRightRail";
 import { WorkspaceDrawer } from "@/components/workspace/WorkspaceDrawer";
-import {
-  resolvePrimaryNextAction,
-  type WorkspaceAgentState,
-} from "@/components/workspace/next-action";
 import { OverviewTab } from "@/components/workspace/tabs/OverviewTab";
 import { ResearchTab } from "@/components/workspace/tabs/ResearchTab";
 import { ActionsTab } from "@/components/workspace/tabs/ActionsTab";
@@ -66,9 +61,6 @@ export function BusinessWorkspace({
   const [blueprintOpen, setBlueprintOpen] = useState(false);
   const [executionStatus, setExecutionStatus] =
     useState<BusinessExecutionStatus | null>(initialExecutionStatus ?? null);
-  const [agentState, setAgentState] = useState<WorkspaceAgentState>({
-    registryLoaded: false,
-  });
 
   // Sync tab to URL
   const handleTabChange = useCallback(
@@ -99,53 +91,10 @@ export function BusinessWorkspace({
     void load();
   }, [business.id]);
 
-  // Load compact agent state for primary next-action decisions
-  useEffect(() => {
-    let ignore = false;
-
-    async function loadAgents() {
-      const [registryResult, runsResult] = await Promise.all([
-        fetchAgentRegistry(business.id),
-        fetchAgentRuns(business.id),
-      ]);
-
-      if (ignore) return;
-
-      if (!registryResult.ok) {
-        setAgentState({
-          registryLoaded: false,
-          agentRunsSchemaMissing:
-            runsResult.ok ? Boolean(runsResult.warning) : runsResult.code === "agent_runs_schema_missing",
-        });
-        return;
-      }
-
-      setAgentState({
-        registryLoaded: true,
-        totalAgents: registryResult.data.summary.totalAgents,
-        activeCount: registryResult.data.summary.activeCount,
-        completedCount: registryResult.data.summary.completedCount,
-        blockedCount: registryResult.data.summary.blockedCount,
-        waitingCount: registryResult.data.summary.waitingCount,
-        monitoringCount: registryResult.data.summary.monitoringCount,
-        runCount: runsResult.ok ? runsResult.data.summary.totalRuns : 0,
-        agentRunsSchemaMissing:
-          runsResult.ok ? Boolean(runsResult.warning) : runsResult.code === "agent_runs_schema_missing",
-      });
-    }
-
-    void loadAgents();
-
-    return () => {
-      ignore = true;
-    };
-  }, [business.id]);
-
   const pendingApprovalCount =
     business.humanActionItems?.length ?? business.humanActions.length;
   const blockerCount = executionStatus?.blockers?.length ?? 0;
   const actionCount = pendingApprovalCount + blockerCount;
-  const primaryAction = resolvePrimaryNextAction(business, executionStatus, agentState);
   const badgeCounts = { actions: actionCount };
 
   const activeTabContent =
@@ -225,41 +174,10 @@ export function BusinessWorkspace({
             <WorkspaceRightRail
               business={business}
               executionStatus={executionStatus}
-              agentState={agentState}
               onTabChange={handleTabChange}
             />
           </div>
         </aside>
-      </div>
-
-      {/* Mobile sticky bottom action bar */}
-      <div
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-border px-3 py-2.5 backdrop-blur lg:hidden"
-        style={{ background: "var(--surface-glass)" }}
-      >
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => handleTabChange(primaryAction.target)}
-            className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-warning/35 bg-warning/10 px-3 py-2 text-left"
-          >
-            <span className="block min-w-0">
-              <span className="block font-mono text-[10px] uppercase tracking-[0.18em] text-warning">
-                Next action
-              </span>
-              <span className="block truncate text-xs font-semibold text-foreground">
-                {primaryAction.label}
-              </span>
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => handleTabChange("activity")}
-            className="shrink-0 rounded-lg border border-border bg-elevated px-3 py-2.5 font-mono text-[11px] uppercase tracking-[0.18em] text-secondary"
-          >
-            Activity
-          </button>
-        </div>
       </div>
 
       {/* Blueprint drawer */}
