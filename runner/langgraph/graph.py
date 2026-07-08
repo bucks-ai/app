@@ -71,6 +71,7 @@ from tools.high_risk_claude_review import guard_high_risk_claude_review
 from tools.codex_to_claude_escalation import should_escalate, build_repair_prompt
 from tools.auto_repair_loop import should_auto_repair, build_auto_repair_prompt
 from tools.playwright_harness import run_e2e_suite, is_playwright_available
+from tools.deploy_target import resolve_target_url
 from tools.ui_flow_validator import (
     run_ui_flow_validation,
     load_flows_from_file,
@@ -1581,16 +1582,20 @@ def run_e2e_if_needed(state: RunnerState) -> RunnerState:
         }, task_id=state.current_task_id)
         return state
 
-    base_url = cfg.e2e_base_url
-    if not base_url:
-        deploy = state.deploy_result or {}
-        base_url = deploy.get("url") or deploy.get("deployment_url")
+    base_url, url_source = resolve_target_url(cfg.e2e_base_url, state.deploy_result)
     if not base_url:
         log_event("e2e_skipped", {
             "task_id": state.current_task_id,
             "reason": "no E2E_BASE_URL and no URL in deploy_result",
         }, task_id=state.current_task_id)
         return state
+
+    log_event("deploy_url_validated", {
+        "task_id": state.current_task_id,
+        "harness": "e2e",
+        "url": base_url,
+        "source": url_source,
+    }, task_id=state.current_task_id)
 
     result = run_e2e_suite(
         base_url=base_url,
@@ -1649,10 +1654,7 @@ def run_ui_flow_validation_if_needed(state: RunnerState) -> RunnerState:
         }, task_id=state.current_task_id)
         return state
 
-    base_url = cfg.e2e_base_url
-    if not base_url:
-        deploy = state.deploy_result or {}
-        base_url = deploy.get("url") or deploy.get("deployment_url")
+    base_url, url_source = resolve_target_url(cfg.e2e_base_url, state.deploy_result)
     if not base_url:
         log_event("ui_flow_skipped", {
             "task_id": state.current_task_id,
@@ -1670,6 +1672,13 @@ def run_ui_flow_validation_if_needed(state: RunnerState) -> RunnerState:
             "reason": "no flows defined (set UI_FLOW_CONFIG_PATH to a ui_flows.json file)",
         }, task_id=state.current_task_id)
         return state
+
+    log_event("deploy_url_validated", {
+        "task_id": state.current_task_id,
+        "harness": "ui_flow",
+        "url": base_url,
+        "source": url_source,
+    }, task_id=state.current_task_id)
 
     result = run_ui_flow_validation(
         base_url=base_url,

@@ -45,6 +45,20 @@ def is_terminal_state(state: str) -> bool:
     return s == _STATE_READY or s in _STATES_FAILED
 
 
+def normalize_deployment_url(url: str) -> str:
+    """Prefix a bare Vercel deployment hostname with ``https://``.
+
+    Vercel's API returns ``url`` as a bare hostname (e.g. ``my-app.vercel.app``)
+    with no scheme, which browser automation (Playwright) requires. Absolute
+    URLs are passed through unchanged.
+    """
+    if not url:
+        return None
+    if url.startswith("http://") or url.startswith("https://"):
+        return url
+    return f"https://{url}"
+
+
 def get_deployment_status(project_id: str = None) -> dict:
     cfg = get_config()
     if not cfg.has_vercel:
@@ -218,22 +232,28 @@ def trigger_deploy(project_name: str = None, project_id: str = None, poll: bool 
         return {"success": False, "reason": "AUTO_DEPLOY=false"}
     log_event("deploy_started", {"project_name": project_name})
     status = get_deployment_status(project_id)
+    latest = status.get("latest") or {}
     result = {"success": status.get("available", False), "status": status}
+    result["url"] = normalize_deployment_url(latest.get("url"))
 
     # Auto-deploy polling: wait for the latest deployment to finish building so the
     # runner reports a real ready/failed verdict instead of an in-progress snapshot.
     if poll and cfg.auto_deploy_poll and status.get("available"):
-        latest = status.get("latest") or {}
         deployment_id = latest.get("uid") or latest.get("id")
         verdict = poll_deployment_until_terminal(
             deployment_id=deployment_id,
             project_id=project_id,
         )
         result["poll"] = verdict
+        # The polled deployment record is the freshest source of the final URL
+        # (production aliasing can differ from the pre-build snapshot).
+        polled_url = normalize_deployment_url((verdict.get("deployment") or {}).get("url"))
+        if polled_url:
+            result["url"] = polled_url
         if verdict.get("available"):
             # A reachable-but-not-ready deployment (failed/canceled/timed out) is a
             # deploy failure as far as the runner is concerned.
             result["success"] = bool(verdict.get("ready"))
 
-    log_event("deploy_completed", {"status": status, "poll": result.get("poll")})
+    log_event("deploy_completed", {"status": status, "poll": result.get("poll"), "url": result.get("url")})
     return result

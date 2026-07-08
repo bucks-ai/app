@@ -479,7 +479,7 @@ Append-only JSONL flight recorder. Each line is a JSON event:
 {"event_type": "task_loaded", "timestamp": "...", "task_id": "...", "payload": {...}}
 ```
 
-Event types: `task_started`, `task_loaded`, `branch_rewritten`, `branch_rewrite_persisted`, `prompt_generated`, `fast_engineering_mode_injected`, `context_compressed`, `planner_started`, `planner_finished`, `worker_started`, `worker_finished`, `summary_captured`, `run_summary_digest`, `check_started`, `check_passed`, `check_failed`, `branch_created`, `commit_created`, `push_completed`, `merge_started`, `merge_completed`, `pr_created`, `pr_already_exists`, `pr_checks_poll_started`, `pr_checks_poll_tick`, `pr_checks_completed`, `pr_checks_failed`, `pr_checks_timeout`, `pr_merged`, `branch_cleanup_completed`, `deploy_skipped`, `deploy_started`, `deploy_completed`, `deploy_result`, `deploy_poll_started`, `deploy_poll_tick`, `deploy_poll_ready`, `deploy_poll_failed`, `deploy_poll_timeout`, `deploy_poll_unavailable`, `loop_blocked_on_deploy`, `rollback_revert_policy_required`, `sql_detected`, `sql_scan_passed`, `sql_scan_blocked`, `sql_applied`, `resource_request_pending`, `resource_request_waiting`, `resource_request_fulfilled`, `next_task_requested`, `loop_stopped`, `slack_degraded`, `error`
+Event types: `task_started`, `task_loaded`, `branch_rewritten`, `branch_rewrite_persisted`, `prompt_generated`, `fast_engineering_mode_injected`, `context_compressed`, `planner_started`, `planner_finished`, `worker_started`, `worker_finished`, `summary_captured`, `run_summary_digest`, `check_started`, `check_passed`, `check_failed`, `branch_created`, `commit_created`, `push_completed`, `merge_started`, `merge_completed`, `pr_created`, `pr_already_exists`, `pr_checks_poll_started`, `pr_checks_poll_tick`, `pr_checks_completed`, `pr_checks_failed`, `pr_checks_timeout`, `pr_merged`, `branch_cleanup_completed`, `deploy_skipped`, `deploy_started`, `deploy_completed`, `deploy_result`, `deploy_poll_started`, `deploy_poll_tick`, `deploy_poll_ready`, `deploy_poll_failed`, `deploy_poll_timeout`, `deploy_poll_unavailable`, `loop_blocked_on_deploy`, `rollback_revert_policy_required`, `deploy_url_validated`, `sql_detected`, `sql_scan_passed`, `sql_scan_blocked`, `sql_applied`, `resource_request_pending`, `resource_request_waiting`, `resource_request_fulfilled`, `next_task_requested`, `loop_stopped`, `slack_degraded`, `error`
 
 ---
 
@@ -680,6 +680,14 @@ The node records the verdict on `state.deploy_result` / `state.deploy_ready`,
 emits a `deploy_result` event, and (when a GitHub issue is linked) appends the
 deploy verdict to the issue comment.
 
+`state.deploy_result["url"]` carries the live deployment URL Vercel reported
+(normalized to an absolute `https://` URL — Vercel's API returns a bare
+hostname), refreshed from the polled deployment record when polling is
+enabled so it reflects the final build rather than the pre-build snapshot.
+This is the URL the post-deploy browser harnesses (`run_e2e_if_needed`,
+`run_ui_flow_validation_if_needed`) target by default; see
+`tools/deploy_target.py`.
+
 When `BLOCK_ON_DEPLOY_FAILURE=true` (default), a polled deploy that **failed**
 (terminal `ERROR` / `CANCELED`) or **timed out** sets `stop_reason`
 (`deploy_failed` / `deploy_timed_out`), emits a `loop_blocked_on_deploy` event,
@@ -735,6 +743,7 @@ Each scenario dict:
 ```
 
 **Logged events:**
+- `deploy_url_validated` — the resolved base URL (and its source — `env_override` or `deploy_result`) the harness is about to run against; logged once, immediately before the suite runs.
 - `e2e_passed` — all scenarios passed.
 - `e2e_failed` — one or more scenarios failed (loop continues).
 - `e2e_skipped` — harness skipped (disabled / not ready / playwright missing).
@@ -802,6 +811,7 @@ The validator runs in the `run_ui_flow_validation_if_needed` node, immediately a
 | `assert_element` | `selector` | Assert element matching selector exists |
 
 **Logged events:**
+- `deploy_url_validated` — the resolved base URL (and its source — `env_override` or `deploy_result`) the validator is about to run against; logged once, immediately before the flows run.
 - `ui_flow_passed` — all flows passed.
 - `ui_flow_failed` — one or more flows failed (loop continues unless strict mode).
 - `ui_flow_skipped` — validator skipped (disabled / no URL / playwright missing / no flows).

@@ -277,6 +277,100 @@ def test_trigger_deploy_skips_poll_when_disabled():
         cfg.auto_deploy_poll = saved_pollcfg
 
 
+# ---------------------------------------------------------------------------
+# normalize_deployment_url
+# ---------------------------------------------------------------------------
+
+def test_normalize_deployment_url_adds_https():
+    assert vt.normalize_deployment_url("my-app.vercel.app") == "https://my-app.vercel.app"
+
+
+def test_normalize_deployment_url_passes_through_absolute():
+    assert vt.normalize_deployment_url("http://my-app.vercel.app") == "http://my-app.vercel.app"
+    assert vt.normalize_deployment_url("https://my-app.vercel.app") == "https://my-app.vercel.app"
+
+
+def test_normalize_deployment_url_none_for_empty():
+    assert vt.normalize_deployment_url(None) is None
+    assert vt.normalize_deployment_url("") is None
+
+
+# ---------------------------------------------------------------------------
+# trigger_deploy — url plumbing
+# ---------------------------------------------------------------------------
+
+def test_trigger_deploy_sets_url_from_snapshot_when_poll_disabled():
+    cfg = get_config()
+    saved_status = vt.get_deployment_status
+    saved_auto = cfg.auto_deploy
+    saved_pollcfg = cfg.auto_deploy_poll
+    cfg.auto_deploy = True
+    cfg.auto_deploy_poll = False
+    vt.get_deployment_status = lambda project_id=None: {
+        "available": True, "latest": {"uid": "dpl_z", "url": "my-app.vercel.app"},
+    }
+    try:
+        res = vt.trigger_deploy(project_name="bucks-ai")
+        assert res["url"] == "https://my-app.vercel.app", res
+    finally:
+        vt.get_deployment_status = saved_status
+        cfg.auto_deploy = saved_auto
+        cfg.auto_deploy_poll = saved_pollcfg
+
+
+def test_trigger_deploy_prefers_polled_deployment_url():
+    cfg = get_config()
+    saved_status = vt.get_deployment_status
+    saved_poll = vt.poll_deployment_until_terminal
+    saved_auto = cfg.auto_deploy
+    saved_pollcfg = cfg.auto_deploy_poll
+    cfg.auto_deploy = True
+    cfg.auto_deploy_poll = True
+    vt.get_deployment_status = lambda project_id=None: {
+        "available": True,
+        "latest": {"uid": "dpl_x", "url": "dpl-x-preview.vercel.app"},
+    }
+    vt.poll_deployment_until_terminal = lambda **kw: {
+        "available": True, "ready": True, "terminal": True, "timed_out": False,
+        "state": "READY", "polls": 2,
+        "deployment": {"uid": "dpl_x", "url": "my-app.vercel.app"},
+    }
+    try:
+        res = vt.trigger_deploy(project_name="bucks-ai")
+        assert res["url"] == "https://my-app.vercel.app", res
+    finally:
+        vt.get_deployment_status = saved_status
+        vt.poll_deployment_until_terminal = saved_poll
+        cfg.auto_deploy = saved_auto
+        cfg.auto_deploy_poll = saved_pollcfg
+
+
+def test_trigger_deploy_keeps_snapshot_url_when_poll_omits_deployment():
+    cfg = get_config()
+    saved_status = vt.get_deployment_status
+    saved_poll = vt.poll_deployment_until_terminal
+    saved_auto = cfg.auto_deploy
+    saved_pollcfg = cfg.auto_deploy_poll
+    cfg.auto_deploy = True
+    cfg.auto_deploy_poll = True
+    vt.get_deployment_status = lambda project_id=None: {
+        "available": True,
+        "latest": {"uid": "dpl_x", "url": "my-app.vercel.app"},
+    }
+    vt.poll_deployment_until_terminal = lambda **kw: {
+        "available": True, "ready": True, "terminal": True, "timed_out": False,
+        "state": "READY", "polls": 2,
+    }
+    try:
+        res = vt.trigger_deploy(project_name="bucks-ai")
+        assert res["url"] == "https://my-app.vercel.app", res
+    finally:
+        vt.get_deployment_status = saved_status
+        vt.poll_deployment_until_terminal = saved_poll
+        cfg.auto_deploy = saved_auto
+        cfg.auto_deploy_poll = saved_pollcfg
+
+
 if __name__ == "__main__":
     import traceback
 
@@ -295,6 +389,12 @@ if __name__ == "__main__":
         test_trigger_deploy_polls_and_reports_ready,
         test_trigger_deploy_failure_marks_unsuccessful,
         test_trigger_deploy_skips_poll_when_disabled,
+        test_normalize_deployment_url_adds_https,
+        test_normalize_deployment_url_passes_through_absolute,
+        test_normalize_deployment_url_none_for_empty,
+        test_trigger_deploy_sets_url_from_snapshot_when_poll_disabled,
+        test_trigger_deploy_prefers_polled_deployment_url,
+        test_trigger_deploy_keeps_snapshot_url_when_poll_omits_deployment,
     ]
     passed = failed = 0
     for t in tests:
