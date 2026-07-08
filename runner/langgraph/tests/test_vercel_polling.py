@@ -277,6 +277,50 @@ def test_trigger_deploy_skips_poll_when_disabled():
         cfg.auto_deploy_poll = saved_pollcfg
 
 
+# ---------------------------------------------------------------------------
+# extract_deploy_url — pulling the deployed hostname out of a trigger_deploy()
+# result (Vercel exposes it as a bare hostname on the deployment record, not a
+# top-level "url"/"deployment_url" key on the trigger_deploy() result itself).
+# ---------------------------------------------------------------------------
+
+def test_extract_deploy_url_none_for_empty():
+    assert vt.extract_deploy_url(None) is None
+    assert vt.extract_deploy_url({}) is None
+
+
+def test_extract_deploy_url_prefers_polled_deployment():
+    deploy_result = {
+        "success": True,
+        "status": {"available": True, "latest": {"url": "stale-snapshot.vercel.app"}},
+        "poll": {"ready": True, "deployment": {"url": "my-app-abc123.vercel.app"}},
+    }
+    assert vt.extract_deploy_url(deploy_result) == "https://my-app-abc123.vercel.app"
+
+
+def test_extract_deploy_url_falls_back_to_status_latest():
+    deploy_result = {
+        "success": True,
+        "status": {"available": True, "latest": {"url": "my-app-xyz.vercel.app"}},
+        "poll": {},
+    }
+    assert vt.extract_deploy_url(deploy_result) == "https://my-app-xyz.vercel.app"
+
+
+def test_extract_deploy_url_falls_back_to_top_level_keys():
+    assert vt.extract_deploy_url({"url": "example.vercel.app"}) == "https://example.vercel.app"
+    assert vt.extract_deploy_url({"deployment_url": "example2.vercel.app"}) == "https://example2.vercel.app"
+
+
+def test_extract_deploy_url_preserves_existing_scheme():
+    deploy_result = {"poll": {"deployment": {"url": "https://already-has-scheme.vercel.app"}}}
+    assert vt.extract_deploy_url(deploy_result) == "https://already-has-scheme.vercel.app"
+
+
+def test_extract_deploy_url_none_when_no_url_anywhere():
+    deploy_result = {"success": False, "status": {"available": False}, "poll": {}}
+    assert vt.extract_deploy_url(deploy_result) is None
+
+
 if __name__ == "__main__":
     import traceback
 
@@ -295,6 +339,12 @@ if __name__ == "__main__":
         test_trigger_deploy_polls_and_reports_ready,
         test_trigger_deploy_failure_marks_unsuccessful,
         test_trigger_deploy_skips_poll_when_disabled,
+        test_extract_deploy_url_none_for_empty,
+        test_extract_deploy_url_prefers_polled_deployment,
+        test_extract_deploy_url_falls_back_to_status_latest,
+        test_extract_deploy_url_falls_back_to_top_level_keys,
+        test_extract_deploy_url_preserves_existing_scheme,
+        test_extract_deploy_url_none_when_no_url_anywhere,
     ]
     passed = failed = 0
     for t in tests:

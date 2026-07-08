@@ -3,7 +3,7 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Optional
 
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
@@ -55,7 +55,7 @@ from tools.git_tools import (
 from tools.sql_guard import scan_sql_text
 from tools.sql_environment_gate import evaluate_sql_approval_policy, infer_environment
 from tools.supabase_tools import apply_sql_file
-from tools.vercel_tools import trigger_deploy
+from tools.vercel_tools import trigger_deploy, extract_deploy_url
 from tools.github_tools import (
     sync_open_issues_to_tasks,
     create_pull_request,
@@ -1550,6 +1550,38 @@ def deploy_if_needed(state: RunnerState) -> RunnerState:
     return _persist(state, "deploy_if_needed")
 
 
+def _resolve_validation_base_url(state: RunnerState, harness: str) -> Optional[str]:
+    """Resolve the URL a post-deploy validation harness (E2E/UI-flow/product-eval)
+    should target, and log which URL (and source) was picked.
+
+    ``E2E_BASE_URL`` always wins when set. Otherwise the URL is pulled from the
+    just-completed Vercel deploy via ``extract_deploy_url`` — the deployment's
+    real hostname lives at ``deploy_result["poll"]["deployment"]["url"]``, not a
+    top-level key, so callers must not read ``deploy_result.get("url")`` directly.
+    Logs a ``deploy_url_resolved`` runs.jsonl event whenever a URL is found, so
+    there's a record of exactly what was validated even if the harness itself
+    produces no other event (e.g. it's skipped for an unrelated reason).
+    """
+    if cfg.e2e_base_url:
+        log_event("deploy_url_resolved", {
+            "task_id": state.current_task_id,
+            "harness": harness,
+            "base_url": cfg.e2e_base_url,
+            "source": "E2E_BASE_URL_override",
+        }, task_id=state.current_task_id)
+        return cfg.e2e_base_url
+
+    base_url = extract_deploy_url(state.deploy_result)
+    if base_url:
+        log_event("deploy_url_resolved", {
+            "task_id": state.current_task_id,
+            "harness": harness,
+            "base_url": base_url,
+            "source": "deploy_result",
+        }, task_id=state.current_task_id)
+    return base_url
+
+
 def run_e2e_if_needed(state: RunnerState) -> RunnerState:
     """Playwright Browser E2E Harness.
 
@@ -1581,10 +1613,7 @@ def run_e2e_if_needed(state: RunnerState) -> RunnerState:
         }, task_id=state.current_task_id)
         return state
 
-    base_url = cfg.e2e_base_url
-    if not base_url:
-        deploy = state.deploy_result or {}
-        base_url = deploy.get("url") or deploy.get("deployment_url")
+    base_url = _resolve_validation_base_url(state, "e2e")
     if not base_url:
         log_event("e2e_skipped", {
             "task_id": state.current_task_id,
@@ -1649,10 +1678,7 @@ def run_ui_flow_validation_if_needed(state: RunnerState) -> RunnerState:
         }, task_id=state.current_task_id)
         return state
 
-    base_url = cfg.e2e_base_url
-    if not base_url:
-        deploy = state.deploy_result or {}
-        base_url = deploy.get("url") or deploy.get("deployment_url")
+    base_url = _resolve_validation_base_url(state, "ui_flow")
     if not base_url:
         log_event("ui_flow_skipped", {
             "task_id": state.current_task_id,
@@ -1719,10 +1745,7 @@ def run_product_eval_if_needed(state: RunnerState) -> RunnerState:
         }, task_id=state.current_task_id)
         return state
 
-    base_url = cfg.e2e_base_url
-    if not base_url:
-        deploy = state.deploy_result or {}
-        base_url = deploy.get("url") or deploy.get("deployment_url")
+    base_url = _resolve_validation_base_url(state, "product_eval")
     if not base_url:
         log_event("product_eval_skipped", {
             "task_id": state.current_task_id,

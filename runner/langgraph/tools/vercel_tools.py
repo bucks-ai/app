@@ -6,6 +6,7 @@ the runner can wait for an auto-deploy to actually finish instead of firing it
 and immediately moving on.
 """
 import time
+from typing import Optional
 
 import requests
 
@@ -237,3 +238,26 @@ def trigger_deploy(project_name: str = None, project_id: str = None, poll: bool 
 
     log_event("deploy_completed", {"status": status, "poll": result.get("poll")})
     return result
+
+
+def extract_deploy_url(deploy_result: dict) -> Optional[str]:
+    """Pull the deployed URL out of a ``trigger_deploy()`` result, if present.
+
+    Vercel deployment objects expose a bare hostname (no scheme) in ``url``, not
+    a top-level ``url``/``deployment_url`` key on the ``trigger_deploy`` result —
+    so callers reading ``deploy_result.get("url")`` directly always get ``None``.
+    Prefers the polled deployment (most current, post-build) over the initial
+    status snapshot, and falls back to top-level convenience keys for callers
+    (tests, other deploy providers) that construct a ``deploy_result`` by hand.
+    """
+    if not deploy_result:
+        return None
+    poll = deploy_result.get("poll") or {}
+    deployment = poll.get("deployment") or (deploy_result.get("status") or {}).get("latest") or {}
+    host = deployment.get("url") or deploy_result.get("url") or deploy_result.get("deployment_url")
+    if not host:
+        return None
+    host = str(host)
+    if host.startswith("http://") or host.startswith("https://"):
+        return host
+    return f"https://{host}"
