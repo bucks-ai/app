@@ -14,6 +14,7 @@ type PrimaryActionStripProps = {
   executionStatus?: BusinessExecutionStatus | null;
   agentState?: WorkspaceAgentState;
   onTabChange: (tab: WorkspaceActionTarget) => void;
+  className?: string;
 };
 
 const urgencyStyles = {
@@ -43,6 +44,7 @@ export function PrimaryActionStrip({
   executionStatus,
   agentState,
   onTabChange,
+  className = "",
 }: PrimaryActionStripProps) {
   const [pinnedOpen, setPinnedOpen] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -61,7 +63,7 @@ export function PrimaryActionStrip({
   }
 
   return (
-    <div className="px-4 py-1.5 sm:px-6">
+    <div className={`relative w-full ${className}`}>
       <div
         className="relative"
         onMouseEnter={() => setHovered(true)}
@@ -70,33 +72,28 @@ export function PrimaryActionStrip({
         onBlurCapture={handleBlur}
       >
         <div
-          className={`flex min-h-11 min-w-0 items-center gap-2 rounded-lg border px-2.5 py-1.5 transition-[border-color,background-color,box-shadow] duration-200 ${urgencyStyles[action.urgency]}`}
+          className={`flex min-h-9 min-w-0 items-center gap-2 rounded-lg border px-2 py-1.5 transition-[border-color,background-color,box-shadow] duration-200 ${urgencyStyles[action.urgency]}`}
         >
           <button
             type="button"
             onClick={() => setPinnedOpen((value) => !value)}
             aria-expanded={expanded}
-            className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent/60 motion-reduce:transition-none"
+            className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-0.5 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent/60 motion-reduce:transition-none"
           >
-            <span className="hidden rounded-md border border-warning/25 bg-background/60 px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-warning sm:inline-flex">
+            <span className="hidden rounded-md border border-warning/25 bg-background/60 px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-warning sm:inline-flex">
               Next
             </span>
             <span className="min-w-0 flex-1">
               <span className="flex min-w-0 items-center gap-2">
-                <span className="truncate text-sm font-semibold text-foreground">
+                <span className="truncate text-xs font-semibold text-foreground">
                   {action.label}
                 </span>
-                <span className="hidden shrink-0 rounded-md border border-border bg-background/55 px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-warning xl:inline-flex">
+                <span className="hidden shrink-0 rounded-md border border-border bg-background/55 px-2 py-0.5 font-mono text-[9px] uppercase tracking-widest text-warning 2xl:inline-flex">
                   {urgencyLabel[action.urgency]}
                 </span>
               </span>
-              <span className="block truncate text-[11px] leading-4 text-muted md:hidden">
-                {pendingApprovals > 0
-                  ? `${pendingApprovals} approval${pendingApprovals !== 1 ? "s" : ""}`
-                  : action.description}
-              </span>
-              <span className="hidden max-w-2xl truncate text-xs leading-4 text-muted md:block">
-                Hover or press for details · {action.description}
+              <span className="block truncate text-[10px] leading-3 text-muted">
+                Hover or press for details
               </span>
             </span>
             <span
@@ -114,7 +111,7 @@ export function PrimaryActionStrip({
               <button
                 type="button"
                 onClick={() => onTabChange("actions")}
-                className="hidden items-center rounded-md border border-warning/25 bg-warning/10 px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-widest text-warning transition-colors hover:border-warning/45 md:inline-flex"
+                className="hidden items-center rounded-md border border-warning/25 bg-warning/10 px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-warning transition-colors hover:border-warning/45 2xl:inline-flex"
               >
                 {pendingApprovals} approval{pendingApprovals !== 1 ? "s" : ""}
               </button>
@@ -131,7 +128,7 @@ export function PrimaryActionStrip({
 
         <div
           aria-hidden={!expanded}
-          className={`absolute left-0 right-0 top-[calc(100%+0.5rem)] z-50 rounded-xl border border-border bg-surface/95 p-3 shadow-[0_24px_90px_rgba(0,0,0,0.55)] backdrop-blur transition-[opacity,transform] duration-200 motion-reduce:transition-none ${
+          className={`absolute right-0 top-[calc(100%+0.5rem)] z-50 w-[min(42rem,calc(100vw-2rem))] rounded-xl border border-border bg-surface/95 p-3 shadow-[0_24px_90px_rgba(0,0,0,0.55)] backdrop-blur transition-[opacity,transform] duration-200 motion-reduce:transition-none ${
             expanded
               ? "pointer-events-auto translate-y-0 opacity-100"
               : "pointer-events-none -translate-y-1 opacity-0"

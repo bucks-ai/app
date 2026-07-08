@@ -10,7 +10,6 @@ import {
 } from "@/lib/execution-client";
 import { fetchAgentRegistry, fetchAgentRuns } from "@/lib/agents-client";
 import { WorkspaceHeader } from "@/components/workspace/WorkspaceHeader";
-import { PrimaryActionStrip } from "@/components/workspace/PrimaryActionStrip";
 import { WorkspaceTabs } from "@/components/workspace/WorkspaceTabs";
 import type { TabKey } from "@/components/workspace/WorkspaceTabs";
 import { WorkspaceSidebar } from "@/components/workspace/WorkspaceSidebar";
@@ -202,18 +201,10 @@ export function BusinessWorkspace({
             <WorkspaceHeader
               business={business}
               executionStatus={executionStatus}
+              agentState={agentState}
               onBlueprintOpen={() => setBlueprintOpen(true)}
+              onTabChange={handleTabChange}
             />
-
-            {/* Primary next action — desktop */}
-            <div className="hidden border-t border-border-subtle lg:block">
-              <PrimaryActionStrip
-                business={business}
-                executionStatus={executionStatus}
-                agentState={agentState}
-                onTabChange={handleTabChange}
-              />
-            </div>
 
             {/* Tabs — mobile / tablet */}
             <div className="border-t border-border-subtle lg:hidden">
