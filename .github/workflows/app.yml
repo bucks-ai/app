@@ -16,6 +16,9 @@ on:
       - ".github/workflows/app.yml"
   pull_request:
     branches: [main]
+  # Lets us re-run the same checks on demand (e.g. to verify e2e reliability
+  # across repeated runs) without needing a new push or PR event.
+  workflow_dispatch: {}
 
 jobs:
   check:
@@ -52,3 +55,90 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  e2e:
+    name: E2E (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Requires five repository secrets pointing at a Supabase project used
+    # ONLY for E2E/test data (never the production project — the seed step
+    # below deletes and recreates data for the seeded test user on every
+    # run). The founder must add these under
+    # Settings > Secrets and variables > Actions before this job can pass:
+    #   E2E_SUPABASE_URL              -> NEXT_PUBLIC_SUPABASE_URL
+    #   E2E_SUPABASE_ANON_KEY         -> NEXT_PUBLIC_SUPABASE_ANON_KEY
+    #   E2E_SUPABASE_SERVICE_ROLE_KEY -> SUPABASE_SERVICE_ROLE_KEY
+    #   E2E_TEST_USER_EMAIL           -> TEST_USER_EMAIL
+    #   E2E_TEST_USER_PASSWORD        -> TEST_USER_PASSWORD
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.E2E_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.E2E_SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.E2E_SUPABASE_SERVICE_ROLE_KEY }}
+      TEST_USER_EMAIL: ${{ secrets.E2E_TEST_USER_EMAIL }}
+      TEST_USER_PASSWORD: ${{ secrets.E2E_TEST_USER_PASSWORD }}
+      E2E_FAKE_AI: "true"
+      # The job tests a production build (next build && next start), which
+      # sets NODE_ENV=production — opt in so the fake-AI fixture still works.
+      # Deployed (Vercel) environments ignore the flag regardless.
+      E2E_FAKE_AI_ALLOW_PRODUCTION_BUILD: "true"
+    steps:
+      - uses: actions/checkout@v4
+
+      # @supabase/supabase-js's realtime client requires native WebSocket
+      # support at construction time, even when realtime isn't used — this
+      # job needs Node 22+ (the `check` job doesn't touch Supabase, so it's
+      # unaffected and stays on 20).
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install (locked)
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install chromium --with-deps
+
+      - name: Build
+        run: npm run build
+
+      - name: Seed E2E test user + demo business
+        run: npm run seed:e2e
+
+      - name: Start app
+        run: nohup npm run start > next-start.log 2>&1 &
+
+      - name: Wait for app to be ready
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000 > /dev/null; then
+              echo "App is up."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "App did not become ready in time." >&2
+          cat next-start.log || true
+          exit 1
+
+      - name: Run E2E tests (auth flows — fail-fast gate)
+        run: npx playwright test e2e/auth.spec.ts
+
+      - name: Run E2E tests (full suite)
+        run: npm run test:e2e
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: test-results/
+          retention-days: 14

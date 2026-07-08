@@ -45,7 +45,10 @@ test.describe("auth", () => {
       "SUPABASE_SERVICE_ROLE_KEY not set — required to confirm the new signup on a project with email confirmation enabled."
     );
 
-    const email = `e2e-signup-${randomUUID()}@bucks.ai`;
+    // Supabase's public signUp validates that the domain has a real MX
+    // record (bucks.ai has none), so the throwaway address needs a domain
+    // that does — gmail.com — even though nothing is ever actually delivered.
+    const email = `e2e-signup-${randomUUID()}@gmail.com`;
     const password = `Signup-${randomUUID()}!`;
     let userId: string | null = null;
 
@@ -58,9 +61,19 @@ test.describe("auth", () => {
 
       // signUp's response time depends on Supabase sending the confirmation
       // email, which can take longer than the default assertion timeout.
-      await expect(page.getByText(/account created/i)).toBeVisible({
-        timeout: 15000,
-      });
+      // Two valid signup outcomes depending on the project's
+      // mailer_autoconfirm setting:
+      //  - confirm-email ON: an "account created" notice appears and the
+      //    user must be admin-confirmed before logging in.
+      //  - confirm-email OFF (the E2E project): signUp returns a session
+      //    immediately and the app proceeds straight to the dashboard.
+      await expect(async () => {
+        const noticeVisible = await page
+          .getByText(/account created/i)
+          .isVisible();
+        const onDashboard = /\/dashboard$/.test(page.url());
+        expect(noticeVisible || onDashboard).toBe(true);
+      }).toPass({ timeout: 15000 });
 
       userId = await findUserIdByEmail(admin!, email);
       if (!userId) throw new Error(`Signed-up user ${email} was not found via the admin API.`);
