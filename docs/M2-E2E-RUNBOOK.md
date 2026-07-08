@@ -132,13 +132,48 @@ The local-build `e2e` job (§5) remains the blocking gate.
   fail is a real fail.
 - `forbidOnly: isCI` — a stray `test.only` fails CI instead of silently skipping
   the rest of the suite.
-- If a spec is genuinely flaky (fails intermittently even with retries), don't
-  increase retries globally — fix the root cause (usually a missing
-  auto-waiting assertion or a race in the seed data) or, as a last resort,
-  `test.fixme()` it with a comment linking the follow-up task. Do not delete or
-  silently disable a failing spec.
+- If a spec fails deterministically (a real bug), don't reach for `@flaky` —
+  fix the root cause, or as a last resort `test.fixme()` it with a comment
+  linking the follow-up task. Do not delete or silently disable a failing spec.
 - The `e2e-preview` job is exempt from this policy by design (§6) — it's
   informational and expected to occasionally skip on Vercel-side timing.
+
+### The `@flaky` tag
+
+- **When to tag:** only after retries (§ above) still fail intermittently and
+  you've confirmed it's timing/environment-dependent, not a real regression —
+  usually a missing auto-waiting assertion or a race in the seed data you
+  haven't had time to chase down yet. Tag the individual `test()` (or the
+  wrapping `describe()` to cover a whole file) by putting `@flaky` in the
+  title string, e.g.:
+  ```ts
+  test("@flaky logs in with an expired session token", async ({ page }) => {
+    ...
+  });
+  ```
+  Playwright's `--grep`/`--grep-invert` match against the full title, so the
+  tag can go anywhere in it as long as it's the literal substring `@flaky`.
+- **Obligation to fix:** tagging is quarantine, not a permanent home. A tagged
+  spec must be fixed (root-caused and the tag removed, back under the
+  blocking gate) within one mission of being tagged — do not let a spec sit
+  quarantined across multiple missions. The mission that tags a spec should
+  also record the follow-up task to fix it.
+- **CI wiring** (`.github/workflows/app.yml`, `e2e` job):
+  - "Run E2E tests (full suite)" runs `playwright test --grep-invert "@flaky"`
+    — quarantined specs never affect the blocking `E2E (Playwright)` check.
+  - "Run E2E tests (flaky quarantine, non-blocking)" runs
+    `playwright test --grep "@flaky"` with `continue-on-error: true`, so a
+    quarantined spec failing is visible (red step) but never fails the job or
+    blocks a merge. If nothing is currently tagged, this step no-ops instead
+    of failing on Playwright's "No tests found" error.
+  - "Summarize quarantined (@flaky) tests" always runs (`if: always()`) and
+    writes the current `@flaky` list to the job's Actions summary, so
+    quarantined specs stay visible even on runs where the quarantine step
+    itself found nothing to execute.
+- Run just the quarantined specs locally with:
+  ```bash
+  npx playwright test --grep "@flaky"
+  ```
 
 ## 8. Fail-fast on auth breakage, and reliability
 

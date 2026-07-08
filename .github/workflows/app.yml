@@ -124,8 +124,10 @@ jobs:
       - name: Run E2E tests (auth flows — fail-fast gate)
         run: npx playwright test e2e/auth.spec.ts
 
+      # @flaky-tagged specs are excluded here and run separately below — see
+      # docs/M2-E2E-RUNBOOK.md §7 for the tagging convention.
       - name: Run E2E tests (full suite)
-        run: npm run test:e2e
+        run: npx playwright test --grep-invert "@flaky"
 
       - name: Upload Playwright report
         if: failure()
@@ -142,6 +144,48 @@ jobs:
           name: test-results
           path: test-results/
           retention-days: 14
+
+      # Non-blocking: @flaky specs are known-intermittent and must not fail
+      # the required check. See docs/M2-E2E-RUNBOOK.md §7 — quarantine is
+      # temporary and owed a fix within one mission of being tagged.
+      - name: Run E2E tests (flaky quarantine, non-blocking)
+        id: flaky
+        if: always()
+        continue-on-error: true
+        run: |
+          if npx playwright test --grep "@flaky" --list 2>/dev/null | grep -q "^Total: 0 tests"; then
+            echo "No tests currently tagged @flaky — nothing to quarantine-run."
+            echo "ran=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ran=true" >> "$GITHUB_OUTPUT"
+            npx playwright test --grep "@flaky"
+          fi
+
+      - name: Upload flaky-quarantine Playwright report
+        if: always() && steps.flaky.outputs.ran == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-flaky
+          path: playwright-report/
+          retention-days: 14
+
+      - name: Summarize quarantined (@flaky) tests
+        if: always()
+        run: |
+          {
+            echo "## Quarantined (\`@flaky\`) E2E tests"
+            echo
+            echo "These run in the non-blocking \"flaky quarantine\" step above and are"
+            echo "excluded from the blocking full-suite step. Each one is owed a fix"
+            echo "within one mission of being tagged — see docs/M2-E2E-RUNBOOK.md §7."
+            echo
+            LIST=$(npx playwright test --grep "@flaky" --list 2>/dev/null | grep "^  \[" || true)
+            if [ -z "$LIST" ]; then
+              echo "_None currently quarantined._"
+            else
+              echo "$LIST" | sed -E 's/^ *\[chromium\] › //; s/^/- /'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
   e2e-preview:
     name: E2E (Playwright, Vercel preview) [informational]
