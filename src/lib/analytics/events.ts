@@ -22,6 +22,7 @@ export const ANALYTICS_EVENTS = Object.freeze({
   USER_SIGNED_UP: defineEvent(
     "user_signed_up",
     "A visitor completes account creation and becomes an authenticated user.",
+    ["signup_method"],
   ),
   INTAKE_STARTED: defineEvent(
     "intake_started",
