@@ -4,7 +4,10 @@
 // docs/M3-EVENT-TAXONOMY.md for the full contract.
 
 import posthog from "@/app/posthog";
+import type { AnalyticsEventName } from "@/lib/analytics/events";
 import { guardCapture } from "@/lib/analytics/guard";
+
+export type ClientAnalyticsEventName = AnalyticsEventName | "$pageview";
 
 /**
  * Captures a client-side PostHog event (a canonical event name from
@@ -12,7 +15,7 @@ import { guardCapture } from "@/lib/analytics/guard";
  * `email`, when known, is checked against the test-traffic guard.
  */
 export function capture(
-  eventName: string,
+  eventName: ClientAnalyticsEventName,
   properties: Record<string, unknown> = {},
   email?: string | null,
 ): void {

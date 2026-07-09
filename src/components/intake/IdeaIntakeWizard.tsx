@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BlueprintPreview } from "@/components/intake/BlueprintPreview";
 import { IntakeStep } from "@/components/intake/IntakeStep";
 import { OperatorPanel } from "@/components/ui/OperatorPanel";
 import { SectionLabel } from "@/components/ui/SectionLabel";
 import { StatusPill } from "@/components/ui/StatusPill";
+import { captureIntakeStartedOnce, captureIntakeSubmitted } from "@/lib/analytics/intake-client";
 import { generateMockBlueprint } from "@/lib/mock-blueprint";
 import { createBrowserClient } from "@/lib/supabase/client";
 import type {
@@ -308,6 +309,7 @@ function SelectField({
 }
 
 export function IdeaIntakeWizard() {
+  const intakeStartedCaptured = useRef(false);
   const [idea, setIdea] = useState<StartupIdea>(initialIdea);
   const [currentStep, setCurrentStep] = useState(0);
   const [errors, setErrors] = useState<FieldErrors>({});
@@ -315,6 +317,10 @@ export function IdeaIntakeWizard() {
   const [isPreviewVisible, setIsPreviewVisible] = useState(false);
   const [generateState, setGenerateState] = useState<GenerateState>({ status: "idle" });
   const [saveState, setSaveState] = useState<SaveState>({ status: "idle" });
+
+  useEffect(() => {
+    captureIntakeStartedOnce(intakeStartedCaptured);
+  }, []);
 
   useEffect(() => {
     if (isPreviewVisible) {
@@ -399,6 +405,7 @@ export function IdeaIntakeWizard() {
       }
 
       setGenerateState({ status: "idle" });
+      captureIntakeSubmitted();
       setBlueprint(data.blueprint);
       setIsPreviewVisible(true);
       void saveGeneratedBlueprint(data.blueprint);
