@@ -126,7 +126,7 @@ describe("POST /api/vercel/refresh-deployment-status", () => {
     const response = await POST(makeRequest({ businessId: "biz-1" }));
 
     expect(response.status).toBe(200);
-    expect(refreshVercelDeploymentStatusForBusinessMock).toHaveBeenCalledWith("biz-1", "user-1");
+    expect(refreshVercelDeploymentStatusForBusinessMock).toHaveBeenCalledWith("biz-1", { id: "user-1" });
     await expect(response.json()).resolves.toEqual({
       ok: true,
       data: { status: "ready", deploymentUrl: "https://acme.vercel.app" },

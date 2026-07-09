@@ -1,6 +1,7 @@
 "use client";
 
 import posthog from "@/app/posthog";
+import { capture } from "@/lib/analytics/client";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, Suspense } from "react";
 import { PostHogProvider as PHProvider } from "posthog-js/react";
@@ -14,7 +15,7 @@ function PostHogPageView() {
       let url = window.origin + pathname;
       const search = searchParams?.toString();
       if (search) url += `?${search}`;
-      posthog.capture("$pageview", { $current_url: url });
+      capture("$pageview", { $current_url: url });
     }
   }, [pathname, searchParams]);
 

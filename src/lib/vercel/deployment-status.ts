@@ -85,8 +85,9 @@ export async function getLatestVercelDeploymentForProject(input: {
 
 export async function refreshVercelDeploymentStatusForBusiness(
   businessId: string,
-  userId: string
+  user: { id: string; email?: string | null }
 ): Promise<Result<RefreshDeploymentStatusResult>> {
+  const userId = user.id;
   // Load stored Vercel project metadata
   const metaResult = await getLatestVercelProjectForBusiness(businessId);
   if (metaResult.error || !metaResult.data) {
@@ -211,7 +212,7 @@ export async function refreshVercelDeploymentStatusForBusiness(
     });
 
     if (!alreadyReportedReady) {
-      capture("DEPLOY_SUCCEEDED", userId, { business_id: businessId });
+      capture("DEPLOY_SUCCEEDED", user, { business_id: businessId });
     }
   }
 

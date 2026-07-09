@@ -204,7 +204,7 @@ export async function POST(request: NextRequest) {
     // Non-fatal
   }
 
-  capture("VERCEL_PROJECT_CREATED", user.id, { business_id: businessId });
+  capture("VERCEL_PROJECT_CREATED", user, { business_id: businessId });
 
   return Response.json({
     ok: true,

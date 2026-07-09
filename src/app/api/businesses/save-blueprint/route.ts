@@ -143,7 +143,7 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  capture("BLUEPRINT_SAVED", user.id, { business_id: business.id });
+  capture("BLUEPRINT_SAVED", user, { business_id: business.id });
 
   return Response.json(
     {

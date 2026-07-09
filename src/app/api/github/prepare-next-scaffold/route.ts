@@ -139,7 +139,7 @@ export async function POST(request: NextRequest) {
     return scaffoldErrorResponse(e);
   }
 
-  capture("SCAFFOLD_PREPARED", user.id, { business_id: businessId });
+  capture("SCAFFOLD_PREPARED", user, { business_id: businessId });
 
   return Response.json({
     ok: true,

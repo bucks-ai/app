@@ -213,7 +213,7 @@ export async function POST(request: NextRequest) {
     responseBody.warning = starterFilesWarning;
   }
 
-  capture("REPO_CREATED", user.id, { business_id: businessId });
+  capture("REPO_CREATED", user, { business_id: businessId });
 
   return Response.json(responseBody, { status: 201 });
 }

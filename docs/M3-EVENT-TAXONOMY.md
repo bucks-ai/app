@@ -65,11 +65,40 @@ onward requires one.
 | `vercel_project_created` | A Vercel project is created and linked to the business repository. | `business_id` |
 | `deploy_succeeded` | A deployment for the business completes successfully and is publicly reachable. | `business_id` |
 
-## Non-goals of this task
+## Test-traffic guard
 
-This task only defines the catalog and its conventions. It does **not**:
+Source of truth: `src/lib/analytics/guard.ts` (`guardCapture`). Both capture
+helpers — `src/lib/analytics/server.ts` (server-side) and
+`src/lib/analytics/client.ts` (client-side, used by `PostHogProvider` for
+`$pageview` and available to any future client capture point) — run every
+call through this guard before sending anything to PostHog, so no capture
+point can forget it.
 
-- Add any `posthog.capture()` calls at existing call sites.
-- Change runner (`runner/langgraph/`) code or add dependencies.
-- Define stage-transition or funnel-completion metrics — that's future
-  analytics work once capture calls exist.
+**When capture is dropped.** A capture call is a complete no-op (no
+network call, no PostHog client construction) whenever the traffic is
+E2E or seeded-test traffic:
+
+- `E2E_FAKE_AI=true` (see `src/lib/e2e-fake-ai.ts`), or its client-bundle
+  mirror `NEXT_PUBLIC_E2E_FAKE_AI=true` — Next.js only inlines
+  `NEXT_PUBLIC_`-prefixed vars into the browser, so the mirror is what lets
+  the guard also suppress client-side capture during an E2E run.
+- The authenticated user's email equals `TEST_USER_EMAIL` (the dedicated
+  seeded E2E/QA account — see `scripts/seed-e2e.ts`).
+
+**`M3_VERIFY=true` override.** An explicit, opt-in override (plus its
+client-bundle mirror `NEXT_PUBLIC_M3_VERIFY=true`) that re-enables capture
+for test traffic and stamps **every** captured event — test traffic or
+not — with `verification_run: true`. This lets a one-off E2E run be
+verified end-to-end against real PostHog data without polluting the
+regular funnel dashboards, since every event from that run carries the
+marker. Intended to be used once, by the m3-10 task, to confirm the
+funnel fires correctly; it is not meant to run continuously in CI.
+
+## Non-goals
+
+None of the tasks that built up this document (catalog definition,
+server-side capture wiring, the test-traffic guard above) touch:
+
+- Runner (`runner/langgraph/`) code or its dependencies.
+- Stage-transition or funnel-completion metrics — that's future analytics
+  work built on top of the capture calls that now exist.

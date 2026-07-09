@@ -163,7 +163,7 @@ describe("POST /api/github/create-repo", () => {
       ok: true,
       data: { fullName: "user/acme" },
     });
-    expect(captureMock).toHaveBeenCalledWith("REPO_CREATED", "user-1", { business_id: "biz-1" });
+    expect(captureMock).toHaveBeenCalledWith("REPO_CREATED", { id: "user-1" }, { business_id: "biz-1" });
   });
 
   it("returns a 400 badRequest envelope when businessId is missing", async () => {

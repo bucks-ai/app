@@ -176,7 +176,7 @@ describe("POST /api/generate-blueprint", () => {
     expect(openaiCreateMock).toHaveBeenCalledTimes(1);
     const payload = await response.json();
     expect(payload.blueprint).toEqual(validBlueprint);
-    expect(captureMock).toHaveBeenCalledWith("BLUEPRINT_GENERATED", "user-1", {});
+    expect(captureMock).toHaveBeenCalledWith("BLUEPRINT_GENERATED", { id: "user-1", email: "a@example.com" }, {});
   });
 
   it("returns a 400 badRequest envelope with field issues and never calls OpenAI for a missing required field", async () => {
@@ -317,7 +317,7 @@ describe("POST /api/generate-blueprint", () => {
     const payload = await response.json();
     expect(payload.blueprint).toBeDefined();
     expect(payload.blueprint.businessSummary).toEqual(expect.any(String));
-    expect(captureMock).toHaveBeenCalledWith("BLUEPRINT_GENERATED", "user-1", {});
+    expect(captureMock).toHaveBeenCalledWith("BLUEPRINT_GENERATED", { id: "user-1", email: "a@example.com" }, {});
   });
 
   it("ignores E2E_FAKE_AI and calls OpenAI when NODE_ENV=production", async () => {
