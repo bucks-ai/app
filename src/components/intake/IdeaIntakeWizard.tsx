@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BlueprintPreview } from "@/components/intake/BlueprintPreview";
 import { IntakeStep } from "@/components/intake/IntakeStep";
 import { OperatorPanel } from "@/components/ui/OperatorPanel";
 import { SectionLabel } from "@/components/ui/SectionLabel";
 import { StatusPill } from "@/components/ui/StatusPill";
+import { captureIntakeStarted, captureIntakeSubmitted } from "@/lib/analytics/intake";
 import { generateMockBlueprint } from "@/lib/mock-blueprint";
 import { createBrowserClient } from "@/lib/supabase/client";
 import type {
@@ -315,6 +316,14 @@ export function IdeaIntakeWizard() {
   const [isPreviewVisible, setIsPreviewVisible] = useState(false);
   const [generateState, setGenerateState] = useState<GenerateState>({ status: "idle" });
   const [saveState, setSaveState] = useState<SaveState>({ status: "idle" });
+  const hasCapturedStart = useRef(false);
+
+  useEffect(() => {
+    if (hasCapturedStart.current) return;
+
+    hasCapturedStart.current = true;
+    captureIntakeStarted();
+  }, []);
 
   useEffect(() => {
     if (isPreviewVisible) {
@@ -401,6 +410,7 @@ export function IdeaIntakeWizard() {
       setGenerateState({ status: "idle" });
       setBlueprint(data.blueprint);
       setIsPreviewVisible(true);
+      captureIntakeSubmitted();
       void saveGeneratedBlueprint(data.blueprint);
     } catch {
       setGenerateState({
