@@ -50,6 +50,7 @@ _DEFAULT_SLACK_EVENTS = frozenset({
     "claude_subscription_cooldown_detected",
     "claude_subscription_cooldown_resumed",
     "loop_blocked_on_claude_subscription_cooldown",
+    "analytics_report_ready",
 })
 
 
@@ -79,6 +80,15 @@ class RunnerConfig:
     vercel_token: Optional[str] = field(default_factory=lambda: os.getenv("VERCEL_TOKEN"))
     vercel_project_id: Optional[str] = field(
         default_factory=lambda: os.getenv("VERCEL_PROJECT_ID")
+    )
+    posthog_personal_api_key: Optional[str] = field(
+        default_factory=lambda: os.getenv("POSTHOG_PERSONAL_API_KEY")
+    )
+    posthog_project_id: Optional[str] = field(
+        default_factory=lambda: os.getenv("POSTHOG_PROJECT_ID")
+    )
+    posthog_host: str = field(
+        default_factory=lambda: os.getenv("POSTHOG_HOST", "https://us.i.posthog.com")
     )
     sentry_auth_token: Optional[str] = field(default_factory=lambda: os.getenv("SENTRY_AUTH_TOKEN"))
     sentry_org: Optional[str] = field(default_factory=lambda: os.getenv("SENTRY_ORG"))
@@ -440,6 +450,10 @@ class RunnerConfig:
         return bool(self.vercel_token)
 
     @property
+    def has_posthog(self) -> bool:
+        return bool(self.posthog_personal_api_key and self.posthog_project_id)
+
+    @property
     def has_sentry(self) -> bool:
         return bool(self.sentry_auth_token and self.sentry_org and self.sentry_project)
 
@@ -464,6 +478,9 @@ class RunnerConfig:
             "has_direct_database_url": bool(self.direct_database_url),
             "vercel": self.has_vercel,
             "vercel_project_id": self.vercel_project_id,
+            "posthog": self.has_posthog,
+            "posthog_project_id": self.posthog_project_id,
+            "posthog_host": self.posthog_host,
             "sentry": self.has_sentry,
             "sentry_org": self.sentry_org,
             "sentry_project": self.sentry_project,

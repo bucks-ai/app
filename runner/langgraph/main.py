@@ -7,6 +7,7 @@ Usage:
   python main.py run-once
   python main.py run-loop
   python main.py sync-github-issues [repo]
+  python main.py analytics-report [--days N]
   python main.py scan-sql path/to/file.sql
   python main.py logs [--tail N]
   python main.py reset-state [--hard]
@@ -324,6 +325,15 @@ def cmd_dry_run(args):
         print("Task queue restored.")
 
 
+def cmd_analytics_report(args):
+    from tools.analytics_report import generate_analytics_report
+
+    days = getattr(args, "days", 7) or 7
+    result = generate_analytics_report(days=days)
+    print(result["text"])
+    print(f"Written to {result['report_path']}")
+
+
 def cmd_scan_sql(args):
     from tools.sql_guard import scan_sql_file
     path = args.path
@@ -379,6 +389,9 @@ def main():
     p_sync = sub.add_parser("sync-github-issues", help="Import open GitHub issues into the local task queue")
     p_sync.add_argument("repo", nargs="?", help="GitHub repo in owner/name form")
 
+    p_analytics = sub.add_parser("analytics-report", help="Build the weekly analytics report (funnel + new Sentry issues)")
+    p_analytics.add_argument("--days", type=int, default=7, help="Trailing window in days (default 7)")
+
     p_sql = sub.add_parser("scan-sql", help="Scan a SQL file for dangerous statements")
     p_sql.add_argument("path", help="Path to .sql file")
 
@@ -401,6 +414,7 @@ def main():
         "sync-github-issues": cmd_sync_github_issues,
         "run-once": cmd_run_once,
         "run-loop": cmd_run_loop,
+        "analytics-report": cmd_analytics_report,
         "scan-sql": cmd_scan_sql,
         "logs": cmd_logs,
         "reset-state": cmd_reset_state,
