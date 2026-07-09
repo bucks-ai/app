@@ -50,6 +50,7 @@ _DEFAULT_SLACK_EVENTS = frozenset({
     "claude_subscription_cooldown_detected",
     "claude_subscription_cooldown_resumed",
     "loop_blocked_on_claude_subscription_cooldown",
+    "analytics_report_ready",
 })
 
 

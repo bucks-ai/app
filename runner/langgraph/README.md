@@ -419,6 +419,7 @@ python main.py status          # Print current .runtime/state.local.json
 python main.py next-task       # Print next queued task
 python main.py run-once        # Run one full LangGraph cycle
 python main.py run-loop        # Run continuous autonomous loop
+python main.py analytics-report [--days 7]  # Build the weekly analytics report (PostHog funnel + new Sentry issues)
 python main.py scan-sql path/to/file.sql   # Scan SQL file for dangerous statements
 python main.py logs --tail 50  # Print last 50 log events
 ```
