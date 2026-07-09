@@ -290,6 +290,9 @@ Copy `.env.example` to `.env` and fill in:
 | `DIRECT_DATABASE_URL` | Direct (non-pooled) Postgres connection string used by `tools/db_tools.py` for applying migrations (`apply_migration_file`, `apply_pending_migrations`); falls back to `DATABASE_URL` when unset |
 | `VERCEL_TOKEN` | Deploy status / trigger |
 | `VERCEL_PROJECT_ID` | Scope deploy polling to one Vercel project (optional) |
+| `SENTRY_AUTH_TOKEN` | `tools/sentry_tools.py` reader tools (`list_new_issues`, `issue_summary`) — required alongside `SENTRY_ORG` and `SENTRY_PROJECT` |
+| `SENTRY_ORG` | Sentry organization slug for `tools/sentry_tools.py` |
+| `SENTRY_PROJECT` | Sentry project slug for `tools/sentry_tools.py` |
 | `SLACK_WEBHOOK_URL` | Slack notifications for notable runner events (optional) |
 | `SLACK_NOTIFY` | Enable/disable Slack notifications (default: true) |
 | `SLACK_NOTIFY_EVENTS` | Comma-separated event types to notify on (default: curated set) |
@@ -416,6 +419,7 @@ python main.py status          # Print current .runtime/state.local.json
 python main.py next-task       # Print next queued task
 python main.py run-once        # Run one full LangGraph cycle
 python main.py run-loop        # Run continuous autonomous loop
+python main.py analytics-report [--days 7]  # Build the weekly analytics report (PostHog funnel + new Sentry issues)
 python main.py scan-sql path/to/file.sql   # Scan SQL file for dangerous statements
 python main.py logs --tail 50  # Print last 50 log events
 ```
