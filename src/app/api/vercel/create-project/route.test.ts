@@ -13,6 +13,7 @@ const {
   prepareDeployableNextScaffoldMock,
   sanitizeVercelProjectNameMock,
   createVercelProjectWithSetupMock,
+  captureMock,
 } = vi.hoisted(() => ({
   requireUserMock: vi.fn(),
   hasSupabaseEnvMock: vi.fn(),
@@ -25,10 +26,15 @@ const {
   prepareDeployableNextScaffoldMock: vi.fn(),
   sanitizeVercelProjectNameMock: vi.fn(),
   createVercelProjectWithSetupMock: vi.fn(),
+  captureMock: vi.fn(),
 }));
 
 vi.mock("@/lib/api-auth", () => ({
   requireUser: requireUserMock,
+}));
+
+vi.mock("@/lib/analytics/server", () => ({
+  capture: captureMock,
 }));
 
 vi.mock("@/lib/supabase/env", () => ({
@@ -93,6 +99,7 @@ describe("POST /api/vercel/create-project", () => {
     prepareDeployableNextScaffoldMock.mockReset();
     sanitizeVercelProjectNameMock.mockReset();
     createVercelProjectWithSetupMock.mockReset();
+    captureMock.mockReset();
     hasSupabaseEnvMock.mockReturnValue(true);
     hasVercelEnvMock.mockReturnValue(true);
   });
@@ -169,6 +176,9 @@ describe("POST /api/vercel/create-project", () => {
     await expect(response.json()).resolves.toMatchObject({
       ok: true,
       data: { projectId: "proj-1" },
+    });
+    expect(captureMock).toHaveBeenCalledWith("VERCEL_PROJECT_CREATED", { id: "user-1" }, {
+      business_id: "biz-1",
     });
   });
 

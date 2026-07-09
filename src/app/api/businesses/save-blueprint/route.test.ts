@@ -9,6 +9,7 @@ const {
   createHumanRequiredActionsFromBlueprintMock,
   createAgentActivityLogMock,
   seedToolPermissionsForBusinessMock,
+  captureMock,
 } = vi.hoisted(() => ({
   requireUserMock: vi.fn(),
   hasSupabaseEnvMock: vi.fn(),
@@ -17,10 +18,15 @@ const {
   createHumanRequiredActionsFromBlueprintMock: vi.fn(),
   createAgentActivityLogMock: vi.fn(),
   seedToolPermissionsForBusinessMock: vi.fn(),
+  captureMock: vi.fn(),
 }));
 
 vi.mock("@/lib/api-auth", () => ({
   requireUser: requireUserMock,
+}));
+
+vi.mock("@/lib/analytics/server", () => ({
+  capture: captureMock,
 }));
 
 vi.mock("@/lib/supabase/env", () => ({
@@ -69,6 +75,7 @@ describe("POST /api/businesses/save-blueprint", () => {
     createHumanRequiredActionsFromBlueprintMock.mockReset();
     createAgentActivityLogMock.mockReset();
     seedToolPermissionsForBusinessMock.mockReset();
+    captureMock.mockReset();
     hasSupabaseEnvMock.mockReturnValue(true);
   });
 
@@ -92,6 +99,7 @@ describe("POST /api/businesses/save-blueprint", () => {
     expect(createHumanRequiredActionsFromBlueprintMock).not.toHaveBeenCalled();
     expect(createAgentActivityLogMock).not.toHaveBeenCalled();
     expect(seedToolPermissionsForBusinessMock).not.toHaveBeenCalled();
+    expect(captureMock).not.toHaveBeenCalled();
   });
 
   it("proceeds to write to the database when authenticated", async () => {
@@ -112,6 +120,7 @@ describe("POST /api/businesses/save-blueprint", () => {
 
     expect(response.status).toBe(200);
     expect(createBusinessMock).toHaveBeenCalledTimes(1);
+    expect(captureMock).toHaveBeenCalledWith("BLUEPRINT_SAVED", { id: "user-1", email: "a@example.com" }, { business_id: "biz-1" });
   });
 
   it("returns a 400 badRequest envelope and never writes to the database when startupIdea is missing required fields", async () => {

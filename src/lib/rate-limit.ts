@@ -120,4 +120,6 @@ export const RATE_LIMITS = {
   researchGenerate: { limit: 5, windowMs: 60_000 },
   /** Moderate default for mutating routes without a bespoke limit. */
   mutationDefault: { limit: 30, windowMs: 60_000 },
+  /** Public, unauthenticated signup endpoint — limited by IP, not user id. */
+  authSignup: { limit: 10, windowMs: 60_000 },
 } as const satisfies Record<string, RateLimitOptions>;

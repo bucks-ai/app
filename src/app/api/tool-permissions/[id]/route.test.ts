@@ -7,16 +7,22 @@ const {
   getToolPermissionByIdMock,
   updateToolPermissionStatusMock,
   createToolPermissionActivityLogMock,
+  captureMock,
 } = vi.hoisted(() => ({
   requireUserMock: vi.fn(),
   hasSupabaseEnvMock: vi.fn(),
   getToolPermissionByIdMock: vi.fn(),
   updateToolPermissionStatusMock: vi.fn(),
   createToolPermissionActivityLogMock: vi.fn(),
+  captureMock: vi.fn(),
 }));
 
 vi.mock("@/lib/api-auth", () => ({
   requireUser: requireUserMock,
+}));
+
+vi.mock("@/lib/analytics/server", () => ({
+  capture: captureMock,
 }));
 
 vi.mock("@/lib/supabase/env", () => ({
@@ -57,6 +63,7 @@ describe("PATCH /api/tool-permissions/[id]", () => {
     getToolPermissionByIdMock.mockReset();
     updateToolPermissionStatusMock.mockReset();
     createToolPermissionActivityLogMock.mockReset();
+    captureMock.mockReset();
     hasSupabaseEnvMock.mockReturnValue(true);
     createToolPermissionActivityLogMock.mockResolvedValue({ data: {}, error: null });
   });
@@ -129,6 +136,60 @@ describe("PATCH /api/tool-permissions/[id]", () => {
       ok: true,
       data: { id: "perm-1", status: "approved" },
     });
+    expect(captureMock).toHaveBeenCalledWith("TOOL_APPROVED", { id: "user-1" }, { business_id: "biz-1" });
+  });
+
+  it("captures tool_approval_requested for a request_approval action", async () => {
+    requireUserMock.mockResolvedValue({ user: { id: "user-1" }, response: null });
+    getToolPermissionByIdMock.mockResolvedValue({
+      data: {
+        id: "perm-1",
+        user_id: "user-1",
+        business_id: "biz-1",
+        tool_id: "github",
+        tool_name: "GitHub",
+        status: "human_required",
+      },
+      error: null,
+    });
+    updateToolPermissionStatusMock.mockResolvedValue({
+      data: { id: "perm-1", status: "approval_requested" },
+      error: null,
+    });
+
+    const response = await PATCH(
+      makeRequest({ action: "request_approval" }),
+      makeParams("perm-1"),
+    );
+
+    expect(response.status).toBe(200);
+    expect(captureMock).toHaveBeenCalledWith("TOOL_APPROVAL_REQUESTED", { id: "user-1" }, {
+      business_id: "biz-1",
+    });
+  });
+
+  it("does not capture an analytics event for actions other than approve/request_approval", async () => {
+    requireUserMock.mockResolvedValue({ user: { id: "user-1" }, response: null });
+    getToolPermissionByIdMock.mockResolvedValue({
+      data: {
+        id: "perm-1",
+        user_id: "user-1",
+        business_id: "biz-1",
+        tool_id: "github",
+        tool_name: "GitHub",
+        status: "approved",
+      },
+      error: null,
+    });
+    updateToolPermissionStatusMock.mockResolvedValue({
+      data: { id: "perm-1", status: "blocked" },
+      error: null,
+    });
+
+    const response = await PATCH(makeRequest({ action: "block" }), makeParams("perm-1"));
+
+    expect(response.status).toBe(200);
+    expect(captureMock).not.toHaveBeenCalled();
   });
 
   it("returns a 400 badRequest envelope when action is missing", async () => {

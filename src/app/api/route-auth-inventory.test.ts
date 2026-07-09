@@ -40,7 +40,9 @@ const EXPECTED_ENVELOPE = {
 // Routes exempt from this guard because they are intentionally public.
 // Keep empty unless a route is deliberately meant to be reachable without
 // authentication — adding an entry here should be a reviewed decision.
-const PUBLIC_ROUTE_ALLOWLIST: string[] = [];
+// auth/signup/route.ts is the account-creation endpoint itself: there is no
+// user to authenticate yet, by definition.
+const PUBLIC_ROUTE_ALLOWLIST: string[] = ["auth/signup/route.ts"];
 
 // Some handlers parse a businessId (query string or JSON body) before
 // checking auth. Supply whatever is needed to reach the auth check —

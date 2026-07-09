@@ -12,6 +12,7 @@ const {
   updateToolPermissionStatusMock,
   createGitHubRepositoryMock,
   createStarterRepositoryFilesMock,
+  captureMock,
 } = vi.hoisted(() => ({
   requireUserMock: vi.fn(),
   hasSupabaseEnvMock: vi.fn(),
@@ -23,10 +24,15 @@ const {
   updateToolPermissionStatusMock: vi.fn(),
   createGitHubRepositoryMock: vi.fn(),
   createStarterRepositoryFilesMock: vi.fn(),
+  captureMock: vi.fn(),
 }));
 
 vi.mock("@/lib/api-auth", () => ({
   requireUser: requireUserMock,
+}));
+
+vi.mock("@/lib/analytics/server", () => ({
+  capture: captureMock,
 }));
 
 vi.mock("@/lib/supabase/env", () => ({
@@ -82,6 +88,7 @@ describe("POST /api/github/create-repo", () => {
     updateToolPermissionStatusMock.mockReset();
     createGitHubRepositoryMock.mockReset();
     createStarterRepositoryFilesMock.mockReset();
+    captureMock.mockReset();
     hasSupabaseEnvMock.mockReturnValue(true);
     hasGitHubEnvMock.mockReturnValue(true);
   });
@@ -156,6 +163,7 @@ describe("POST /api/github/create-repo", () => {
       ok: true,
       data: { fullName: "user/acme" },
     });
+    expect(captureMock).toHaveBeenCalledWith("REPO_CREATED", { id: "user-1" }, { business_id: "biz-1" });
   });
 
   it("returns a 400 badRequest envelope when businessId is missing", async () => {

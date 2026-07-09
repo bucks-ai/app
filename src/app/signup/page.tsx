@@ -8,7 +8,6 @@ import { Navbar } from "@/components/shared/Navbar";
 import { OperatorPanel } from "@/components/ui/OperatorPanel";
 import { SectionLabel } from "@/components/ui/SectionLabel";
 import { StatusPill } from "@/components/ui/StatusPill";
-import { createBrowserClient } from "@/lib/supabase/client";
 
 const supabaseConfigured =
   !!process.env.NEXT_PUBLIC_SUPABASE_URL &&
@@ -50,25 +49,21 @@ export default function SignupPage() {
 
     setLoading(true);
 
-    const supabase = createBrowserClient();
-    if (!supabase) {
-      setAuthError(
-        "Supabase is not configured. Check your environment variables.",
-      );
-      setLoading(false);
-      return;
-    }
+    const response = await fetch("/api/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    const result = await response.json();
 
-    const { data, error } = await supabase.auth.signUp({ email, password });
-
-    if (error) {
-      setAuthError(error.message);
+    if (!response.ok || !result.ok) {
+      setAuthError(result.error ?? "Something went wrong. Please try again.");
       setLoading(false);
       return;
     }
 
     // If a session was created immediately (email confirmation disabled), redirect.
-    if (data.session) {
+    if (result.hasSession) {
       router.push("/dashboard");
       router.refresh();
       return;

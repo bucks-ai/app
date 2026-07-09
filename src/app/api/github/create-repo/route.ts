@@ -11,6 +11,7 @@ import {
 import { apiError, badRequest, notFound, zodIssuesToFields } from "@/lib/api-error";
 import { createGitHubRepoBodySchema } from "@/lib/schemas/infra";
 import { limit, tooManyRequests, RATE_LIMITS } from "@/lib/rate-limit";
+import { capture } from "@/lib/analytics/server";
 
 // Converts an arbitrary string into a valid GitHub repo name:
 // lowercase, alphanumeric + hyphens only, max 100 chars, no leading/trailing hyphens.
@@ -211,6 +212,8 @@ export async function POST(request: NextRequest) {
   if (starterFilesWarning) {
     responseBody.warning = starterFilesWarning;
   }
+
+  capture("REPO_CREATED", user, { business_id: businessId });
 
   return Response.json(responseBody, { status: 201 });
 }

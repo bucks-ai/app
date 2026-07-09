@@ -77,6 +77,11 @@ jobs:
       TEST_USER_EMAIL: ${{ secrets.E2E_TEST_USER_EMAIL }}
       TEST_USER_PASSWORD: ${{ secrets.E2E_TEST_USER_PASSWORD }}
       E2E_FAKE_AI: "true"
+      # Client-bundle mirror of E2E_FAKE_AI — see src/lib/analytics/guard.ts.
+      # Next.js only inlines NEXT_PUBLIC_ vars into the browser bundle, so
+      # this is what keeps client-side analytics capture (e.g. $pageview)
+      # suppressed for this run too.
+      NEXT_PUBLIC_E2E_FAKE_AI: "true"
       # The job tests a production build (next build && next start), which
       # sets NODE_ENV=production — opt in so the fake-AI fixture still works.
       # Deployed (Vercel) environments ignore the flag regardless.

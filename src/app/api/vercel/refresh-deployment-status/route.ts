@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
   // Refresh deployment status
   const refreshResult = await refreshVercelDeploymentStatusForBusiness(
     businessId,
-    user.id
+    user
   );
 
   if (refreshResult.error || !refreshResult.data) {

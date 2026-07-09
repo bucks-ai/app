@@ -13,6 +13,7 @@ import { sanitizeVercelProjectName, createVercelProjectWithSetup } from "@/lib/v
 import { apiError, badRequest, notFound, zodIssuesToFields } from "@/lib/api-error";
 import { createVercelProjectBodySchema } from "@/lib/schemas/infra";
 import { limit, tooManyRequests, RATE_LIMITS } from "@/lib/rate-limit";
+import { capture } from "@/lib/analytics/server";
 
 function scaffoldErrorResponse(error: unknown) {
   const detail =
@@ -202,6 +203,8 @@ export async function POST(request: NextRequest) {
   } catch {
     // Non-fatal
   }
+
+  capture("VERCEL_PROJECT_CREATED", user, { business_id: businessId });
 
   return Response.json({
     ok: true,

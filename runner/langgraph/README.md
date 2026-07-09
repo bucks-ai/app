@@ -290,6 +290,9 @@ Copy `.env.example` to `.env` and fill in:
 | `DIRECT_DATABASE_URL` | Direct (non-pooled) Postgres connection string used by `tools/db_tools.py` for applying migrations (`apply_migration_file`, `apply_pending_migrations`); falls back to `DATABASE_URL` when unset |
 | `VERCEL_TOKEN` | Deploy status / trigger |
 | `VERCEL_PROJECT_ID` | Scope deploy polling to one Vercel project (optional) |
+| `SENTRY_AUTH_TOKEN` | `tools/sentry_tools.py` reader tools (`list_new_issues`, `issue_summary`) — required alongside `SENTRY_ORG` and `SENTRY_PROJECT` |
+| `SENTRY_ORG` | Sentry organization slug for `tools/sentry_tools.py` |
+| `SENTRY_PROJECT` | Sentry project slug for `tools/sentry_tools.py` |
 | `SLACK_WEBHOOK_URL` | Slack notifications for notable runner events (optional) |
 | `SLACK_NOTIFY` | Enable/disable Slack notifications (default: true) |
 | `SLACK_NOTIFY_EVENTS` | Comma-separated event types to notify on (default: curated set) |
@@ -312,6 +315,9 @@ Copy `.env.example` to `.env` and fill in:
 | `ROLLBACK_REVERT_POLICY` | Recovery plan to write after a failed/timed-out deploy: `manual`, `rollback`, `revert`, `rollback_then_revert`, or `disabled` (default: `manual`) |
 | `VERCEL_POLL_TIMEOUT` | Max seconds to poll a deployment before giving up (default: 180) |
 | `VERCEL_POLL_INTERVAL` | Seconds between deployment status reads (default: 5) |
+| `POSTHOG_PERSONAL_API_KEY` | Personal API key used by `tools/posthog_tools.py` to read event counts / funnels via the PostHog query API (optional — reads degrade to an error result when unset) |
+| `POSTHOG_PROJECT_ID` | PostHog project id to scope queries to (optional — required alongside `POSTHOG_PERSONAL_API_KEY`) |
+| `POSTHOG_HOST` | PostHog API host (default: `https://us.i.posthog.com`) |
 | `AUTO_APPLY_SQL` | Auto-apply scanned SQL (default: true) — **keep false until SQL parsing is verified** |
 | `SQL_ENVIRONMENT` | Target deployment environment used by the SQL approval gate: `production`, `staging`, `development`, or `preview`. When unset, inferred from `SUPABASE_URL` (URL containing "prod" → production, "stag" → staging, otherwise development). |
 | `SQL_APPROVAL_POLICY` | Controls when SQL approval is required: `auto` (defer to legacy `REQUIRE_SQL_APPROVAL`), `require_on_production` (default — require approval only when `SQL_ENVIRONMENT=production`), `require_on_warning` (require approval when the SQL scan has warnings or blocked terms), `always_require` (require approval in all environments). |
@@ -413,6 +419,7 @@ python main.py status          # Print current .runtime/state.local.json
 python main.py next-task       # Print next queued task
 python main.py run-once        # Run one full LangGraph cycle
 python main.py run-loop        # Run continuous autonomous loop
+python main.py analytics-report [--days 7]  # Build the weekly analytics report (PostHog funnel + new Sentry issues)
 python main.py scan-sql path/to/file.sql   # Scan SQL file for dangerous statements
 python main.py logs --tail 50  # Print last 50 log events
 ```
