@@ -53,7 +53,7 @@ onward requires one.
 
 | Event name | Description | Required properties |
 |---|---|---|
-| `user_signed_up` | A visitor completes account creation and becomes an authenticated user. | — |
+| `user_signed_up` | A visitor completes account creation and becomes an authenticated user. | `signup_method` |
 | `intake_started` | A user begins the founder intake wizard for a new business idea. | — |
 | `intake_submitted` | A user submits the completed intake wizard, ready for blueprint generation. | — |
 | `blueprint_generated` | The AI pipeline returns a generated launch blueprint from intake data. | — |
@@ -64,6 +64,32 @@ onward requires one.
 | `scaffold_prepared` | A deployable Next.js scaffold is written to the business repository. | `business_id` |
 | `vercel_project_created` | A Vercel project is created and linked to the business repository. | `business_id` |
 | `deploy_succeeded` | A deployment for the business completes successfully and is publicly reachable. | `business_id` |
+
+## `user_signed_up` capture point
+
+`user_signed_up` is captured **server-side only**, once, in
+`POST /api/auth/signup` (`src/app/api/auth/signup/route.ts`) — the route the
+signup form now submits to instead of calling `supabase.auth.signUp()`
+directly from the browser. This is the single reliable point where a new
+account first exists:
+
+- The route calls `supabase.auth.signUp()` through the request-bound SSR
+  client, so the resulting session cookie (if "Confirm email" is off) is set
+  directly on the response.
+- It only fires `capture("USER_SIGNED_UP", ...)` when Supabase's response
+  indicates an account was actually created (`user.identities` non-empty).
+  A `signUp()` call for an already-registered, confirmed email returns an
+  obfuscated user with no identities and no error — no event fires for that
+  case, so re-submitting the signup form for an existing account can't
+  double-count as a new signup.
+- Every call includes `signup_method: "email"` — the only signup path this
+  app supports today. A future OAuth/social signup path must use the same
+  route (or otherwise dedupe through this one) and pass its own
+  `signup_method` value rather than adding a second, parallel capture point.
+
+There is deliberately no client-side capture of `user_signed_up`: pick one
+authoritative source (server, since it's the only place that can tell a real
+signup from a duplicate) and never fire both.
 
 ## Test-traffic guard
 
