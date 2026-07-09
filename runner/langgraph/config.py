@@ -80,6 +80,9 @@ class RunnerConfig:
     vercel_project_id: Optional[str] = field(
         default_factory=lambda: os.getenv("VERCEL_PROJECT_ID")
     )
+    sentry_auth_token: Optional[str] = field(default_factory=lambda: os.getenv("SENTRY_AUTH_TOKEN"))
+    sentry_org: Optional[str] = field(default_factory=lambda: os.getenv("SENTRY_ORG"))
+    sentry_project: Optional[str] = field(default_factory=lambda: os.getenv("SENTRY_PROJECT"))
     slack_webhook_url: Optional[str] = field(
         default_factory=lambda: os.getenv("SLACK_WEBHOOK_URL")
     )
@@ -437,6 +440,10 @@ class RunnerConfig:
         return bool(self.vercel_token)
 
     @property
+    def has_sentry(self) -> bool:
+        return bool(self.sentry_auth_token and self.sentry_org and self.sentry_project)
+
+    @property
     def has_slack(self) -> bool:
         return bool(self.slack_webhook_url)
 
@@ -457,6 +464,9 @@ class RunnerConfig:
             "has_direct_database_url": bool(self.direct_database_url),
             "vercel": self.has_vercel,
             "vercel_project_id": self.vercel_project_id,
+            "sentry": self.has_sentry,
+            "sentry_org": self.sentry_org,
+            "sentry_project": self.sentry_project,
             "slack": self.has_slack,
             "slack_notify": self.slack_notify,
             "slack_interactive_approvals": self.slack_interactive_approvals,
