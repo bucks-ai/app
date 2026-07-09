@@ -136,7 +136,7 @@ describe("PATCH /api/tool-permissions/[id]", () => {
       ok: true,
       data: { id: "perm-1", status: "approved" },
     });
-    expect(captureMock).toHaveBeenCalledWith("TOOL_APPROVED", "user-1", { business_id: "biz-1" });
+    expect(captureMock).toHaveBeenCalledWith("TOOL_APPROVED", { id: "user-1" }, { business_id: "biz-1" });
   });
 
   it("captures tool_approval_requested for a request_approval action", async () => {
@@ -163,7 +163,7 @@ describe("PATCH /api/tool-permissions/[id]", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(captureMock).toHaveBeenCalledWith("TOOL_APPROVAL_REQUESTED", "user-1", {
+    expect(captureMock).toHaveBeenCalledWith("TOOL_APPROVAL_REQUESTED", { id: "user-1" }, {
       business_id: "biz-1",
     });
   });

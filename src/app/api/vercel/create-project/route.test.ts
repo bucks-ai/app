@@ -177,7 +177,7 @@ describe("POST /api/vercel/create-project", () => {
       ok: true,
       data: { projectId: "proj-1" },
     });
-    expect(captureMock).toHaveBeenCalledWith("VERCEL_PROJECT_CREATED", "user-1", {
+    expect(captureMock).toHaveBeenCalledWith("VERCEL_PROJECT_CREATED", { id: "user-1" }, {
       business_id: "biz-1",
     });
   });

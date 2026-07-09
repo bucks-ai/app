@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
       );
       return aiOutputInvalid("The AI returned a blueprint that failed validation.");
     }
-    capture("BLUEPRINT_GENERATED", user.id, {});
+    capture("BLUEPRINT_GENERATED", user, {});
     return Response.json({ blueprint: parsedFixture.data }, { status: 200 });
   }
 
@@ -101,6 +101,6 @@ export async function POST(request: NextRequest) {
     return aiOutputInvalid("The AI returned a blueprint that failed validation.");
   }
 
-  capture("BLUEPRINT_GENERATED", user.id, {});
+  capture("BLUEPRINT_GENERATED", user, {});
   return Response.json({ blueprint: parsedBlueprint.data }, { status: 200 });
 }

@@ -120,7 +120,7 @@ describe("POST /api/businesses/save-blueprint", () => {
 
     expect(response.status).toBe(200);
     expect(createBusinessMock).toHaveBeenCalledTimes(1);
-    expect(captureMock).toHaveBeenCalledWith("BLUEPRINT_SAVED", "user-1", { business_id: "biz-1" });
+    expect(captureMock).toHaveBeenCalledWith("BLUEPRINT_SAVED", { id: "user-1", email: "a@example.com" }, { business_id: "biz-1" });
   });
 
   it("returns a 400 badRequest envelope and never writes to the database when startupIdea is missing required fields", async () => {

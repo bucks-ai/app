@@ -155,7 +155,7 @@ describe("POST /api/github/prepare-next-scaffold", () => {
       ok: true,
       data: { filesWritten: 3 },
     });
-    expect(captureMock).toHaveBeenCalledWith("SCAFFOLD_PREPARED", "user-1", { business_id: "biz-1" });
+    expect(captureMock).toHaveBeenCalledWith("SCAFFOLD_PREPARED", { id: "user-1" }, { business_id: "biz-1" });
   });
 
   it("returns a 400 badRequest envelope when businessId is missing", async () => {

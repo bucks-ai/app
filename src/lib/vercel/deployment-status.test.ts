@@ -66,10 +66,10 @@ describe("refreshVercelDeploymentStatusForBusiness", () => {
     listVercelDeploymentsMock.mockResolvedValue([readyDeployment]);
     getAgentActivityLogsMock.mockResolvedValue({ data: [], error: null });
 
-    const result = await refreshVercelDeploymentStatusForBusiness("biz-1", "user-1");
+    const result = await refreshVercelDeploymentStatusForBusiness("biz-1", { id: "user-1" });
 
     expect(result.data?.status).toBe("ready");
-    expect(captureMock).toHaveBeenCalledWith("DEPLOY_SUCCEEDED", "user-1", { business_id: "biz-1" });
+    expect(captureMock).toHaveBeenCalledWith("DEPLOY_SUCCEEDED", { id: "user-1" }, { business_id: "biz-1" });
     expect(captureMock).toHaveBeenCalledTimes(1);
   });
 
@@ -80,7 +80,7 @@ describe("refreshVercelDeploymentStatusForBusiness", () => {
       error: null,
     });
 
-    await refreshVercelDeploymentStatusForBusiness("biz-1", "user-1");
+    await refreshVercelDeploymentStatusForBusiness("biz-1", { id: "user-1" });
 
     expect(captureMock).not.toHaveBeenCalled();
   });
@@ -90,7 +90,7 @@ describe("refreshVercelDeploymentStatusForBusiness", () => {
       { ...readyDeployment, state: "BUILDING" },
     ]);
 
-    const result = await refreshVercelDeploymentStatusForBusiness("biz-1", "user-1");
+    const result = await refreshVercelDeploymentStatusForBusiness("biz-1", { id: "user-1" });
 
     expect(result.data?.status).toBe("building");
     expect(captureMock).not.toHaveBeenCalled();
@@ -103,7 +103,7 @@ describe("refreshVercelDeploymentStatusForBusiness", () => {
       error: null,
     });
 
-    const result = await refreshVercelDeploymentStatusForBusiness("biz-1", "user-1");
+    const result = await refreshVercelDeploymentStatusForBusiness("biz-1", { id: "user-1" });
 
     expect(result.data?.status).toBe("manual_action_required");
     expect(captureMock).not.toHaveBeenCalled();

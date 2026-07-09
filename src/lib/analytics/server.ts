@@ -5,10 +5,15 @@
 // capture call itself only enqueues the event, and the network flush is
 // deferred to `after()` (see instrumentation.md) so it runs once the
 // response has already been sent.
+//
+// Also a complete no-op for E2E/seeded-test traffic (see guardCapture in
+// ./guard.ts) unless M3_VERIFY=true, which re-enables capture and stamps
+// every event with verification_run: true.
 
 import { after } from "next/server";
 import { PostHog } from "posthog-node";
 import { ANALYTICS_EVENTS, type AnalyticsEventKey } from "@/lib/analytics/events";
+import { guardCapture } from "@/lib/analytics/guard";
 
 let client: PostHog | null | undefined;
 
@@ -31,18 +36,25 @@ function getClient(): PostHog | null {
  * Captures a server-side analytics event from the canonical catalog
  * (see `@/lib/analytics/events`). Fire-and-forget: does not throw, does not
  * await the network request, and does not block the caller.
+ *
+ * `user` is the caller's already-resolved authenticated user (e.g. from
+ * `requireUser()`) — its id becomes the PostHog distinctId, and its email is
+ * checked against the test-traffic guard so callers can't forget it.
  */
 export function capture(
   eventKey: AnalyticsEventKey,
-  distinctId: string,
+  user: { id: string; email?: string | null },
   properties: Record<string, unknown> = {},
 ): void {
   try {
+    const guard = guardCapture(user.email, properties);
+    if (!guard.allow) return;
+
     const posthog = getClient();
     if (!posthog) return;
 
     const event = ANALYTICS_EVENTS[eventKey];
-    posthog.capture({ distinctId, event: event.name, properties });
+    posthog.capture({ distinctId: user.id, event: event.name, properties: guard.properties });
 
     after(async () => {
       try {

@@ -101,9 +101,9 @@ export async function PATCH(
     }).catch(() => undefined);
 
     if (action === "approve") {
-      capture("TOOL_APPROVED", user.id, { business_id: existing.business_id });
+      capture("TOOL_APPROVED", user, { business_id: existing.business_id });
     } else if (action === "request_approval") {
-      capture("TOOL_APPROVAL_REQUESTED", user.id, { business_id: existing.business_id });
+      capture("TOOL_APPROVAL_REQUESTED", user, { business_id: existing.business_id });
     }
   }
 
