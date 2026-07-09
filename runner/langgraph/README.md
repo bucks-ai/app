@@ -312,6 +312,9 @@ Copy `.env.example` to `.env` and fill in:
 | `ROLLBACK_REVERT_POLICY` | Recovery plan to write after a failed/timed-out deploy: `manual`, `rollback`, `revert`, `rollback_then_revert`, or `disabled` (default: `manual`) |
 | `VERCEL_POLL_TIMEOUT` | Max seconds to poll a deployment before giving up (default: 180) |
 | `VERCEL_POLL_INTERVAL` | Seconds between deployment status reads (default: 5) |
+| `POSTHOG_PERSONAL_API_KEY` | Personal API key used by `tools/posthog_tools.py` to read event counts / funnels via the PostHog query API (optional — reads degrade to an error result when unset) |
+| `POSTHOG_PROJECT_ID` | PostHog project id to scope queries to (optional — required alongside `POSTHOG_PERSONAL_API_KEY`) |
+| `POSTHOG_HOST` | PostHog API host (default: `https://us.i.posthog.com`) |
 | `AUTO_APPLY_SQL` | Auto-apply scanned SQL (default: true) — **keep false until SQL parsing is verified** |
 | `SQL_ENVIRONMENT` | Target deployment environment used by the SQL approval gate: `production`, `staging`, `development`, or `preview`. When unset, inferred from `SUPABASE_URL` (URL containing "prod" → production, "stag" → staging, otherwise development). |
 | `SQL_APPROVAL_POLICY` | Controls when SQL approval is required: `auto` (defer to legacy `REQUIRE_SQL_APPROVAL`), `require_on_production` (default — require approval only when `SQL_ENVIRONMENT=production`), `require_on_warning` (require approval when the SQL scan has warnings or blocked terms), `always_require` (require approval in all environments). |
