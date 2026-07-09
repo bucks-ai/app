@@ -1338,12 +1338,20 @@ def _merge_via_pull_request(state: RunnerState, task: dict, branch: str) -> None
         sha,
         timeout_s=cfg.pr_checks_timeout_s,
         interval_s=cfg.pr_checks_poll_interval_s,
+        pr_number=state.pr_number,
     )
 
     if checks.get("timed_out"):
         _mark_merge_step_failed(
             state,
             f"pr_checks_timeout: PR #{state.pr_number} required checks did not finish within {cfg.pr_checks_timeout_s}s",
+        )
+        return
+
+    if checks.get("reason") == "pr_checks_no_runs":
+        _mark_merge_step_failed(
+            state,
+            f"pr_checks_no_runs: PR #{state.pr_number} never had any check runs scheduled",
         )
         return
 

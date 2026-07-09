@@ -309,6 +309,7 @@ Copy `.env.example` to `.env` and fill in:
 | `MERGE_VIA_PR` | Merge through a GitHub pull request + the checks/merge API instead of a local `git merge` + direct push to `main` (default: true — required when `main` has branch protection with required status checks). Set `false` only for lab repos without branch protection, to fall back to the old direct-merge path unchanged. |
 | `PR_CHECKS_TIMEOUT_S` | Max seconds to poll a PR's check runs before giving up (default: 900) |
 | `PR_CHECKS_POLL_INTERVAL_S` | Seconds between check-run polls (default: 20) |
+| `PR_CHECKS_EMPTY_GRACE_S` | Seconds to wait with zero check runs scheduled before attempting recovery (querying mergeable state and refreshing the branch); a further wait of the same length with still-zero runs fails fast with `pr_checks_no_runs` (default: 180) |
 | `AUTO_DEPLOY` | Auto-trigger Vercel (default: true) |
 | `AUTO_DEPLOY_POLL` | Poll the triggered deployment until it finishes (default: true) |
 | `BLOCK_ON_DEPLOY_FAILURE` | Stop the loop when a polled deploy fails or times out (default: true) |
@@ -486,7 +487,7 @@ Append-only JSONL flight recorder. Each line is a JSON event:
 {"event_type": "task_loaded", "timestamp": "...", "task_id": "...", "payload": {...}}
 ```
 
-Event types: `task_started`, `task_loaded`, `branch_rewritten`, `branch_rewrite_persisted`, `prompt_generated`, `fast_engineering_mode_injected`, `context_compressed`, `planner_started`, `planner_finished`, `worker_started`, `worker_finished`, `summary_captured`, `run_summary_digest`, `check_started`, `check_passed`, `check_failed`, `branch_created`, `commit_created`, `push_completed`, `merge_started`, `merge_completed`, `pr_created`, `pr_already_exists`, `pr_checks_poll_started`, `pr_checks_poll_tick`, `pr_checks_completed`, `pr_checks_failed`, `pr_checks_timeout`, `pr_merged`, `branch_cleanup_completed`, `deploy_skipped`, `deploy_started`, `deploy_completed`, `deploy_result`, `deploy_poll_started`, `deploy_poll_tick`, `deploy_poll_ready`, `deploy_poll_failed`, `deploy_poll_timeout`, `deploy_poll_unavailable`, `loop_blocked_on_deploy`, `rollback_revert_policy_required`, `deploy_url_validated`, `sql_detected`, `sql_scan_passed`, `sql_scan_blocked`, `sql_applied`, `resource_request_pending`, `resource_request_waiting`, `resource_request_fulfilled`, `next_task_requested`, `loop_stopped`, `slack_degraded`, `error`
+Event types: `task_started`, `task_loaded`, `branch_rewritten`, `branch_rewrite_persisted`, `prompt_generated`, `fast_engineering_mode_injected`, `context_compressed`, `planner_started`, `planner_finished`, `worker_started`, `worker_finished`, `summary_captured`, `run_summary_digest`, `check_started`, `check_passed`, `check_failed`, `branch_created`, `commit_created`, `push_completed`, `merge_started`, `merge_completed`, `pr_created`, `pr_already_exists`, `pr_checks_poll_started`, `pr_checks_poll_tick`, `pr_checks_completed`, `pr_checks_failed`, `pr_checks_timeout`, `pr_branch_updated`, `pr_checks_no_runs`, `pr_merged`, `branch_cleanup_completed`, `deploy_skipped`, `deploy_started`, `deploy_completed`, `deploy_result`, `deploy_poll_started`, `deploy_poll_tick`, `deploy_poll_ready`, `deploy_poll_failed`, `deploy_poll_timeout`, `deploy_poll_unavailable`, `loop_blocked_on_deploy`, `rollback_revert_policy_required`, `deploy_url_validated`, `sql_detected`, `sql_scan_passed`, `sql_scan_blocked`, `sql_applied`, `resource_request_pending`, `resource_request_waiting`, `resource_request_fulfilled`, `next_task_requested`, `loop_stopped`, `slack_degraded`, `error`
 
 ---
 
@@ -557,7 +558,16 @@ merges through a pull request instead:
 3. `poll_pr_checks` — poll `GET /repos/{repo}/commits/{sha}/check-runs` every
    `PR_CHECKS_POLL_INTERVAL_S` seconds (default 20) until every check run is
    `completed`, or `PR_CHECKS_TIMEOUT_S` seconds (default 900) elapse.
-   Success requires every run's conclusion to be `success` or `skipped`.
+   Success requires every run's conclusion to be `success` or `skipped`. If
+   check runs are still empty (never scheduled — e.g. a dropped GitHub Actions
+   webhook) after `PR_CHECKS_EMPTY_GRACE_S` seconds (default 180), the PR's
+   mergeable state is queried; if it is `dirty` (conflicting) or `behind`, the
+   branch is refreshed once via `PUT /pulls/{number}/update-branch` (logged as
+   `pr_branch_updated`) to re-trigger workflows, and polling continues. If
+   check runs are *still* empty after a further `PR_CHECKS_EMPTY_GRACE_S`
+   seconds, polling fails fast with the distinct reason `pr_checks_no_runs`
+   (logged and returned instead of the generic timeout) so the failure guard
+   sees an actionable, specific cause rather than an ambiguous timeout.
 4. `merge_pull_request` — merge the PR via `PUT
    /repos/{repo}/pulls/{number}/merge`, only once checks are green.
 5. `fetch_pull_main` + local feature-branch cleanup — unchanged from before.
