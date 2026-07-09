@@ -42,6 +42,31 @@ npm run test:e2e
 npm run test:e2e:ui
 ```
 
+## Analytics
+
+Server- and client-side event capture is documented in
+`docs/M3-EVENT-TAXONOMY.md`; the canonical event catalog lives in
+`src/lib/analytics/events.ts`.
+
+The core signup -> deploy funnel dashboard is provisioned from code rather
+than clicked together in the PostHog UI:
+
+```bash
+npm run analytics:provision
+```
+
+This runs `scripts/analytics/provision-dashboards.ts`, which idempotently
+creates or updates (by exact name, never duplicating):
+
+1. A funnel insight over `user_signed_up -> intake_submitted ->
+   blueprint_saved -> tool_approved -> repo_created -> deploy_succeeded`.
+2. A weekly trend of unique users who fired `deploy_succeeded`.
+3. A dashboard named `bucks.ai core funnel` containing both insights.
+
+It requires `POSTHOG_PERSONAL_API_KEY` and `POSTHOG_PROJECT_ID` (see
+`.env.example`); it skips cleanly with a message and does nothing if either
+is unset.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
