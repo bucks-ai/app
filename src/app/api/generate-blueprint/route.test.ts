@@ -1,15 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
-const { requireUserMock, openaiCreateMock, openaiConstructorMock, limitMock } = vi.hoisted(() => ({
+const { requireUserMock, openaiCreateMock, openaiConstructorMock, limitMock, captureMock } = vi.hoisted(() => ({
   requireUserMock: vi.fn(),
   openaiCreateMock: vi.fn(),
   openaiConstructorMock: vi.fn(),
   limitMock: vi.fn(),
+  captureMock: vi.fn(),
 }));
 
 vi.mock("@/lib/api-auth", () => ({
   requireUser: requireUserMock,
+}));
+
+vi.mock("@/lib/analytics/server", () => ({
+  capture: captureMock,
 }));
 
 vi.mock("@/lib/rate-limit", async (importOriginal) => {
@@ -94,6 +99,7 @@ describe("POST /api/generate-blueprint", () => {
     openaiCreateMock.mockReset();
     openaiConstructorMock.mockReset();
     limitMock.mockReset();
+    captureMock.mockReset();
     limitMock.mockResolvedValue({ allowed: true, remaining: 4 });
     process.env.OPENAI_API_KEY = "test-key";
     delete process.env.E2E_FAKE_AI;
@@ -132,6 +138,7 @@ describe("POST /api/generate-blueprint", () => {
     expect(limitMock).not.toHaveBeenCalled();
     expect(openaiConstructorMock).not.toHaveBeenCalled();
     expect(openaiCreateMock).not.toHaveBeenCalled();
+    expect(captureMock).not.toHaveBeenCalled();
   });
 
   it("returns the standard 429 envelope and never calls OpenAI when the rate limit is exceeded", async () => {
@@ -169,6 +176,7 @@ describe("POST /api/generate-blueprint", () => {
     expect(openaiCreateMock).toHaveBeenCalledTimes(1);
     const payload = await response.json();
     expect(payload.blueprint).toEqual(validBlueprint);
+    expect(captureMock).toHaveBeenCalledWith("BLUEPRINT_GENERATED", "user-1", {});
   });
 
   it("returns a 400 badRequest envelope with field issues and never calls OpenAI for a missing required field", async () => {
@@ -309,6 +317,7 @@ describe("POST /api/generate-blueprint", () => {
     const payload = await response.json();
     expect(payload.blueprint).toBeDefined();
     expect(payload.blueprint.businessSummary).toEqual(expect.any(String));
+    expect(captureMock).toHaveBeenCalledWith("BLUEPRINT_GENERATED", "user-1", {});
   });
 
   it("ignores E2E_FAKE_AI and calls OpenAI when NODE_ENV=production", async () => {

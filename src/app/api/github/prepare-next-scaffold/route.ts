@@ -12,6 +12,7 @@ import {
 import { apiError, badRequest, notFound, zodIssuesToFields } from "@/lib/api-error";
 import { prepareNextScaffoldBodySchema } from "@/lib/schemas/infra";
 import { limit, tooManyRequests, RATE_LIMITS } from "@/lib/rate-limit";
+import { capture } from "@/lib/analytics/server";
 
 function scaffoldErrorResponse(error: unknown) {
   const detail =
@@ -137,6 +138,8 @@ export async function POST(request: NextRequest) {
   } catch (e) {
     return scaffoldErrorResponse(e);
   }
+
+  capture("SCAFFOLD_PREPARED", user.id, { business_id: businessId });
 
   return Response.json({
     ok: true,

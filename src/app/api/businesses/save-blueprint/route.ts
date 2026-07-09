@@ -14,6 +14,7 @@ import { requireUser } from "@/lib/api-auth";
 import { apiError, badRequest, zodIssuesToFields } from "@/lib/api-error";
 import { saveBlueprintBodySchema } from "@/lib/schemas/save-blueprint";
 import { limit, tooManyRequests, RATE_LIMITS } from "@/lib/rate-limit";
+import { capture } from "@/lib/analytics/server";
 
 export async function POST(request: NextRequest) {
   if (!hasSupabaseEnv()) {
@@ -141,6 +142,8 @@ export async function POST(request: NextRequest) {
       },
     });
   }
+
+  capture("BLUEPRINT_SAVED", user.id, { business_id: business.id });
 
   return Response.json(
     {

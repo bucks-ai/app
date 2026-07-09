@@ -9,6 +9,7 @@ const {
   getToolPermissionsForBusinessMock,
   getLatestGitHubRepoForBusinessMock,
   prepareDeployableNextScaffoldMock,
+  captureMock,
 } = vi.hoisted(() => ({
   requireUserMock: vi.fn(),
   hasSupabaseEnvMock: vi.fn(),
@@ -17,10 +18,15 @@ const {
   getToolPermissionsForBusinessMock: vi.fn(),
   getLatestGitHubRepoForBusinessMock: vi.fn(),
   prepareDeployableNextScaffoldMock: vi.fn(),
+  captureMock: vi.fn(),
 }));
 
 vi.mock("@/lib/api-auth", () => ({
   requireUser: requireUserMock,
+}));
+
+vi.mock("@/lib/analytics/server", () => ({
+  capture: captureMock,
 }));
 
 vi.mock("@/lib/supabase/env", () => ({
@@ -74,6 +80,7 @@ describe("POST /api/github/prepare-next-scaffold", () => {
     getToolPermissionsForBusinessMock.mockReset();
     getLatestGitHubRepoForBusinessMock.mockReset();
     prepareDeployableNextScaffoldMock.mockReset();
+    captureMock.mockReset();
     hasSupabaseEnvMock.mockReturnValue(true);
     hasGitHubEnvMock.mockReturnValue(true);
   });
@@ -148,6 +155,7 @@ describe("POST /api/github/prepare-next-scaffold", () => {
       ok: true,
       data: { filesWritten: 3 },
     });
+    expect(captureMock).toHaveBeenCalledWith("SCAFFOLD_PREPARED", "user-1", { business_id: "biz-1" });
   });
 
   it("returns a 400 badRequest envelope when businessId is missing", async () => {
