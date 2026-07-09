@@ -9,6 +9,7 @@ import {
 import { apiError, badRequest, notFound, zodIssuesToFields } from "@/lib/api-error";
 import { updateToolPermissionBodySchema } from "@/lib/schemas/infra";
 import { limit, tooManyRequests, RATE_LIMITS } from "@/lib/rate-limit";
+import { capture } from "@/lib/analytics/server";
 
 // ---------------------------------------------------------------------------
 // PATCH /api/tool-permissions/[id]
@@ -98,6 +99,12 @@ export async function PATCH(
         action,
       },
     }).catch(() => undefined);
+
+    if (action === "approve") {
+      capture("TOOL_APPROVED", user.id, { business_id: existing.business_id });
+    } else if (action === "request_approval") {
+      capture("TOOL_APPROVAL_REQUESTED", user.id, { business_id: existing.business_id });
+    }
   }
 
   return Response.json({ ok: true, data: updated });

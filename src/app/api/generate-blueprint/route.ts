@@ -8,6 +8,7 @@ import { generateBlueprintBodySchema } from "@/lib/schemas/generate-blueprint";
 import { businessBlueprintOutputSchema } from "@/lib/schemas/blueprint-output";
 import { limit, tooManyRequests, RATE_LIMITS } from "@/lib/rate-limit";
 import { buildFakeBlueprint, isFakeAiEnabled } from "@/lib/e2e-fake-ai";
+import { capture } from "@/lib/analytics/server";
 
 export async function POST(request: NextRequest) {
   const { user, response } = await requireUser();
@@ -55,6 +56,7 @@ export async function POST(request: NextRequest) {
       );
       return aiOutputInvalid("The AI returned a blueprint that failed validation.");
     }
+    capture("BLUEPRINT_GENERATED", user.id, {});
     return Response.json({ blueprint: parsedFixture.data }, { status: 200 });
   }
 
@@ -99,5 +101,6 @@ export async function POST(request: NextRequest) {
     return aiOutputInvalid("The AI returned a blueprint that failed validation.");
   }
 
+  capture("BLUEPRINT_GENERATED", user.id, {});
   return Response.json({ blueprint: parsedBlueprint.data }, { status: 200 });
 }
