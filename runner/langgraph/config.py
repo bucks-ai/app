@@ -80,6 +80,15 @@ class RunnerConfig:
     vercel_project_id: Optional[str] = field(
         default_factory=lambda: os.getenv("VERCEL_PROJECT_ID")
     )
+    posthog_personal_api_key: Optional[str] = field(
+        default_factory=lambda: os.getenv("POSTHOG_PERSONAL_API_KEY")
+    )
+    posthog_project_id: Optional[str] = field(
+        default_factory=lambda: os.getenv("POSTHOG_PROJECT_ID")
+    )
+    posthog_host: str = field(
+        default_factory=lambda: os.getenv("POSTHOG_HOST", "https://us.i.posthog.com")
+    )
     slack_webhook_url: Optional[str] = field(
         default_factory=lambda: os.getenv("SLACK_WEBHOOK_URL")
     )
@@ -437,6 +446,10 @@ class RunnerConfig:
         return bool(self.vercel_token)
 
     @property
+    def has_posthog(self) -> bool:
+        return bool(self.posthog_personal_api_key and self.posthog_project_id)
+
+    @property
     def has_slack(self) -> bool:
         return bool(self.slack_webhook_url)
 
@@ -457,6 +470,9 @@ class RunnerConfig:
             "has_direct_database_url": bool(self.direct_database_url),
             "vercel": self.has_vercel,
             "vercel_project_id": self.vercel_project_id,
+            "posthog": self.has_posthog,
+            "posthog_project_id": self.posthog_project_id,
+            "posthog_host": self.posthog_host,
             "slack": self.has_slack,
             "slack_notify": self.slack_notify,
             "slack_interactive_approvals": self.slack_interactive_approvals,
