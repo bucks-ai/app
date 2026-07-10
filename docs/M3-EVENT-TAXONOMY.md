@@ -2,9 +2,8 @@
 
 Source of truth: `src/lib/analytics/events.ts` (`ANALYTICS_EVENTS`). This
 document explains the funnel these events model and the conventions every
-future `posthog.capture()` call must follow. This task defines the catalog
-and the capture-call conventions; the call-site table below records the
-currently wired capture points.
+future `posthog.capture()` call must follow. It also records the capture call
+sites that are currently wired.
 
 ## Funnel order
 
@@ -107,6 +106,21 @@ account first exists:
 There is deliberately no client-side capture of `user_signed_up`: pick one
 authoritative source (server, since it's the only place that can tell a real
 signup from a duplicate) and never fire both.
+
+## Intake capture points
+
+`intake_started` and `intake_submitted` are captured client-side in the intake
+wizard (`src/components/intake/IdeaIntakeWizard.tsx`) through the typed client
+helper path:
+
+| Event name | Call site | Firing rule |
+|---|---|---|
+| `intake_started` | `IdeaIntakeWizard` mount effect via `captureIntakeStarted()` (`src/lib/analytics/intake.ts`) | Once per wizard mount; guarded against re-render double-fires. |
+| `intake_submitted` | Successful `/api/generate-blueprint` response handler via `captureIntakeSubmitted()` (`src/lib/analytics/intake.ts`) | Only after the API returns a valid blueprint and before the preview/save flow starts. |
+
+Both helpers call `src/lib/analytics/client.ts`, which resolves canonical event
+keys from `ANALYTICS_EVENTS` and runs through `guardCapture()` before sending
+anything to PostHog.
 
 ## Test-traffic guard
 
