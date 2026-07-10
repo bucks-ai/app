@@ -39,6 +39,7 @@ import type {
 } from "@/types/agents";
 import type {
   AgentActivityLogRecord,
+  AgentRunDatabaseRecord,
   BusinessBlueprintRecord,
   HumanRequiredActionRecord,
 } from "@/types/database";
@@ -61,6 +62,15 @@ function ok<T>(data: T): Result<T> {
 
 function err<T>(message: string, code = "unknown_error"): Result<T> {
   return { data: null, error: message, code };
+}
+
+function agentRunTimestamp(run: Pick<
+  AgentRunDatabaseRecord,
+  "completed_at" | "started_at" | "updated_at" | "created_at"
+>): number {
+  const value = run.completed_at ?? run.started_at ?? run.updated_at ?? run.created_at;
+  const timestamp = new Date(value).getTime();
+  return Number.isNaN(timestamp) ? 0 : timestamp;
 }
 
 // ---------------------------------------------------------------------------
@@ -585,14 +595,15 @@ export async function getAgentRegistryForBusiness(
   }
 
   // Build a per-agent latest-run map when agent_runs is available.
-  // Runs are returned sorted created_at DESC, so the first occurrence per agent_id is latest.
   // If the table is missing, leave undefined so the resolver falls back gracefully.
-  let latestRunByAgent: Record<string, { status: string } | null> | undefined;
+  let latestRunByAgent: Record<string, { status: string; timestamp: number } | null> | undefined;
   if (agentRunsResult.data && agentRunsResult.code !== "agent_runs_schema_missing") {
     latestRunByAgent = {};
     for (const run of agentRunsResult.data) {
-      if (!(run.agent_id in latestRunByAgent)) {
-        latestRunByAgent[run.agent_id] = { status: run.status };
+      const current = latestRunByAgent[run.agent_id];
+      const timestamp = agentRunTimestamp(run);
+      if (!current || timestamp > current.timestamp) {
+        latestRunByAgent[run.agent_id] = { status: run.status, timestamp };
       }
     }
   }
