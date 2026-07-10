@@ -7,6 +7,8 @@ Runs standalone (no pytest dependency):
 Covers:
   - ``seed_tasks_from_mission`` pure conversion helper
   - ``check_mission_completion`` Supabase polling helper (stubbed client)
+  - ``fetch_next_queued_mission`` runner_target claim gate (CRITICAL SAFETY —
+    a mission with runner_target="business" must never be claimed)
   - Graph node ``seed_mission_queue_if_needed`` (Supabase stubbed via monkeypatching)
   - Routing: ``_route_after_compile_mission`` and ``_route_after_seed_mission_queue``
   - Graph wiring: node present in compiled graph
@@ -20,6 +22,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from tools.seeded_mission_queue import (
     seed_tasks_from_mission,
     check_mission_completion,
+    fetch_next_queued_mission,
 )
 import graph
 from state import RunnerState
@@ -237,6 +240,102 @@ def test_check_completion_blocked_counts_as_terminal():
     result = _with_stub_client(rows, lambda: check_mission_completion("uuid-1"))
     # blocked is terminal but not complete → failed status
     assert result["status"] == "failed"
+
+
+# ---------------------------------------------------------------------------
+# fetch_next_queued_mission — CRITICAL SAFETY: runner_target claim gate
+#
+# Until M4b lands per-business sandboxing, the runner must NEVER claim a
+# mission created for a customer business (runner_target="business", e.g.
+# via the app's Execute button, src/app/api/businesses/[id]/execute). Only
+# runner_target="self" missions may be claimed and executed against the
+# bucks-ai repo.
+# ---------------------------------------------------------------------------
+
+def _stub_filtering_client(rows):
+    """Fake Supabase client whose ``.eq()`` actually filters *rows*.
+
+    Unlike ``_stub_client`` above (which ignores filter args — sufficient for
+    the completion-check tests), this stub applies every ``.eq(field, value)``
+    call so tests can prove the claim query's WHERE clause, not just that some
+    row was returned.
+    """
+    class FakeResult:
+        def __init__(self, data):
+            self.data = data
+
+    class FakeQuery:
+        def __init__(self, rows):
+            self._rows = rows
+
+        def select(self, *a):
+            return self
+
+        def eq(self, field, value):
+            self._rows = [r for r in self._rows if r.get(field) == value]
+            return self
+
+        def order(self, *a):
+            return self
+
+        def limit(self, n):
+            self._rows = self._rows[:n]
+            return self
+
+        def execute(self):
+            return FakeResult(self._rows)
+
+    class FakeTable:
+        def table(self, name):
+            return FakeQuery(rows)
+
+    return FakeTable()
+
+
+def _with_filtering_stub_client(rows, fn):
+    import tools.seeded_mission_queue as smq
+    original = smq._get_client
+    smq._get_client = lambda: _stub_filtering_client(rows)
+    try:
+        return fn()
+    finally:
+        smq._get_client = original
+
+
+def test_fetch_next_queued_mission_skips_business_target():
+    rows = [
+        {"id": "biz-1", "status": "queued", "runner_target": "business", "created_at": "2026-01-01"},
+    ]
+    result = _with_filtering_stub_client(rows, fetch_next_queued_mission)
+    assert result is None
+
+
+def test_fetch_next_queued_mission_claims_self_target():
+    rows = [
+        {"id": "self-1", "status": "queued", "runner_target": "self", "created_at": "2026-01-01"},
+    ]
+    result = _with_filtering_stub_client(rows, fetch_next_queued_mission)
+    assert result is not None
+    assert result["id"] == "self-1"
+
+
+def test_fetch_next_queued_mission_prefers_self_over_business():
+    rows = [
+        {"id": "biz-1", "status": "queued", "runner_target": "business", "created_at": "2026-01-01"},
+        {"id": "self-1", "status": "queued", "runner_target": "self", "created_at": "2026-01-02"},
+    ]
+    result = _with_filtering_stub_client(rows, fetch_next_queued_mission)
+    assert result is not None
+    assert result["id"] == "self-1"
+
+
+def test_fetch_next_queued_mission_none_when_only_business_targets():
+    rows = [
+        {"id": "biz-1", "status": "queued", "runner_target": "business", "created_at": "2026-01-01"},
+        {"id": "biz-2", "status": "queued", "runner_target": "business", "created_at": "2026-01-02"},
+    ]
+    result = _with_filtering_stub_client(rows, fetch_next_queued_mission)
+    assert result is None
 
 
 # ---------------------------------------------------------------------------
