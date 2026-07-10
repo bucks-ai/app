@@ -136,23 +136,36 @@ def cmd_run_once(args):
             print(f"Stop reason: {result.stop_reason}")
 
 
-def cmd_run_loop(args):
-    from graph import graph
-    from state import RunnerState
-    from tools.log_tools import read_state, update_state
-    from datetime import datetime
+def start_fresh_session(init):
+    """Reset per-session fields so a restarted loop starts clean.
 
-    saved = read_state()
-    init = RunnerState(**{k: v for k, v in saved.items() if k in RunnerState.model_fields})
-    # Every run-loop invocation is a fresh session. A stop_reason, loop_count,
-    # failure streak, or started_at left over from a previous run would
-    # otherwise stop this run on its first cycle (instant "awaiting_resources"
-    # / "max_loop_tasks" / "max_runtime" stops after a restart).
+    Every run-loop invocation is a fresh session. A stop_reason, loop_count,
+    failure streak, or started_at left over from a previous run would
+    otherwise stop this run on its first cycle (instant "awaiting_resources"
+    / "max_loop_tasks" / "max_runtime" stops after a restart). Likewise,
+    task_attempt_counts carried over from .runtime/state.local.json would let
+    the repeated-task guard insta-block a task on the new session's very
+    first attempt, even though that task only exhausted its attempts in a
+    previous, unrelated failure cascade — the guard is meant to measure
+    attempts within one session, not across restarts.
+    """
     init.stop_reason = None
     init.loop_count = 0
     init.consecutive_failures = 0
     init.started_at = datetime.utcnow().isoformat()
     init.status = "running"
+    init.task_attempt_counts = {}
+    return init
+
+
+def cmd_run_loop(args):
+    from graph import graph
+    from state import RunnerState
+    from tools.log_tools import read_state, update_state
+
+    saved = read_state()
+    init = RunnerState(**{k: v for k, v in saved.items() if k in RunnerState.model_fields})
+    init = start_fresh_session(init)
 
     print("Starting autonomous loop (Ctrl+C to stop)...")
     def _get(s, key, default=None):

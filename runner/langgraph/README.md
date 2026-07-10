@@ -361,6 +361,9 @@ Copy `.env.example` to `.env` and fill in:
 | `FAILURE_GUARD` | Retry failed tasks and stop the loop on repeated failures (default: true) |
 | `MAX_TASK_RETRIES` | Times a failed task is requeued before giving up (default: 1) |
 | `MAX_CONSECUTIVE_FAILURES` | Consecutive failures that trip the circuit breaker and halt the loop (default: 3) |
+| `MAX_TASK_ATTEMPTS` | Times a single task ID can be run within one run-loop session before the repeated-task guard halts the loop; counts reset at the start of every run-loop session, so a task never carries attempts over from a previous session; 0 disables the guard (default: 3) |
+| `MAX_REPEATED_ERRORS` | Occurrences of the same (or near-identical) error message within one session before the repeated-error guard halts the loop; 0 disables the guard (default: 3) |
+| `REPEATED_ERROR_WINDOW` | How many recent failures the repeated-error guard looks back across when counting matches; 0 means unbounded (default: 10) |
 | `FAILURE_RETRY_BACKOFF` | Apply exponential backoff before retrying under degraded worker conditions (timeout, health-probe failure, or sustained consecutive failures) (default: true) |
 | `FAILURE_RETRY_BACKOFF_BASE_S` | Base backoff delay in seconds for the first degraded retry (default: 30.0) |
 | `FAILURE_RETRY_BACKOFF_MULTIPLIER` | Exponential multiplier applied per retry attempt (default: 2.0) |
@@ -506,6 +509,12 @@ Current loop state, updated after every node. Stored in `.runtime/state.local.js
 ```
 
 On first run, the runner migrates any existing `state.json` to `.runtime/state.local.json` automatically.
+
+`run-loop` treats every invocation as a fresh session: `main.start_fresh_session`
+resets `stop_reason`, `loop_count`, `consecutive_failures`, `started_at`, and
+`task_attempt_counts` before the first cycle, so per-session guard counters
+persisted here from a previous run (or restart) don't leak into the new one —
+see **Repeated-Task & Repeated-Error Guards** below.
 
 ---
 
@@ -665,6 +674,41 @@ restores the old behavior: mark failed and continue.
 The decision logic in `tools/failure_guard.py` (`task_retry_count`,
 `evaluate_failure`) is pure/side-effect free and unit-tested in
 `tests/test_failure_guard.py`, which also covers the graph node.
+
+---
+
+## Repeated-Task & Repeated-Error Guards
+
+Two more circuit breakers run in `update_logs_and_state`, alongside the
+consecutive-failure breaker above, to catch infinite loops it misses:
+
+1. **Repeated-task guard** — tracks how many times each task ID has run
+   this session in `state.task_attempt_counts`. Once a task is attempted
+   more than `MAX_TASK_ATTEMPTS` times (regardless of success/failure) the
+   guard sets `stop_reason` (`repeated_task`) and logs
+   `loop_blocked_on_repeated_task`. This catches a task cycling through the
+   queue indefinitely (planner re-queuing the same task, a bug in the queue
+   mutation logic, etc.).
+2. **Repeated-error guard** — tracks recent failure messages in
+   `state.error_history`. Once the same (or near-identical) error appears
+   `MAX_REPEATED_ERRORS` times within the last `REPEATED_ERROR_WINDOW`
+   failures, the guard sets `stop_reason` (`repeated_errors`) — a signal the
+   runner cannot self-repair (broken environment, missing dependency,
+   invalid config).
+
+Both counters are **session-local**: `main.start_fresh_session` resets
+`task_attempt_counts` (along with `stop_reason`, `loop_count`, and
+`consecutive_failures`) every time `run-loop` starts, so attempts from a
+previous session never carry over via `.runtime/state.local.json`. Without
+this reset, a task that exhausted its attempts in an earlier, unrelated
+failure cascade would be insta-blocked by the repeated-task guard the moment
+a fresh session picked it up again. Set `MAX_TASK_ATTEMPTS=0` or
+`MAX_REPEATED_ERRORS=0` to disable either guard.
+
+The decision logic in `tools/repeated_error_guard.py`
+(`evaluate_task_repetition`, `evaluate_error_repetition`) is pure/side-effect
+free and unit-tested in `tests/test_repeated_error_guard.py`; the fresh-session
+reset itself is unit-tested in `tests/test_run_loop_session_reset.py`.
 
 ---
 
