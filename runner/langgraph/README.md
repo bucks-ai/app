@@ -300,6 +300,8 @@ Copy `.env.example` to `.env` and fill in:
 | `SLACK_BOT_TOKEN` | Bot token (`xoxb-...`) used by `approvals_daemon.py` to post/update messages (needs `chat:write`) |
 | `SLACK_APP_TOKEN` | App-level token (`xapp-...`) used by `approvals_daemon.py` for Socket Mode (needs `connections:write`) |
 | `SLACK_CHANNEL_ID` | Channel `approvals_daemon.py` posts approval requests into |
+| `APP_APPROVALS_ENABLED` | Enable `app_approvals_daemon.py` (in-app approval queue mirroring outbox/inbox) (default: false) |
+| `RUNNER_OWNER_USER_ID` | Supabase `auth.users.id` of the operator — stamped on every `approvals` row so RLS scopes it to the right account |
 | `BUCKS_AI_REPO_PATH` | Path to repo (default: `/home/arnavt/bucks-ai`) |
 | `RUNNER_MODE` | `browser_or_cli` (default) |
 | `MAX_LOOP_TASKS` | Max tasks per run (default: 10) |
@@ -964,6 +966,53 @@ The request-classification, Block Kit formatting, and button-click-to-inbox-file
 mapping are all pure functions in `tools/slack_approvals.py`, unit-tested
 without any Slack calls (see `tests/test_slack_approvals.py` and
 `tests/test_approvals_daemon.py`).
+
+---
+
+## In-App Approval Queue
+
+`app_approvals_daemon.py` gives the bucks.ai app the same approval power as
+the Slack daemon above, over the same outbox/inbox conventions — again
+**without changing the gates or the graph at all**. It reuses
+`tools/slack_approvals.classify_outbox_file` to recognize approval-request
+files, and `tools/slack_approvals.resolve_action` to decide what to write to
+`inbox/`; the app-specific mapping (outbox classification -> `approvals` table
+row, table row -> inbox write) lives in `tools/app_approvals.py`.
+
+Run it alongside the runner loop, as a separate process:
+
+```bash
+python app_approvals_daemon.py &
+python main.py run-loop
+```
+
+Required env vars (see the table above): `APP_APPROVALS_ENABLED=true`,
+`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `RUNNER_OWNER_USER_ID`. Missing
+any of these is a clear startup error and a nonzero exit, same as the Slack
+daemon.
+
+How it works:
+
+- Polls `outbox/` every few seconds. Any new file recognized as one of the
+  four approval-request conventions gets upserted into the `approvals` table
+  (`supabase/m4a-approvals-queue.sql`) as a `pending` row — `(request_type,
+  request_id)` is unique, so re-scanning the same file is a no-op.
+- The app (Approvals panel on the business Actions tab) lists pending rows
+  and lets the founder Approve/Reject via an authenticated API route
+  (`src/app/api/approvals/[id]/route.ts`), which flips the row's `status`.
+- The daemon separately polls the `approvals` table for rows that are decided
+  (`approved`/`rejected`) but not yet `inbox_synced_at` — for each, it writes
+  the exact same `inbox/` fulfillment file the Slack daemon would write
+  (existence check before write), then stamps `inbox_synced_at`. This is what
+  makes the two daemons idempotent with each other: whichever writes the
+  inbox file first wins; the other just finds it already there.
+- Never writes secret values into the `approvals` table: the `body` column is
+  sanitized/truncated the same way the Slack message excerpt is (see
+  `tools/slack_approvals.sanitize_excerpt`).
+
+The classification-to-row and decision-to-inbox-file mapping are pure
+functions in `tools/app_approvals.py`, unit-tested without any Supabase calls
+(see `tests/test_app_approvals.py` and `tests/test_app_approvals_daemon.py`).
 
 ---
 

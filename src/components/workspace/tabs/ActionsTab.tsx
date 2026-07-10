@@ -1,5 +1,6 @@
 import type { DashboardBusiness } from "@/components/dashboard/mock-data";
 import type { BusinessExecutionStatus } from "@/types/execution-ui";
+import { ApprovalsPanel } from "@/components/workspace/tabs/ApprovalsPanel";
 
 type ActionsTabProps = {
   business: DashboardBusiness;
@@ -97,19 +98,23 @@ export function ActionsTab({ business, executionStatus }: ActionsTabProps) {
 
   if (actions.length === 0) {
     return (
-      <div className="rounded-lg border border-border bg-surface p-8 text-center">
-        <p className="font-mono text-xs uppercase tracking-[0.24em] text-muted">
-          No pending actions
-        </p>
-        <p className="mt-2 text-sm text-muted">
-          All current actions are complete or no inputs are needed.
-        </p>
+      <div>
+        <ApprovalsPanel />
+        <div className="rounded-lg border border-border bg-surface p-8 text-center">
+          <p className="font-mono text-xs uppercase tracking-[0.24em] text-muted">
+            No pending actions
+          </p>
+          <p className="mt-2 text-sm text-muted">
+            All current actions are complete or no inputs are needed.
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="space-y-2">
+      <ApprovalsPanel />
       {actions.map((action) => (
         <div
           key={action.id}

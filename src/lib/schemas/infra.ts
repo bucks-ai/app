@@ -1,6 +1,6 @@
 // Zod schemas for the agents and infrastructure mutating routes:
 // src/app/api/businesses/[id]/agent-runs/infer, src/app/api/github/**,
-// src/app/api/vercel/**, src/app/api/tool-permissions/**.
+// src/app/api/vercel/**, src/app/api/tool-permissions/**, src/app/api/approvals/**.
 
 import { z } from "zod";
 
@@ -95,3 +95,15 @@ export const updateToolPermissionBodySchema = z.object({
 });
 
 export type UpdateToolPermissionBody = z.infer<typeof updateToolPermissionBodySchema>;
+
+// ---------------------------------------------------------------------------
+// PATCH /api/approvals/[id]
+// ---------------------------------------------------------------------------
+
+export const approvalActionSchema = z.enum(["approve", "reject"]);
+
+export const updateApprovalBodySchema = z.object({
+  action: approvalActionSchema,
+});
+
+export type UpdateApprovalBody = z.infer<typeof updateApprovalBodySchema>;

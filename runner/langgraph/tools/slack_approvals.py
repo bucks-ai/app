@@ -105,6 +105,13 @@ def classify_outbox_file(filename: str) -> Optional[dict]:
     return None
 
 
+def display_title(request_type: str) -> str:
+    """Human-readable title for a request_type (used by both Slack and app-side surfaces)."""
+    if request_type not in APPROVAL_TYPES:
+        raise ValueError(f"unknown request_type: {request_type!r}")
+    return _DISPLAY_TITLES[request_type]
+
+
 def inbox_filename_for(request_type: str, request_id: str) -> str:
     """The exact inbox/ fulfillment filename the graph polls for, per type."""
     if request_type == "merge_approval":
