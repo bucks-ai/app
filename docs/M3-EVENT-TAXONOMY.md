@@ -65,6 +65,22 @@ onward requires one.
 | `vercel_project_created` | A Vercel project is created and linked to the business repository. | `business_id` |
 | `deploy_succeeded` | A deployment for the business completes successfully and is publicly reachable. | `business_id` |
 
+## Capture Call Sites
+
+| Event name | Capture side | Call site | Notes |
+|---|---|---|---|
+| `user_signed_up` | server | `src/app/api/auth/signup/route.ts` | Fires once after Supabase confirms a new email signup. |
+| `intake_started` | client | `src/components/intake/IdeaIntakeWizard.tsx` | Fires once when the intake wizard first mounts, guarded against re-render double-fires. |
+| `intake_submitted` | client | `src/components/intake/IdeaIntakeWizard.tsx` | Fires after the completed intake submit succeeds and returns a blueprint. |
+| `blueprint_generated` | — | — | Catalogued, not wired yet. |
+| `blueprint_saved` | server | `src/app/api/businesses/save-blueprint/route.ts` | Fires after the business record is persisted. |
+| `tool_approval_requested` | server | `src/app/api/tool-permissions/[id]/route.ts` | Fires when a permission enters founder approval. |
+| `tool_approved` | server | `src/app/api/tool-permissions/[id]/route.ts` | Fires when a founder approves a pending permission. |
+| `repo_created` | server | `src/app/api/github/create-repo/route.ts` | Fires after GitHub repository creation succeeds. |
+| `scaffold_prepared` | server | `src/app/api/github/prepare-next-scaffold/route.ts` | Fires after scaffold files are prepared. |
+| `vercel_project_created` | — | — | Catalogued, not wired yet. |
+| `deploy_succeeded` | server | `src/lib/vercel/deployment-status.ts` | Fires the first time a deployment reports ready. |
+
 ## `user_signed_up` capture point
 
 `user_signed_up` is captured **server-side only**, once, in

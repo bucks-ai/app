@@ -408,9 +408,9 @@ export function IdeaIntakeWizard() {
       }
 
       setGenerateState({ status: "idle" });
+      captureIntakeSubmitted();
       setBlueprint(data.blueprint);
       setIsPreviewVisible(true);
-      captureIntakeSubmitted();
       void saveGeneratedBlueprint(data.blueprint);
     } catch {
       setGenerateState({
