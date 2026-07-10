@@ -10,6 +10,26 @@ type AgentStatusBadgeProps = {
 };
 
 function badgeStyles(kind: BadgeKind, value: string) {
+  if (kind === "run") {
+    switch (value) {
+      case "completed":
+        return "border-success/20 bg-success/6 text-success";
+      case "failed":
+        return "border-error/30 bg-error/10 text-error";
+      case "blocked":
+      case "waiting_for_approval":
+        return "border-warning/30 bg-warning/10 text-warning";
+      case "running":
+        return "border-accent/35 bg-accent/12 text-accent";
+      case "queued":
+        return "border-border bg-background text-secondary";
+      case "skipped":
+        return "border-warning/25 bg-warning/8 text-warning";
+      default:
+        return "border-border bg-background text-secondary";
+    }
+  }
+
   if (kind === "risk") {
     if (value === "high" || value === "human_controlled") {
       return "border-error/30 bg-error/10 text-error";
