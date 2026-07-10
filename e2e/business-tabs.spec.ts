@@ -117,7 +117,7 @@ test.describe("business detail tabs", () => {
         .or(page.getByText("No agents are available for this business yet."))
         .first()
     ).toBeVisible({ timeout: 15000 });
-    await expect(page.getByText("Run history")).toBeVisible();
+    await expect(page.getByText("Run history", { exact: true })).toBeVisible();
     await expect(
       page
         .getByText("No agent runs are recorded yet.")
