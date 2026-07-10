@@ -115,3 +115,4 @@ class RunnerState(BaseModel):
     claude_subscription_cooldown_until: Optional[str] = None  # ISO-8601 UTC resume timestamp; set when Claude rate-limits in subscription mode
     claude_subscription_cooldown_count: int = 0      # cumulative cooldown events this session
     cooldown_wait_seconds_total: float = 0.0         # cumulative wall-clock seconds slept on cooldown waits this session; excluded from the MAX_RUNTIME_MINUTES budget
+    current_agent_run_id: Optional[str] = None       # Supabase agent_runs.id for the in-flight seeded-mission task, if any
