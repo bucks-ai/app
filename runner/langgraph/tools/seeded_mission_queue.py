@@ -140,6 +140,8 @@ def seed_tasks_from_mission(mission: dict, mission_tasks: list[dict]) -> list[di
     mission_id = str(mission.get("id", ""))
     mission_name = mission.get("name", "mission")
     mission_slug = _slug(mission_name, max_len=30)
+    business_id = mission.get("business_id")
+    user_id = mission.get("user_id")
     now = _now_iso()
     tasks: list[dict] = []
 
@@ -163,6 +165,8 @@ def seed_tasks_from_mission(mission: dict, mission_tasks: list[dict]) -> list[di
             "mission": mission_name,
             "seeded_mission_id": mission_id,
             "seeded_task_id": str(row.get("id", "")),
+            "business_id": business_id,
+            "user_id": user_id,
             "created_at": now,
         }
         if row.get("preferred_worker"):
