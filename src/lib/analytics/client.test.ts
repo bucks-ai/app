@@ -16,9 +16,11 @@ describe("analytics client capture", () => {
   const originalPublicFlag = process.env.NEXT_PUBLIC_E2E_FAKE_AI;
   const originalVerify = process.env.M3_VERIFY;
   const originalTestEmail = process.env.TEST_USER_EMAIL;
+  const originalPublicPosthogKey = process.env.NEXT_PUBLIC_POSTHOG_KEY;
 
   beforeEach(() => {
     captureMock.mockReset();
+    process.env.NEXT_PUBLIC_POSTHOG_KEY = "phc_test";
     delete process.env.E2E_FAKE_AI;
     delete process.env.NEXT_PUBLIC_E2E_FAKE_AI;
     delete process.env.M3_VERIFY;
@@ -34,6 +36,8 @@ describe("analytics client capture", () => {
     else process.env.M3_VERIFY = originalVerify;
     if (originalTestEmail === undefined) delete process.env.TEST_USER_EMAIL;
     else process.env.TEST_USER_EMAIL = originalTestEmail;
+    if (originalPublicPosthogKey === undefined) delete process.env.NEXT_PUBLIC_POSTHOG_KEY;
+    else process.env.NEXT_PUBLIC_POSTHOG_KEY = originalPublicPosthogKey;
   });
 
   it("forwards the event to posthog-js when traffic is not test traffic", async () => {
@@ -57,7 +61,16 @@ describe("analytics client capture", () => {
     process.env.TEST_USER_EMAIL = "qa@bucks.ai";
     const { capture } = await importFreshClientModule();
 
-    capture("intake_started", {}, "qa@bucks.ai");
+    capture("INTAKE_STARTED", {}, "qa@bucks.ai");
+
+    expect(captureMock).not.toHaveBeenCalled();
+  });
+
+  it("no-ops when NEXT_PUBLIC_POSTHOG_KEY is unset", async () => {
+    delete process.env.NEXT_PUBLIC_POSTHOG_KEY;
+    const { capture } = await importFreshClientModule();
+
+    capture("INTAKE_STARTED");
 
     expect(captureMock).not.toHaveBeenCalled();
   });
@@ -67,7 +80,7 @@ describe("analytics client capture", () => {
     process.env.M3_VERIFY = "true";
     const { capture } = await importFreshClientModule();
 
-    capture("intake_started", { foo: "bar" });
+    capture("INTAKE_STARTED", { foo: "bar" });
 
     expect(captureMock).toHaveBeenCalledWith("intake_started", { foo: "bar", verification_run: true });
   });
