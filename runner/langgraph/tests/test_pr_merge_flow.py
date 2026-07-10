@@ -67,10 +67,11 @@ class _FakeConfig:
     """Minimal stand-in for RunnerConfig, used to isolate github_tools tests
     from the real process-wide config singleton."""
 
-    def __init__(self, github_token="test-token", timeout=900, interval=20):
+    def __init__(self, github_token="test-token", timeout=900, interval=20, empty_grace=180):
         self.github_token = github_token
         self.pr_checks_timeout_s = timeout
         self.pr_checks_poll_interval_s = interval
+        self.pr_checks_empty_grace_s = empty_grace
 
     @property
     def has_github(self):
@@ -293,6 +294,131 @@ def test_poll_pr_checks_treats_empty_runs_as_not_complete():
     assert result["polls"] == 2, result
 
 
+def _routed_get(check_runs_responses, pr_details_response=None):
+    """Fake requests.get that routes on URL: .../check-runs vs .../pulls/{n}."""
+    check_runs_responses = list(check_runs_responses)
+
+    def _get(url, headers=None, params=None, timeout=None):
+        if url.endswith("/check-runs"):
+            return check_runs_responses.pop(0)
+        return pr_details_response
+
+    return _get
+
+
+def test_poll_pr_checks_empty_runs_recovers_via_branch_update_when_conflicting():
+    """Live-incident scenario: check_runs stays empty past the grace window.
+    Mergeable state is 'dirty' (conflicting), so the branch should be
+    refreshed exactly once via update-branch, and polling should continue
+    (not fail) once real check runs eventually show up."""
+    clock = FakeClock()
+    github_tools.requests.get = _routed_get(
+        [
+            _FakeResponse(200, json_data={"check_runs": []}),   # elapsed 0
+            _FakeResponse(200, json_data={"check_runs": []}),   # elapsed 10 -> hits grace(10)
+            _FakeResponse(200, json_data={"check_runs": [
+                {"name": "build", "status": "completed", "conclusion": "success"},
+            ]}),
+        ],
+        pr_details_response=_FakeResponse(200, json_data={"mergeable_state": "dirty"}),
+    )
+    put_calls = []
+
+    def _put(url, headers=None, timeout=None):
+        put_calls.append(url)
+        return _FakeResponse(202, json_data={})
+
+    github_tools.requests.put = _put
+
+    result = _with_fake_config(
+        _FakeConfig(empty_grace=10),
+        lambda: github_tools.poll_pr_checks(
+            "owner/repo", "abc123", timeout_s=100, interval_s=10,
+            sleep=clock.sleep, now=clock.now, pr_number=42,
+        ),
+    )
+
+    assert result["success"] is True, result
+    assert result["polls"] == 3, result
+    assert put_calls == ["https://api.github.com/repos/owner/repo/pulls/42/update-branch"], put_calls
+
+
+def test_poll_pr_checks_empty_runs_skips_update_when_mergeable_clean():
+    """If the PR is already clean/unblocked, empty check runs are just a slow
+    webhook — don't call update-branch, just keep polling."""
+    clock = FakeClock()
+    github_tools.requests.get = _routed_get(
+        [
+            _FakeResponse(200, json_data={"check_runs": []}),
+            _FakeResponse(200, json_data={"check_runs": []}),
+            _FakeResponse(200, json_data={"check_runs": [
+                {"name": "build", "status": "completed", "conclusion": "success"},
+            ]}),
+        ],
+        pr_details_response=_FakeResponse(200, json_data={"mergeable_state": "clean"}),
+    )
+
+    def _put(*a, **k):
+        raise AssertionError("must not update branch when mergeable_state is clean")
+
+    github_tools.requests.put = _put
+
+    result = _with_fake_config(
+        _FakeConfig(empty_grace=10),
+        lambda: github_tools.poll_pr_checks(
+            "owner/repo", "abc123", timeout_s=100, interval_s=10,
+            sleep=clock.sleep, now=clock.now, pr_number=42,
+        ),
+    )
+
+    assert result["success"] is True, result
+
+
+def test_poll_pr_checks_fails_fast_with_no_runs_after_second_grace_window():
+    """Zero check runs ever scheduled (e.g. a dropped Actions webhook) must
+    fail fast with the distinct reason 'pr_checks_no_runs' — never the
+    generic timeout — once a second grace window elapses with still no runs."""
+    clock = FakeClock()
+    github_tools.requests.get = _routed_get(
+        [_FakeResponse(200, json_data={"check_runs": []}) for _ in range(10)],
+        pr_details_response=_FakeResponse(200, json_data={"mergeable_state": "clean"}),
+    )
+    github_tools.requests.put = lambda *a, **k: (_ for _ in ()).throw(
+        AssertionError("must not update branch when mergeable_state is clean")
+    )
+
+    result = _with_fake_config(
+        _FakeConfig(empty_grace=10),
+        lambda: github_tools.poll_pr_checks(
+            "owner/repo", "abc123", timeout_s=900, interval_s=10,
+            sleep=clock.sleep, now=clock.now, pr_number=42,
+        ),
+    )
+
+    assert result["success"] is False, result
+    assert result["timed_out"] is False, "must be distinct from a generic timeout"
+    assert result["reason"] == "pr_checks_no_runs", result
+
+
+def test_poll_pr_checks_no_runs_fail_fast_works_without_pr_number():
+    """Callers that don't pass pr_number (can't query mergeable state/update
+    the branch) must still fail fast with pr_checks_no_runs after the second
+    grace window, rather than hanging until the generic timeout."""
+    clock = FakeClock()
+    github_tools.requests.get = lambda *a, **k: _FakeResponse(200, json_data={"check_runs": []})
+
+    result = _with_fake_config(
+        _FakeConfig(empty_grace=10),
+        lambda: github_tools.poll_pr_checks(
+            "owner/repo", "abc123", timeout_s=900, interval_s=10,
+            sleep=clock.sleep, now=clock.now,
+        ),
+    )
+
+    assert result["success"] is False, result
+    assert result["reason"] == "pr_checks_no_runs", result
+
+
 # ---------------------------------------------------------------------------
 # merge_pull_request
 # ---------------------------------------------------------------------------
@@ -366,7 +492,7 @@ def _wire_for_pr_merge(commit_result, *, create_result, checks_result, merge_res
         return create_result
     graph.create_pull_request = _create_pr
 
-    def _poll_checks(repo, sha, timeout_s=None, interval_s=None):
+    def _poll_checks(repo, sha, timeout_s=None, interval_s=None, pr_number=None):
         calls["poll_checks"].append((repo, sha))
         return checks_result
     graph.poll_pr_checks = _poll_checks
@@ -451,6 +577,32 @@ def test_pr_merge_checks_timeout_marks_task_failed_distinctly():
     assert calls["merge_pr"] == [], calls
     assert state.worker_result["success"] is False, state.worker_result
     assert "pr_checks_timeout" in state.worker_result["error"], state.worker_result
+
+
+def test_pr_merge_checks_no_runs_marks_task_failed_distinctly():
+    """A PR that never had any check runs scheduled (poll_pr_checks returned
+    reason='pr_checks_no_runs') must be marked failed with that distinct
+    reason — never generic pr_checks_failed/pr_checks_timeout text — and
+    must not merge, matching the timeout/failed cases above."""
+    calls = _wire_for_pr_merge(
+        _LANDED_COMMIT,
+        create_result={"success": True, "created": True, "number": 42, "url": "https://github.test/pull/42"},
+        checks_result={"success": False, "timed_out": False, "reason": "pr_checks_no_runs"},
+        merge_result={"success": True, "sha": "def456"},
+    )
+    graph.cfg.auto_merge = True
+    graph.cfg.auto_cleanup_branches = True
+    graph.cfg.merge_via_pr = True
+    graph.cfg.github_token = "test-token"
+    graph.cfg.github_repo = "owner/repo"
+
+    state = graph.commit_push_merge_if_needed(_worker_done_state())
+
+    assert calls["merge_pr"] == [], "must not merge when no check runs were ever scheduled"
+    assert calls["fetch"] == 0, calls
+    assert calls["cleanup"] == [], "PR must be left open, branch not cleaned up"
+    assert state.worker_result["success"] is False, state.worker_result
+    assert "pr_checks_no_runs" in state.worker_result["error"], state.worker_result
 
 
 def test_pr_merge_rejected_by_branch_protection_marks_task_failed():
@@ -545,29 +697,44 @@ def test_pr_merge_no_diff_treated_as_success_and_cleans_up_branch():
 # ---------------------------------------------------------------------------
 
 def test_merge_via_pr_config_defaults():
-    cfg = config_module.RunnerConfig()
+    # .env may set PR_CHECKS_* for the live runner; isolate this defaults
+    # check from it (works standalone, without a pytest monkeypatch fixture).
+    keys = ("PR_CHECKS_TIMEOUT_S", "PR_CHECKS_POLL_INTERVAL_S", "PR_CHECKS_EMPTY_GRACE_S")
+    saved = {k: os.environ.pop(k, None) for k in keys}
+    try:
+        cfg = config_module.RunnerConfig()
+    finally:
+        for k, v in saved.items():
+            if v is not None:
+                os.environ[k] = v
+
     assert cfg.merge_via_pr is True, cfg.merge_via_pr
     assert cfg.pr_checks_timeout_s == 900, cfg.pr_checks_timeout_s
     assert cfg.pr_checks_poll_interval_s == 20, cfg.pr_checks_poll_interval_s
+    assert cfg.pr_checks_empty_grace_s == 180, cfg.pr_checks_empty_grace_s
     report = cfg.report()
     assert report["merge_via_pr"] is True, report
     assert report["pr_checks_timeout_s"] == 900, report
     assert report["pr_checks_poll_interval_s"] == 20, report
+    assert report["pr_checks_empty_grace_s"] == 180, report
 
 
 def test_merge_via_pr_config_env_overrides(monkeypatch):
     monkeypatch.setenv("MERGE_VIA_PR", "false")
     monkeypatch.setenv("PR_CHECKS_TIMEOUT_S", "60")
     monkeypatch.setenv("PR_CHECKS_POLL_INTERVAL_S", "5")
+    monkeypatch.setenv("PR_CHECKS_EMPTY_GRACE_S", "30")
     cfg = config_module.RunnerConfig()
     assert cfg.merge_via_pr is False, cfg.merge_via_pr
     assert cfg.pr_checks_timeout_s == 60, cfg.pr_checks_timeout_s
     assert cfg.pr_checks_poll_interval_s == 5, cfg.pr_checks_poll_interval_s
+    assert cfg.pr_checks_empty_grace_s == 30, cfg.pr_checks_empty_grace_s
 
 
 def test_pr_checks_events_are_in_curated_slack_set():
     assert "pr_checks_failed" in config_module._DEFAULT_SLACK_EVENTS
     assert "pr_checks_timeout" in config_module._DEFAULT_SLACK_EVENTS
+    assert "pr_checks_no_runs" in config_module._DEFAULT_SLACK_EVENTS
 
 
 if __name__ == "__main__":
@@ -581,12 +748,17 @@ if __name__ == "__main__":
         test_poll_pr_checks_fails_on_a_failed_conclusion,
         test_poll_pr_checks_times_out_when_never_complete,
         test_poll_pr_checks_treats_empty_runs_as_not_complete,
+        test_poll_pr_checks_empty_runs_recovers_via_branch_update_when_conflicting,
+        test_poll_pr_checks_empty_runs_skips_update_when_mergeable_clean,
+        test_poll_pr_checks_fails_fast_with_no_runs_after_second_grace_window,
+        test_poll_pr_checks_no_runs_fail_fast_works_without_pr_number,
         test_merge_pull_request_success,
         test_merge_pull_request_surfaces_405_rejection,
         test_merge_pull_request_surfaces_409_conflict,
         test_pr_merge_happy_path_merges_and_cleans_up,
         test_pr_merge_checks_failure_marks_task_failed_and_leaves_pr_open,
         test_pr_merge_checks_timeout_marks_task_failed_distinctly,
+        test_pr_merge_checks_no_runs_marks_task_failed_distinctly,
         test_pr_merge_rejected_by_branch_protection_marks_task_failed,
         test_pr_merge_idempotent_pr_reuse_still_polls_and_merges,
         test_pr_merge_skips_cleanly_without_github_configured,

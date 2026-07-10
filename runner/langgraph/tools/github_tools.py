@@ -294,6 +294,41 @@ def create_pull_request(repo: str, branch: str, title: str, body: str, base: str
         return {"success": False, "error": str(e), "error_body": body}
 
 
+def _fetch_pr_details(repo: str, pr_number: int) -> Optional[dict]:
+    """Best-effort fetch of a PR's current mergeable state. Returns ``None``
+    (rather than raising) on any error so a transient failure here degrades to
+    "keep polling", not a crash of the whole check-poll loop."""
+    try:
+        r = retry_request(
+            requests.get,
+            f"{_API_BASE}/repos/{repo}/pulls/{pr_number}",
+            headers=_rest_headers(),
+            timeout=15,
+        )
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        log_event("error", {"tool": "github", "action": "poll_pr_checks_fetch_pr", "error": str(e)})
+        return None
+
+
+def _update_pr_branch(repo: str, pr_number: int) -> bool:
+    """Refresh a PR's merge ref via the update-branch API to re-trigger
+    workflows. Best-effort: returns False (does not raise) on failure."""
+    try:
+        r = retry_request(
+            requests.put,
+            f"{_API_BASE}/repos/{repo}/pulls/{pr_number}/update-branch",
+            headers=_rest_headers(),
+            timeout=15,
+        )
+        r.raise_for_status()
+        return True
+    except Exception as e:
+        log_event("error", {"tool": "github", "action": "poll_pr_checks_update_branch", "error": str(e)})
+        return False
+
+
 def poll_pr_checks(
     repo: str,
     sha: str,
@@ -301,6 +336,8 @@ def poll_pr_checks(
     interval_s: float = None,
     sleep=time.sleep,
     now=time.monotonic,
+    pr_number: Optional[int] = None,
+    empty_grace_s: float = None,
 ) -> dict:
     """Poll the check-runs API for ``sha`` until every run completes or the
     timeout elapses.
@@ -309,6 +346,17 @@ def poll_pr_checks(
     with conclusion "success" or "skipped". Distinguishes a real check
     failure (``timed_out: False``) from giving up before checks finished
     (``timed_out: True``) so the caller can log the right event.
+
+    A dropped GitHub Actions webhook can leave a commit with an empty
+    ``check_runs`` list forever — that used to burn the full ``timeout``
+    every time, indistinguishable from a slow-but-real check run. Once
+    ``check_runs`` has been empty for ``empty_grace_s`` seconds (``pr_number``
+    permitting), the PR's mergeable state is queried once; if it is
+    conflicting (``dirty``) or ``behind``, the branch is refreshed once via
+    the update-branch API to re-trigger workflows and polling continues. If
+    ``check_runs`` is still empty after a further ``empty_grace_s`` seconds,
+    polling fails fast with ``reason: "pr_checks_no_runs"`` — a distinct,
+    actionable reason rather than the generic timeout.
     """
     cfg = get_config()
     if not cfg.has_github:
@@ -319,9 +367,13 @@ def poll_pr_checks(
     interval = cfg.pr_checks_poll_interval_s if interval_s is None else interval_s
     if interval <= 0:
         interval = 1.0
+    grace = cfg.pr_checks_empty_grace_s if empty_grace_s is None else empty_grace_s
+    if grace <= 0:
+        grace = 1.0
 
     start = now()
     polls = 0
+    branch_update_attempted = False
     log_event("pr_checks_poll_started", {"repo": repo, "sha": sha, "timeout": timeout, "interval": interval})
 
     while True:
@@ -359,6 +411,28 @@ def poll_pr_checks(
                 "conclusions": {run.get("name"): run.get("conclusion") for run in runs},
             })
             return {"success": ok, "timed_out": False, "runs": runs, "polls": polls, "elapsed": elapsed}
+
+        if not runs:
+            if not branch_update_attempted and elapsed >= grace and pr_number is not None:
+                branch_update_attempted = True
+                pr_details = _fetch_pr_details(repo, pr_number)
+                mergeable_state = (pr_details or {}).get("mergeable_state")
+                if mergeable_state in ("dirty", "behind"):
+                    if _update_pr_branch(repo, pr_number):
+                        log_event("pr_branch_updated", {
+                            "repo": repo, "pr_number": pr_number,
+                            "mergeable_state": mergeable_state, "elapsed": elapsed,
+                        })
+
+            if elapsed >= grace * 2:
+                log_event("pr_checks_no_runs", {
+                    "repo": repo, "sha": sha, "pr_number": pr_number,
+                    "polls": polls, "elapsed": elapsed,
+                })
+                return {
+                    "success": False, "timed_out": False, "reason": "pr_checks_no_runs",
+                    "runs": runs, "polls": polls, "elapsed": elapsed,
+                }
 
         if (now() - start) + interval >= timeout:
             log_event("pr_checks_timeout", {

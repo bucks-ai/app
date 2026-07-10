@@ -41,6 +41,7 @@ _DEFAULT_SLACK_EVENTS = frozenset({
     "merge_approval_required",
     "pr_checks_failed",
     "pr_checks_timeout",
+    "pr_checks_no_runs",
     "product_eval_failed",
     "worker_dispatch_crash",
     "loop_blocked_on_stale_run",
@@ -132,6 +133,9 @@ class RunnerConfig:
     )
     pr_checks_poll_interval_s: int = field(
         default_factory=lambda: int(os.getenv("PR_CHECKS_POLL_INTERVAL_S", "20"))
+    )
+    pr_checks_empty_grace_s: int = field(
+        default_factory=lambda: int(os.getenv("PR_CHECKS_EMPTY_GRACE_S", "180"))
     )
     auto_deploy: bool = field(
         default_factory=lambda: os.getenv("AUTO_DEPLOY", "true").lower() == "true"
@@ -497,6 +501,7 @@ class RunnerConfig:
             "merge_via_pr": self.merge_via_pr,
             "pr_checks_timeout_s": self.pr_checks_timeout_s,
             "pr_checks_poll_interval_s": self.pr_checks_poll_interval_s,
+            "pr_checks_empty_grace_s": self.pr_checks_empty_grace_s,
             "auto_deploy": self.auto_deploy,
             "auto_deploy_poll": self.auto_deploy_poll,
             "block_on_deploy_failure": self.block_on_deploy_failure,
