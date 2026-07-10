@@ -111,6 +111,7 @@ from tools.seeded_mission_queue import (
     mark_mission_completed,
     mark_mission_failed,
 )
+from tools.agent_run_sync import start_agent_run, complete_agent_run, fail_agent_run
 from workers.chatgpt_worker import ChatGPTWorker
 from workers.claude_worker import ClaudeWorker
 from workers.codex_worker import CodexWorker
@@ -573,6 +574,14 @@ def resolve_model_node(state: RunnerState) -> RunnerState:
         "source": decision["source"],
         "task_id": state.current_task_id,
     }, task_id=state.current_task_id)
+
+    # Seeded-mission task start -> agent_runs row. Only tasks pulled from the
+    # Supabase mission queue carry seeded_task_id/seeded_mission_id; ad-hoc
+    # planner/mission-compiler tasks are left alone. Degrades silently when
+    # Supabase is not configured (see tools/agent_run_sync.py).
+    if task.get("seeded_task_id") and task.get("seeded_mission_id"):
+        state.current_agent_run_id = start_agent_run(task)
+
     return _persist(state, "resolve_model")
 
 
@@ -2055,9 +2064,25 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
                 state.worker_summary, task=task, max_chars=500
             )
             mark_seeded_task_complete(seeded_task_id, _sync_digest[:500])
+            if state.current_agent_run_id:
+                complete_agent_run(
+                    state.current_agent_run_id,
+                    _sync_digest[:2000],
+                    output=state.worker_summary,
+                    cost_usd=result.get("api_cost"),
+                    duration_seconds=state.worker_elapsed_seconds,
+                )
         else:
             _sync_err = result.get("error") or "worker returned no output"
             mark_seeded_task_failed(seeded_task_id, _sync_err[:500])
+            if state.current_agent_run_id:
+                fail_agent_run(
+                    state.current_agent_run_id,
+                    _sync_err[:2000],
+                    output=state.worker_summary,
+                    cost_usd=result.get("api_cost"),
+                    duration_seconds=state.worker_elapsed_seconds,
+                )
 
         completion = check_mission_completion(seeded_mission_id)
         if completion.get("status") == "completed":
@@ -2106,6 +2131,7 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
     state.current_branch = None
     state.worker_result = None
     state.worker_elapsed_seconds = None
+    state.current_agent_run_id = None
     state.worker_summary = None
     state.check_passed = None
     state.deploy_result = None

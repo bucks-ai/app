@@ -9,6 +9,7 @@ import { CompactActivityCenter } from "@/components/workspace/CompactActivityCen
 import { ResearchOverviewCard } from "@/components/research/ResearchOverviewCard";
 import { ValidationOverviewCard } from "@/components/validation/ValidationOverviewCard";
 import { OperatingTeamOverviewCard } from "@/components/agents/OperatingTeamOverviewCard";
+import { ExecutePanel } from "@/components/workspace/ExecutePanel";
 import { resolvePrimaryNextAction } from "@/components/workspace/next-action";
 
 type TabKey =
@@ -159,15 +160,18 @@ export function OverviewTab({
                 {business.oneLineIdea ?? business.overview}
               </p>
             </div>
-            {onBlueprintOpen ? (
-              <button
-                type="button"
-                onClick={onBlueprintOpen}
-                className="shrink-0 rounded-md border border-border bg-background px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-secondary transition-colors hover:border-accent/45 hover:text-accent"
-              >
-                Blueprint
-              </button>
-            ) : null}
+            <div className="flex shrink-0 items-start gap-2">
+              {onBlueprintOpen ? (
+                <button
+                  type="button"
+                  onClick={onBlueprintOpen}
+                  className="rounded-md border border-border bg-background px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-secondary transition-colors hover:border-accent/45 hover:text-accent"
+                >
+                  Blueprint
+                </button>
+              ) : null}
+              <ExecutePanel businessId={business.id} />
+            </div>
           </div>
 
           <div className="mt-4 grid grid-cols-2 gap-2 xl:grid-cols-4">

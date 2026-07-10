@@ -46,6 +46,14 @@ describe.skipIf(!canRun)(suiteName, () => {
   let otherMissionId: string;
   let otherMissionTaskId: string;
   let otherAgentRunId: string;
+  let otherApprovalId: string;
+  // supabase/m4a-approvals-queue.sql is an additive migration applied
+  // manually via the Supabase SQL Editor (see that file's header) — not
+  // auto-applied like the rest of this repo's ad-hoc supabase/*.sql files.
+  // Until Arnav runs it against this project, `approvals` won't exist yet;
+  // that must not fail the whole beforeAll (and so every other table's RLS
+  // assertions below) — it only skips the one approvals-specific test.
+  let approvalsTableExists = true;
 
   beforeAll(async () => {
     admin = createClient(SUPABASE_URL as string, SERVICE_ROLE_KEY as string, {
@@ -129,11 +137,35 @@ describe.skipIf(!canRun)(suiteName, () => {
       throw new Error(`Failed to seed fixture agent run: ${agentRunError?.message ?? "no row returned"}`);
     }
     otherAgentRunId = agentRun.id;
+
+    // approvals is not business-scoped (owner-only RLS — see
+    // supabase/m4a-approvals-queue.sql), so this fixture only needs user_id.
+    const { data: approval, error: approvalError } = await admin
+      .from("approvals")
+      .insert({
+        user_id: otherUserId,
+        request_type: "merge_approval",
+        request_id: "rls-fixture-task",
+        source_file: "rls-fixture-task_merge_approval_request.txt",
+        title: "RLS fixture approval",
+        body: "fixture body",
+      })
+      .select("id")
+      .single();
+    if (approvalError || !approval) {
+      approvalsTableExists = false;
+    } else {
+      otherApprovalId = approval.id;
+    }
   });
 
   afterAll(async () => {
     // Deleting the fixture business cascades to its mission, mission_tasks,
-    // and agent_runs rows.
+    // and agent_runs rows. approvals has no business_id, so it's deleted
+    // explicitly (it cascades from the fixture user instead).
+    if (otherApprovalId) {
+      await admin.from("approvals").delete().eq("id", otherApprovalId);
+    }
     if (otherBusinessId) {
       await admin.from("businesses").delete().eq("id", otherBusinessId);
     }
@@ -243,5 +275,39 @@ describe.skipIf(!canRun)(suiteName, () => {
       .eq("id", otherAgentRunId)
       .single();
     expect(stillThere?.title).toBe("RLS fixture agent run");
+  });
+
+  it("cannot select, update, or delete another user's approval", async (ctx) => {
+    // approvalsTableExists is only known after beforeAll runs, so this can't
+    // be an it.skipIf (evaluated at collection time, before the fixture
+    // seeding above has had a chance to run) — skip at runtime instead.
+    if (!approvalsTableExists) {
+      ctx.skip();
+      return;
+    }
+
+    const { data: selected, error: selectError } = await anon
+      .from("approvals")
+      .select("id")
+      .eq("id", otherApprovalId);
+    expect(selectError).toBeNull();
+    expect(selected).toEqual([]);
+
+    const { data: updated } = await anon
+      .from("approvals")
+      .update({ status: "approved" })
+      .eq("id", otherApprovalId)
+      .select("id");
+    expect(updated).toEqual([]);
+
+    const { data: deleted } = await anon.from("approvals").delete().eq("id", otherApprovalId).select("id");
+    expect(deleted).toEqual([]);
+
+    const { data: stillThere } = await admin
+      .from("approvals")
+      .select("status")
+      .eq("id", otherApprovalId)
+      .single();
+    expect(stillThere?.status).toBe("pending");
   });
 });

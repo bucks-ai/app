@@ -107,6 +107,12 @@ class RunnerConfig:
     slack_bot_token: Optional[str] = field(default_factory=lambda: os.getenv("SLACK_BOT_TOKEN"))
     slack_app_token: Optional[str] = field(default_factory=lambda: os.getenv("SLACK_APP_TOKEN"))
     slack_channel_id: Optional[str] = field(default_factory=lambda: os.getenv("SLACK_CHANNEL_ID"))
+    app_approvals_enabled: bool = field(
+        default_factory=lambda: os.getenv("APP_APPROVALS_ENABLED", "false").lower() == "true"
+    )
+    runner_owner_user_id: Optional[str] = field(
+        default_factory=lambda: os.getenv("RUNNER_OWNER_USER_ID")
+    )
     repo_path: str = field(
         default_factory=lambda: os.getenv("BUCKS_AI_REPO_PATH", "/home/arnav/bucks-ai")
     )
@@ -470,6 +476,11 @@ class RunnerConfig:
         """True when the approvals_daemon.py has everything it needs to run."""
         return bool(self.slack_bot_token and self.slack_app_token and self.slack_channel_id)
 
+    @property
+    def has_app_approvals(self) -> bool:
+        """True when app_approvals_daemon.py has everything it needs to run."""
+        return bool(self.app_approvals_enabled and self.has_supabase and self.runner_owner_user_id)
+
     def report(self) -> dict:
         return {
             "openai": self.has_openai,
@@ -492,6 +503,8 @@ class RunnerConfig:
             "slack_notify": self.slack_notify,
             "slack_interactive_approvals": self.slack_interactive_approvals,
             "slack_interactive_approvals_configured": self.has_slack_interactive_approvals,
+            "app_approvals_enabled": self.app_approvals_enabled,
+            "app_approvals_configured": self.has_app_approvals,
             "repo_path": self.repo_path,
             "runner_mode": self.runner_mode,
             "max_loop_tasks": self.max_loop_tasks,

@@ -102,6 +102,74 @@ export interface AgentRunDatabaseRecord {
   updated_at: string;
 }
 
+// M4a — mirrors public.approvals in supabase/m4a-approvals-queue.sql.
+// Not business-scoped: these mirror the runner's file-based outbox/inbox
+// approval gates (merge/SQL/resource/strategic review), owned by the
+// operator account, not any one founder's business.
+export interface ApprovalRecord {
+  id: string;
+  user_id: string;
+  request_type: string;
+  request_id: string;
+  source_file: string;
+  title: string;
+  body: string;
+  status: string;
+  decided_by: string | null;
+  decided_at: string | null;
+  inbox_synced_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// Mirrors public.missions in supabase/missions.sql, plus the runner_target
+// column from supabase/migrations/0003_missions_runner_target.sql.
+//
+// CRITICAL SAFETY: runner_target gates what the runner is allowed to claim
+// (runner/langgraph/tools/seeded_mission_queue.py::fetch_next_queued_mission).
+// "self" = runner may execute against the bucks-ai repo. "business" = created
+// via the app's Execute button for a customer business; must sit queued and
+// never be claimed until M4b lands per-business sandboxing.
+export interface MissionRecord {
+  id: string;
+  business_id: string;
+  user_id: string;
+  name: string;
+  goal: string | null;
+  status: string;
+  runner_target: "self" | "business";
+  source_file: string | null;
+  task_count: number;
+  completed_task_count: number;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// Mirrors public.mission_tasks in supabase/missions.sql.
+export interface MissionTaskRecord {
+  id: string;
+  mission_id: string;
+  business_id: string;
+  user_id: string;
+  task_id: string;
+  title: string;
+  description: string | null;
+  type: string;
+  branch: string;
+  preferred_worker: string | null;
+  position: number;
+  status: string;
+  summary: string | null;
+  error: string | null;
+  retry_count: number;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // ---------------------------------------------------------------------------
 // Insert types — fields required when creating a new row.
 // Defined as flat interfaces (not intersections) so Supabase's generic
@@ -181,6 +249,31 @@ export interface NewAgentRunInput {
   completed_at?: string | null;
 }
 
+export interface NewMissionInput {
+  business_id: string;
+  user_id: string;
+  name: string;
+  goal?: string | null;
+  status?: string;
+  runner_target?: "self" | "business";
+  source_file?: string | null;
+  task_count?: number;
+}
+
+export interface NewMissionTaskInput {
+  mission_id: string;
+  business_id: string;
+  user_id: string;
+  task_id: string;
+  title: string;
+  description?: string | null;
+  type?: string;
+  branch: string;
+  preferred_worker?: string | null;
+  position: number;
+  status?: string;
+}
+
 // ---------------------------------------------------------------------------
 // Supabase Database generic type (used by createClient<Database>)
 // ---------------------------------------------------------------------------
@@ -222,6 +315,16 @@ export type Database = {
         Row: AgentRunDatabaseRecord;
         Insert: NewAgentRunInput;
         Update: Partial<AgentRunDatabaseRecord>;
+      };
+      missions: {
+        Row: MissionRecord;
+        Insert: NewMissionInput;
+        Update: Partial<MissionRecord>;
+      };
+      mission_tasks: {
+        Row: MissionTaskRecord;
+        Insert: NewMissionTaskInput;
+        Update: Partial<MissionTaskRecord>;
       };
     };
     Views: Record<string, never>;
