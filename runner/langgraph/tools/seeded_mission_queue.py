@@ -44,7 +44,12 @@ def _get_client():
 # ---------------------------------------------------------------------------
 
 def fetch_next_queued_mission() -> Optional[dict]:
-    """Return the first queued mission row from Supabase, or None.
+    """Return the first queued, self-targeted mission row from Supabase, or None.
+
+    CRITICAL SAFETY: filters on ``runner_target = "self"``. Until M4b lands
+    per-business sandboxing, the runner must never claim a mission created
+    for a customer business (``runner_target = "business"``, e.g. via the
+    app's Execute button) — those must sit visibly queued and untouched.
 
     Ordered by ``created_at`` ascending so the oldest mission runs first.
     Returns None on any error so the caller can fall through gracefully.
@@ -55,6 +60,7 @@ def fetch_next_queued_mission() -> Optional[dict]:
             client.table("missions")
             .select("*")
             .eq("status", "queued")
+            .eq("runner_target", "self")
             .order("created_at")
             .limit(1)
             .execute()
