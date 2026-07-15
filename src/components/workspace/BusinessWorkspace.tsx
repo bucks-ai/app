@@ -9,7 +9,6 @@ import {
   fetchExecutionTimeline,
 } from "@/lib/execution-client";
 import { fetchAgentRegistry, fetchAgentRuns } from "@/lib/agents-client";
-import { WorkspaceHeader } from "@/components/workspace/WorkspaceHeader";
 import { PrimaryActionStrip } from "@/components/workspace/PrimaryActionStrip";
 import { WorkspaceTabs } from "@/components/workspace/WorkspaceTabs";
 import type { TabKey } from "@/components/workspace/WorkspaceTabs";
@@ -193,20 +192,11 @@ export function BusinessWorkspace({
           onTabChange={handleTabChange}
         />
 
-        {/* Main column: sticky command bar + scrolling content */}
+        {/* Main column: action strip + scrolling content */}
         <div className="flex min-w-0 flex-1 flex-col">
-          <div
-            className="sticky top-[69px] z-30 border-b border-border backdrop-blur"
-            style={{ background: "var(--surface-glass)" }}
-          >
-            <WorkspaceHeader
-              business={business}
-              executionStatus={executionStatus}
-              onBlueprintOpen={() => setBlueprintOpen(true)}
-            />
-
-            {/* Primary next action — desktop */}
-            <div className="hidden border-t border-border-subtle lg:block">
+          <div className="border-b border-border bg-background/50">
+            {/* Primary next action - desktop */}
+            <div className="hidden lg:block">
               <PrimaryActionStrip
                 business={business}
                 executionStatus={executionStatus}
@@ -215,8 +205,8 @@ export function BusinessWorkspace({
               />
             </div>
 
-            {/* Tabs — mobile / tablet */}
-            <div className="border-t border-border-subtle lg:hidden">
+            {/* Tabs - mobile / tablet */}
+            <div className="lg:hidden">
               <WorkspaceTabs
                 activeTab={activeTab}
                 onTabChange={handleTabChange}
