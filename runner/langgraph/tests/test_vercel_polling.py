@@ -211,7 +211,7 @@ def test_trigger_deploy_polls_and_reports_ready(monkeypatched=None):
     saved_pollcfg = cfg.auto_deploy_poll
     cfg.auto_deploy = True
     cfg.auto_deploy_poll = True
-    vt.get_deployment_status = lambda project_id=None: {
+    vt.get_deployment_status = lambda project_id=None, token=None: {
         "available": True,
         "latest": {"uid": "dpl_x", "readyState": "BUILDING"},
     }
@@ -238,7 +238,7 @@ def test_trigger_deploy_failure_marks_unsuccessful():
     saved_pollcfg = cfg.auto_deploy_poll
     cfg.auto_deploy = True
     cfg.auto_deploy_poll = True
-    vt.get_deployment_status = lambda project_id=None: {
+    vt.get_deployment_status = lambda project_id=None, token=None: {
         "available": True,
         "latest": {"uid": "dpl_y", "readyState": "BUILDING"},
     }
@@ -264,7 +264,7 @@ def test_trigger_deploy_skips_poll_when_disabled():
     saved_pollcfg = cfg.auto_deploy_poll
     cfg.auto_deploy = True
     cfg.auto_deploy_poll = False
-    vt.get_deployment_status = lambda project_id=None: {
+    vt.get_deployment_status = lambda project_id=None, token=None: {
         "available": True, "latest": {"uid": "dpl_z", "readyState": "BUILDING"},
     }
     try:
@@ -306,7 +306,7 @@ def test_trigger_deploy_sets_url_from_snapshot_when_poll_disabled():
     saved_pollcfg = cfg.auto_deploy_poll
     cfg.auto_deploy = True
     cfg.auto_deploy_poll = False
-    vt.get_deployment_status = lambda project_id=None: {
+    vt.get_deployment_status = lambda project_id=None, token=None: {
         "available": True, "latest": {"uid": "dpl_z", "url": "my-app.vercel.app"},
     }
     try:
@@ -326,7 +326,7 @@ def test_trigger_deploy_prefers_polled_deployment_url():
     saved_pollcfg = cfg.auto_deploy_poll
     cfg.auto_deploy = True
     cfg.auto_deploy_poll = True
-    vt.get_deployment_status = lambda project_id=None: {
+    vt.get_deployment_status = lambda project_id=None, token=None: {
         "available": True,
         "latest": {"uid": "dpl_x", "url": "dpl-x-preview.vercel.app"},
     }
@@ -353,7 +353,7 @@ def test_trigger_deploy_keeps_snapshot_url_when_poll_omits_deployment():
     saved_pollcfg = cfg.auto_deploy_poll
     cfg.auto_deploy = True
     cfg.auto_deploy_poll = True
-    vt.get_deployment_status = lambda project_id=None: {
+    vt.get_deployment_status = lambda project_id=None, token=None: {
         "available": True,
         "latest": {"uid": "dpl_x", "url": "my-app.vercel.app"},
     }

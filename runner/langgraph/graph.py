@@ -60,7 +60,7 @@ from tools.db_tools import (
     classify_migration_additivity,
     apply_migration_file as apply_db_migration_file,
 )
-from tools.vercel_tools import trigger_deploy
+from tools.vercel_tools import trigger_deploy, resolve_business_vercel_target
 from tools.github_tools import (
     sync_open_issues_to_tasks,
     create_pull_request,
@@ -75,7 +75,7 @@ from tools.independent_code_review import guard_code_review, get_diff_text
 from tools.high_risk_claude_review import guard_high_risk_claude_review
 from tools.codex_to_claude_escalation import should_escalate, build_repair_prompt
 from tools.auto_repair_loop import should_auto_repair, build_auto_repair_prompt
-from tools.playwright_harness import run_e2e_suite, is_playwright_available
+from tools.playwright_harness import run_e2e_suite, is_playwright_available, build_business_smoke_scenarios
 from tools.deploy_target import resolve_target_url
 from tools.ui_flow_validator import (
     run_ui_flow_validation,
@@ -228,6 +228,28 @@ def _effective_github_token(task: dict) -> Optional[str]:
         return cfg.github_token
     result = resolve_scoped_github_token(secret_name)
     return result.get("token") if result["success"] else None
+
+
+def _resolve_business_deploy_target(task: dict) -> dict:
+    """M4b: resolve a business mission's Vercel deploy target (project id +
+    scoped token), fresh from Supabase + the environment, for ``deploy_if_needed``.
+
+    Returns ``{"applicable": False}`` for ordinary (non-business) tasks.
+    For a business task (``task["business_id"]`` set) returns
+    ``{"applicable": True, "business_id": ..., **resolve_business_vercel_target(...)}``
+    — i.e. ``success`` plus either ``project_id``/``token``/``secret_name`` or
+    a ``reason`` (``partial_sandbox_config`` / ``missing_secret``).
+
+    CRITICAL SAFETY: never falls back to ``cfg.vercel_project_id`` /
+    ``cfg.vercel_token`` — see ``tools/vercel_tools.py::resolve_business_vercel_target``.
+    """
+    business_id = task.get("business_id")
+    if not business_id:
+        return {"applicable": False}
+    business = fetch_business_by_id(str(business_id))
+    sandbox_config = (business or {}).get("sandbox_config") or {}
+    target = resolve_business_vercel_target(sandbox_config)
+    return {"applicable": True, "business_id": business_id, **target}
 
 
 def _compress_context_if_needed(state: RunnerState, *, reason: str) -> RunnerState:
@@ -1799,8 +1821,18 @@ def deploy_if_needed(state: RunnerState) -> RunnerState:
     runner reports a real deploy verdict — READY vs failed/timed-out — instead of
     leaving ``trigger_deploy`` unused. Skips cleanly when nothing landed, when
     ``AUTO_DEPLOY`` is off, or when no ``VERCEL_TOKEN`` is configured.
+
+    M4b: for a business mission (``task["business_id"]`` set), the deploy
+    targets that business's OWN Vercel project with a token scoped to it
+    (``_resolve_business_deploy_target`` / ``tools.vercel_tools.resolve_business_vercel_target``)
+    — it NEVER falls back to the bucks-ai ``cfg.vercel_project_id`` /
+    ``cfg.vercel_token``, even when the business's sandbox config is only
+    partially filled in. A business mission with no/partial Vercel config
+    simply skips the deploy (logged as ``business_deploy_skipped``) rather than
+    deploying to the wrong project.
     """
     result = state.worker_result or {}
+    task = state.current_task or {}
 
     # Only deploy when the worker succeeded, checks passed, and a commit landed.
     if not result.get("success") or not state.check_passed or not state.last_commit:
@@ -1817,19 +1849,40 @@ def deploy_if_needed(state: RunnerState) -> RunnerState:
         }, task_id=state.current_task_id)
         return _persist(state, "deploy_if_needed")
 
-    if not cfg.has_vercel:
+    business_target = _resolve_business_deploy_target(task)
+    deploy_project_id = cfg.vercel_project_id
+    deploy_token = None
+
+    if business_target["applicable"]:
+        if not business_target["success"]:
+            log_event("business_deploy_skipped", {
+                "task_id": state.current_task_id,
+                "business_id": business_target["business_id"],
+                "reason": business_target["reason"],
+                "secret_name": business_target.get("secret_name"),
+            }, task_id=state.current_task_id)
+            return _persist(state, "deploy_if_needed")
+        deploy_project_id = business_target["project_id"]
+        deploy_token = business_target["token"]
+        log_event("business_deploy_targeted", {
+            "task_id": state.current_task_id,
+            "business_id": business_target["business_id"],
+            "project_id": deploy_project_id,
+        }, task_id=state.current_task_id)
+    elif not cfg.has_vercel:
         log_event("deploy_skipped", {
             "task_id": state.current_task_id,
             "reason": "no VERCEL_TOKEN",
         }, task_id=state.current_task_id)
         return _persist(state, "deploy_if_needed")
 
-    deploy = trigger_deploy(project_id=cfg.vercel_project_id)
+    deploy = trigger_deploy(project_id=deploy_project_id, token=deploy_token)
     state.deploy_result = deploy
     state.deploy_ready = bool(deploy.get("success"))
     poll = deploy.get("poll") or {}
     log_event("deploy_result", {
         "task_id": state.current_task_id,
+        "business_id": business_target.get("business_id"),
         "success": deploy.get("success"),
         "ready": poll.get("ready"),
         "state": poll.get("state"),
@@ -1897,9 +1950,21 @@ def run_e2e_if_needed(state: RunnerState) -> RunnerState:
     Results are stored on ``state.e2e_result`` and logged as ``e2e_passed`` or
     ``e2e_failed``.  Failure never blocks the loop — the harness is advisory so
     a flaky E2E suite doesn't prevent a good commit from landing.
+
+    M4b: for a business mission (``task["business_id"]`` set) this doubles as
+    the post-deploy smoke check for that business's deployed URL — a lighter
+    scenario (HTTP 200 on ``/`` plus a non-empty title;
+    ``build_business_smoke_scenarios``) than the self-repo default, since a
+    freshly scaffolded business site has no known title text to assert
+    against. The result is logged through the same per-URL event shape
+    (``deploy_url_validated`` / ``e2e_passed`` / ``e2e_failed``) with
+    ``business_id`` attached for traceability.
     """
     if not cfg.e2e_enabled:
         return state
+
+    task = state.current_task or {}
+    business_id = task.get("business_id")
 
     if not state.deploy_ready:
         log_event("e2e_skipped", {
@@ -1928,10 +1993,13 @@ def run_e2e_if_needed(state: RunnerState) -> RunnerState:
         "harness": "e2e",
         "url": base_url,
         "source": url_source,
+        "business_id": business_id,
     }, task_id=state.current_task_id)
 
+    scenarios = build_business_smoke_scenarios(base_url) if business_id else None
     result = run_e2e_suite(
         base_url=base_url,
+        scenarios=scenarios,
         timeout_ms=cfg.e2e_timeout_ms,
         headless=cfg.e2e_headless,
     )
@@ -1941,6 +2009,7 @@ def run_e2e_if_needed(state: RunnerState) -> RunnerState:
     log_event(event_type, {
         "task_id": state.current_task_id,
         "base_url": base_url,
+        "business_id": business_id,
         "total": len(result.get("results", [])),
         "passed_count": sum(1 for r in result.get("results", []) if r.get("passed")),
         "failed": [r["name"] for r in result.get("results", []) if not r.get("passed")],

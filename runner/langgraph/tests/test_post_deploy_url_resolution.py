@@ -40,7 +40,7 @@ def _capture_events():
 
 
 def _stub_e2e_suite(result, calls):
-    def _run(base_url, timeout_ms, headless):
+    def _run(base_url, timeout_ms, headless, scenarios=None):
         calls.append(base_url)
         return result
     return _run
@@ -73,6 +73,7 @@ def test_e2e_uses_deploy_result_url_when_no_override():
     assert validated == [{
         "task_id": "t1", "harness": "e2e",
         "url": "https://my-app.vercel.app", "source": "deploy_result",
+        "business_id": None,
     }], validated
 
 

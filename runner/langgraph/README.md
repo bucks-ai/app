@@ -865,6 +865,42 @@ or call rollback APIs from this policy path; recovery stays operator-approved.
 
 Without token, Vercel steps are skipped with a logged note.
 
+### Business-mission deploy targeting (M4b)
+
+For a business mission (`task["business_id"]` set — see **Foreign-Repo
+Execution** above), `deploy_if_needed` targets **that business's own Vercel
+project**, never the bucks-ai one:
+
+1. `_resolve_business_deploy_target` re-fetches the business row and reads
+   `sandbox_config.vercel_project_id` / `sandbox_config.vercel_token_secret_name`
+   (the same JSONB column `foreign_repo_workspace.py` reads for the GitHub
+   side — see `supabase/migrations/0005_business_sandbox_config_vercel_target.sql`).
+2. `tools.vercel_tools.resolve_business_vercel_target` requires **both**
+   fields to be present and the named secret to resolve in the runner's own
+   environment (`resolve_scoped_vercel_token` — name only, never a stored
+   value). If either is missing, the deploy is skipped for that business
+   (`business_deploy_skipped`, with the failing `reason` —
+   `partial_sandbox_config` or `missing_secret` — and the secret *name* only)
+   — it is **never** a partial substitute for `VERCEL_PROJECT_ID`/`VERCEL_TOKEN`.
+3. On success (`business_deploy_targeted`), `trigger_deploy(project_id=...,
+   token=...)` and every function it calls (`get_deployment_status`,
+   `get_deployment_by_id`, `poll_deployment_until_terminal`) accept the scoped
+   `token` override so the whole deploy + poll cycle authenticates as the
+   business, not the runner.
+
+`run_e2e_if_needed` doubles as the post-deploy smoke check for business
+missions: it resolves the business's deployed URL from `deploy_result` exactly
+as it does for self-repo deploys, but runs
+`playwright_harness.build_business_smoke_scenarios` (HTTP 200 on `/` plus a
+non-empty `<title>`) instead of the self-repo default scenario, since a
+freshly scaffolded business site has no known title text to assert against.
+The result is logged through the same per-URL event shape
+(`deploy_url_validated` / `e2e_passed` / `e2e_failed` — see **Playwright
+Browser E2E Harness** below) with `business_id` attached.
+
+See `tests/test_business_vercel_target.py` for the targeting/refusal unit
+tests (mocked Vercel API + environment).
+
 ---
 
 ## Playwright Browser E2E Harness

@@ -1,0 +1,43 @@
+-- =============================================================================
+-- bucks.ai — businesses.sandbox_config: add Vercel deploy target keys
+-- =============================================================================
+-- M4b: extends the JSONB shape introduced in
+-- supabase/migrations/0004_businesses_sandbox_config.sql (the shape the
+-- runner's graph nodes actually read at execution time — see
+-- runner/langgraph/tools/foreign_repo_workspace.py::prepare_business_repo)
+-- so a business mission's post-deploy pipeline
+-- (runner/langgraph/graph.py::deploy_if_needed,
+-- runner/langgraph/tools/vercel_tools.py) can target that business's OWN
+-- Vercel project instead of the bucks-ai project the runner deploys from
+-- today.
+--
+-- sandbox_config now carries, in addition to repo_full_name /
+-- github_token_secret_name:
+--
+--   {
+--     "vercel_project_id": "prj_xxx",
+--     "vercel_token_secret_name": "SOME_ENV_VAR_NAME"
+--   }
+--
+-- CRITICAL SAFETY (secret-name-only convention, unchanged from 0004):
+-- vercel_token_secret_name is the NAME of an environment variable the runner
+-- reads at deploy time — see
+-- runner/langgraph/tools/vercel_tools.py::resolve_scoped_vercel_token. The
+-- actual Vercel token never passes through Supabase, this column, or any app
+-- API route.
+--
+-- If EITHER vercel_project_id or vercel_token_secret_name is missing (a
+-- "partial" sandbox_config), deploy_if_needed skips the deploy for that
+-- business mission entirely — it NEVER falls back to the bucks-ai project's
+-- VERCEL_PROJECT_ID/VERCEL_TOKEN. See
+-- runner/langgraph/tools/vercel_tools.py::resolve_business_vercel_target and
+-- runner/langgraph/tests/test_business_vercel_target.py.
+--
+-- No schema change is required — sandbox_config is JSONB and already exists
+-- (0004_businesses_sandbox_config.sql). This migration only refreshes the
+-- column documentation to describe the extended shape, so it is additive
+-- (COMMENT ON COLUMN only) and eligible for AUTO_APPLY_MIGRATIONS.
+-- =============================================================================
+
+COMMENT ON COLUMN public.businesses.sandbox_config IS
+  'Foreign-repo + Vercel deploy target config for M4b: {"repo_full_name": "owner/name", "github_token_secret_name": "ENV_VAR_NAME", "vercel_project_id": "prj_xxx", "vercel_token_secret_name": "ENV_VAR_NAME"}. NULL, or any missing key, means that piece of foreign execution stays disabled for this business: repo_full_name/github_token_secret_name gate foreign-repo execution (see 0004_businesses_sandbox_config.sql); vercel_project_id/vercel_token_secret_name gate business-targeted deploys (see runner/langgraph/tools/vercel_tools.py::resolve_business_vercel_target) and are never a partial substitute for the bucks-ai VERCEL_PROJECT_ID/VERCEL_TOKEN. repo_full_name must never resolve to the bucks-ai repo itself.';
