@@ -4,7 +4,8 @@
 // signs in as TEST_USER_EMAIL / TEST_USER_PASSWORD via the anon client, seeds
 // "victim" rows owned by a throwaway second user (via the service-role admin
 // client), and asserts the signed-in user cannot select, update, or delete
-// those rows on businesses, missions, mission_tasks, and agent_runs.
+// those rows on businesses, missions, mission_tasks, agent_runs, approvals,
+// and business_sandbox.
 //
 // Requires a full credential set. Skips cleanly (with the missing var names
 // in the suite name) everywhere those aren't provisioned — local dev, CI, etc.
@@ -47,6 +48,7 @@ describe.skipIf(!canRun)(suiteName, () => {
   let otherMissionTaskId: string;
   let otherAgentRunId: string;
   let otherApprovalId: string;
+  let otherSandboxId: string;
   // supabase/m4a-approvals-queue.sql is an additive migration applied
   // manually via the Supabase SQL Editor (see that file's header) — not
   // auto-applied like the rest of this repo's ad-hoc supabase/*.sql files.
@@ -54,6 +56,10 @@ describe.skipIf(!canRun)(suiteName, () => {
   // that must not fail the whole beforeAll (and so every other table's RLS
   // assertions below) — it only skips the one approvals-specific test.
   let approvalsTableExists = true;
+  // business_sandbox comes from supabase/migrations/0004_business_sandbox.sql
+  // — a founder must have applied it (or AUTO_APPLY_MIGRATIONS run it) for
+  // this fixture to succeed. Same runtime-skip treatment as approvals above.
+  let sandboxTableExists = true;
 
   beforeAll(async () => {
     admin = createClient(SUPABASE_URL as string, SERVICE_ROLE_KEY as string, {
@@ -157,12 +163,28 @@ describe.skipIf(!canRun)(suiteName, () => {
     } else {
       otherApprovalId = approval.id;
     }
+
+    const { data: sandbox, error: sandboxError } = await admin
+      .from("business_sandbox")
+      .insert({
+        business_id: otherBusinessId,
+        user_id: otherUserId,
+        repo_full_name: "rls-fixture/repo",
+      })
+      .select("id")
+      .single();
+    if (sandboxError || !sandbox) {
+      sandboxTableExists = false;
+    } else {
+      otherSandboxId = sandbox.id;
+    }
   });
 
   afterAll(async () => {
     // Deleting the fixture business cascades to its mission, mission_tasks,
-    // and agent_runs rows. approvals has no business_id, so it's deleted
-    // explicitly (it cascades from the fixture user instead).
+    // agent_runs, and business_sandbox rows (all FK ON DELETE CASCADE).
+    // approvals has no business_id, so it's deleted explicitly (it cascades
+    // from the fixture user instead).
     if (otherApprovalId) {
       await admin.from("approvals").delete().eq("id", otherApprovalId);
     }
@@ -309,5 +331,43 @@ describe.skipIf(!canRun)(suiteName, () => {
       .eq("id", otherApprovalId)
       .single();
     expect(stillThere?.status).toBe("pending");
+  });
+
+  it("cannot select, update, or delete another user's business sandbox config", async (ctx) => {
+    // sandboxTableExists is only known after beforeAll runs (evaluated at
+    // collection time, before the fixture seeding above) — skip at runtime,
+    // same treatment as approvalsTableExists above.
+    if (!sandboxTableExists) {
+      ctx.skip();
+      return;
+    }
+
+    const { data: selected, error: selectError } = await anon
+      .from("business_sandbox")
+      .select("id")
+      .eq("id", otherSandboxId);
+    expect(selectError).toBeNull();
+    expect(selected).toEqual([]);
+
+    const { data: updated } = await anon
+      .from("business_sandbox")
+      .update({ repo_full_name: "hijacked/repo" })
+      .eq("id", otherSandboxId)
+      .select("id");
+    expect(updated).toEqual([]);
+
+    const { data: deleted } = await anon
+      .from("business_sandbox")
+      .delete()
+      .eq("id", otherSandboxId)
+      .select("id");
+    expect(deleted).toEqual([]);
+
+    const { data: stillThere } = await admin
+      .from("business_sandbox")
+      .select("repo_full_name")
+      .eq("id", otherSandboxId)
+      .single();
+    expect(stillThere?.repo_full_name).toBe("rls-fixture/repo");
   });
 });

@@ -170,6 +170,26 @@ export interface MissionTaskRecord {
   updated_at: string;
 }
 
+// Mirrors public.business_sandbox in supabase/migrations/0004_business_sandbox.sql.
+//
+// CRITICAL SAFETY: github_token_secret_name / vercel_token_secret_name are
+// NAMES of entries in the runner's own env/secret store — never the token
+// values themselves. See supabase/migrations/README.md for the convention.
+export type SandboxStatus = "unconfigured" | "partial" | "configured";
+
+export interface BusinessSandboxRecord {
+  id: string;
+  business_id: string;
+  user_id: string;
+  repo_full_name: string | null;
+  vercel_project_id: string | null;
+  github_token_secret_name: string | null;
+  vercel_token_secret_name: string | null;
+  status: SandboxStatus;
+  created_at: string;
+  updated_at: string;
+}
+
 // ---------------------------------------------------------------------------
 // Insert types — fields required when creating a new row.
 // Defined as flat interfaces (not intersections) so Supabase's generic
@@ -274,6 +294,16 @@ export interface NewMissionTaskInput {
   status?: string;
 }
 
+export interface NewBusinessSandboxInput {
+  business_id: string;
+  user_id: string;
+  repo_full_name?: string | null;
+  vercel_project_id?: string | null;
+  github_token_secret_name?: string | null;
+  vercel_token_secret_name?: string | null;
+  status?: SandboxStatus;
+}
+
 // ---------------------------------------------------------------------------
 // Supabase Database generic type (used by createClient<Database>)
 // ---------------------------------------------------------------------------
@@ -325,6 +355,11 @@ export type Database = {
         Row: MissionTaskRecord;
         Insert: NewMissionTaskInput;
         Update: Partial<MissionTaskRecord>;
+      };
+      business_sandbox: {
+        Row: BusinessSandboxRecord;
+        Insert: NewBusinessSandboxInput;
+        Update: Partial<BusinessSandboxRecord>;
       };
     };
     Views: Record<string, never>;

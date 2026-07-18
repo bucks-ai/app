@@ -77,3 +77,22 @@ The ledger table itself. `db_tools.py` also creates this table automatically
 (`CREATE TABLE IF NOT EXISTS`) the first time it applies or checks a
 migration, so this file mainly documents the schema and lets it be applied
 explicitly/idempotently like any other migration.
+
+## 0004_business_sandbox.sql — secret-name-only storage convention
+
+`business_sandbox` is the containment substrate for M4b: it lets a founder
+tell the runner which repo and Vercel project belong to a given business, so
+a future mission can be executed against that business's own resources
+instead of the bucks-ai repo.
+
+The table stores **secret NAMES only, never secret VALUES**:
+`github_token_secret_name` and `vercel_token_secret_name` are just strings
+naming an entry in the runner's own env/secret store (resolved the same way
+`runner/langgraph/config.py` reads `GITHUB_TOKEN` etc. via `os.getenv`) — the
+actual scoped GitHub/Vercel tokens for a business never pass through
+Supabase, this table, or the app's API routes. This is external containment:
+the app layer only ever handles *which* secret to use, never the secret
+itself. Any future runner code that reads a business's sandbox config (e.g.
+to clone its repo or deploy to its Vercel project) must resolve the token by
+looking up that name in its own environment — never by reading a token value
+out of this table, because no such value is ever written there.

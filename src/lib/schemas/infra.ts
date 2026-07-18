@@ -119,3 +119,30 @@ export const executeBusinessParamsSchema = z.object({
 });
 
 export type ExecuteBusinessParams = z.infer<typeof executeBusinessParamsSchema>;
+
+// ---------------------------------------------------------------------------
+// GET/PATCH /api/businesses/[id]/sandbox
+// ---------------------------------------------------------------------------
+
+export const businessSandboxParamsSchema = z.object({
+  id: requiredBusinessId,
+});
+
+export type BusinessSandboxParams = z.infer<typeof businessSandboxParamsSchema>;
+
+// Secret NAME / repo NAME fields only — business_sandbox never stores a
+// secret value, so this schema never accepts one either. At least one field
+// is required per request; partial updates are merged onto the existing row
+// (src/lib/sandbox.ts::upsertSandboxConfig).
+export const setBusinessSandboxBodySchema = z
+  .object({
+    repo_full_name: z.string().trim().min(1).max(200).optional(),
+    vercel_project_id: z.string().trim().min(1).max(200).optional(),
+    github_token_secret_name: z.string().trim().min(1).max(200).optional(),
+    vercel_token_secret_name: z.string().trim().min(1).max(200).optional(),
+  })
+  .refine((body) => Object.keys(body).length > 0, {
+    message: "At least one sandbox field is required.",
+  });
+
+export type SetBusinessSandboxBody = z.infer<typeof setBusinessSandboxBodySchema>;
