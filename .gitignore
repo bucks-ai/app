@@ -65,4 +65,6 @@ runner/langgraph/inbox/*
 runner/langgraph/.runtime/
 runner/langgraph/state.json
 runner/langgraph/tasks.json
+# M4b: per-business foreign-repo workspaces (cloned customer repos)
+runner/langgraph/.workspaces/
 .env.local

@@ -685,6 +685,66 @@ in `tests/test_resource_gate.py`, which also covers the graph node.
 
 ---
 
+## Foreign (Business) Repo Execution (M4b)
+
+> **Lets the runner work outside its own repo, safely, when a claimed
+> mission's business has a sandboxed target repo configured.**
+
+Every mission carries a `runner_target` (`self` or `business` —
+`supabase/migrations/0003_missions_runner_target.sql`). Only a `business`
+mission has a `business_id`; the graph node
+`resolve_business_repo_if_needed` runs right after `choose_worker` and, for
+those tasks only, resolves the business's `sandbox_config` (a JSONB column
+on `businesses` — `supabase/migrations/0004_businesses_sandbox_config.sql`):
+
+```json
+{"repo_full_name": "owner/name", "github_token_secret_name": "SOME_ENV_VAR_NAME"}
+```
+
+1. `github_token_secret_name` is a **name**, not a value — the runner reads
+   the actual token fresh from `os.environ` at each use
+   (`tools/foreign_repo_workspace.py::resolve_scoped_github_token`) and never
+   writes it to a task dict, `state`, or a log event.
+2. The target repo is cloned (first run) or fetched (subsequent runs) into an
+   isolated per-business workspace at
+   `runner/langgraph/.workspaces/<business_id>/` (gitignored).
+3. The task's `repo_path` is overridden to that workspace, and
+   `business_repo_full_name` / `business_github_token_secret_name` are
+   attached so the worker prompt states the target repo explicitly and the
+   PR/merge flow (`create_pull_request` / `poll_pr_checks` /
+   `merge_pull_request` in `tools/github_tools.py`, all now accept an
+   optional `token=`) authenticates against the business's repo instead of
+   the runner's own `GITHUB_TOKEN`/`GITHUB_REPO`.
+
+**CRITICAL SAFETY:** a business mission can never run with `repo_path` equal
+to the bucks-ai repo. `tools/foreign_repo_workspace.py::is_bucks_ai_repo`
+refuses any `sandbox_config.repo_full_name` that resolves to the bucks-ai
+repo *before* anything is cloned, and `guard_business_repo_path` re-checks
+the resolved workspace path as defense in depth. Either violation hard-fails
+the task and halts the loop (`stop_reason = business_repo_forbidden`) for
+human review rather than silently falling back to the runner's own repo. A
+missing GitHub token secret, an unconfigured sandbox, or a workspace
+clone/fetch failure is instead treated as an ordinary resource-gate request
+(name only) via the same `outbox/`/`inbox/` mechanism as
+`request_resources_if_needed`.
+
+Every code path here (repo_path override, wrong-repo refusal, missing-secret
+resource request, workspace clone/fetch) is unit-tested against a fully
+mocked git runner and Supabase client in `tests/test_foreign_repo_workspace.py`
+— no real git binary or network required.
+
+**Known limitations:**
+- `run_check` still runs `bash scripts/check.sh` inside the business
+  workspace — a business repo without that script/convention will fail
+  checks rather than being skipped.
+- `fetch_pull_main` assumes the business repo's default branch is `main`,
+  same as the bucks-ai repo.
+- If a business's scoped token rotates, the workspace's `origin` remote
+  (which embeds the token used at clone time) needs a fresh clone — deleting
+  `.workspaces/<business_id>/` is sufficient; the next run reclones.
+
+---
+
 ## Failure & Retry Guard
 
 When a worker fails, `update_logs_and_state` no longer just records a bare
