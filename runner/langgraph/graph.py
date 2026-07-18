@@ -55,6 +55,11 @@ from tools.git_tools import (
 from tools.sql_guard import scan_sql_text
 from tools.sql_environment_gate import evaluate_sql_approval_policy, infer_environment
 from tools.supabase_tools import apply_sql_file
+from tools.db_tools import (
+    list_pending_migrations,
+    classify_migration_additivity,
+    apply_migration_file as apply_db_migration_file,
+)
 from tools.vercel_tools import trigger_deploy
 from tools.github_tools import (
     sync_open_issues_to_tasks,
@@ -253,6 +258,85 @@ def check_launch_readiness_if_needed(state: RunnerState) -> RunnerState:
         state.stop_reason = "launch_readiness_failed"
 
     return _persist(state, "check_launch_readiness_if_needed")
+
+
+_MIGRATIONS_DIR_NAME = "supabase/migrations"
+
+
+def check_pending_migrations_if_needed(state: RunnerState) -> RunnerState:
+    """Startup migration awareness — the fix for merged migrations that
+    silently never reach production because nothing called
+    `db_tools.apply_pending_migrations`.
+
+    Runs once per loop start, immediately after the launch readiness check.
+    When DIRECT_DATABASE_URL (or DATABASE_URL) is configured, compares
+    `supabase/migrations/` against the `_runner_migrations` ledger and always
+    logs a loud `migrations_pending` event listing any un-applied filenames —
+    this alert fires regardless of AUTO_APPLY_MIGRATIONS.
+
+    When AUTO_APPLY_MIGRATIONS=true, additionally applies pending migrations
+    in filename order, but only ones that are (a) classified additive-only by
+    `db_tools.classify_migration_additivity` and (b) pass the existing
+    `sql_guard` scan + `sql_environment_gate` policy inside
+    `apply_migration_file`. The first non-additive or guard/gate-blocked file
+    stops the auto-apply pass (later files are never applied out of order) —
+    it was already surfaced via `migrations_pending` for manual application.
+    """
+    if not cfg.has_database:
+        return state
+
+    migrations_dir = Path(cfg.repo_path) / _MIGRATIONS_DIR_NAME
+    pending_result = list_pending_migrations(str(migrations_dir))
+    if not pending_result["success"]:
+        log_event("error", {
+            "node": "check_pending_migrations_if_needed",
+            "error": pending_result["error"],
+        })
+        return _persist(state, "check_pending_migrations_if_needed")
+
+    pending = pending_result["data"]["pending"]
+    if not pending:
+        return _persist(state, "check_pending_migrations_if_needed")
+
+    log_event("migrations_pending", {
+        "pending": pending,
+        "count": len(pending),
+        "auto_apply_migrations": cfg.auto_apply_migrations,
+        "message": (
+            f"{len(pending)} migration(s) not yet applied to the database: "
+            + ", ".join(pending)
+        ),
+    })
+
+    if not cfg.auto_apply_migrations:
+        return _persist(state, "check_pending_migrations_if_needed")
+
+    for filename in pending:
+        file_path = migrations_dir / filename
+        additivity = classify_migration_additivity(file_path.read_text())
+        if not additivity["additive"]:
+            log_event("migration_auto_apply_blocked", {
+                "filename": filename,
+                "reason": "non_additive",
+                "details": additivity["reasons"],
+            })
+            break
+
+        result = apply_db_migration_file(str(file_path))
+        if not result["success"]:
+            log_event("migration_auto_apply_blocked", {
+                "filename": filename,
+                "reason": result.get("error"),
+                "details": result.get("data"),
+            })
+            break
+
+        log_event("migration_applied", {
+            "filename": filename,
+            "sha256": result["data"]["sha256"],
+        })
+
+    return _persist(state, "check_pending_migrations_if_needed")
 
 
 def load_next_task(state: RunnerState) -> RunnerState:
@@ -2474,6 +2558,7 @@ def build_graph():
 
     builder.add_node("install_hooks", install_hooks)
     builder.add_node("check_launch_readiness_if_needed", check_launch_readiness_if_needed)
+    builder.add_node("check_pending_migrations_if_needed", check_pending_migrations_if_needed)
     builder.add_node("load_next_task", load_next_task)
     builder.add_node("compile_mission_if_needed", compile_mission_if_needed)
     builder.add_node("seed_mission_queue_if_needed", seed_mission_queue_if_needed)
@@ -2510,12 +2595,13 @@ def build_graph():
     builder.add_edge("install_hooks", "check_launch_readiness_if_needed")
     builder.add_conditional_edges(
         "check_launch_readiness_if_needed",
-        lambda s: "decide_continue_or_stop" if s.stop_reason == "launch_readiness_failed" else "load_next_task",
+        lambda s: "decide_continue_or_stop" if s.stop_reason == "launch_readiness_failed" else "check_pending_migrations_if_needed",
         {
-            "load_next_task": "load_next_task",
+            "check_pending_migrations_if_needed": "check_pending_migrations_if_needed",
             "decide_continue_or_stop": "decide_continue_or_stop",
         },
     )
+    builder.add_edge("check_pending_migrations_if_needed", "load_next_task")
 
     builder.add_conditional_edges("load_next_task", _route_after_load, {
         "compile_mission_if_needed": "compile_mission_if_needed",

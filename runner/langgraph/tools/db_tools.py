@@ -13,6 +13,7 @@ All functions no-op with a clear ``ToolResult`` error when
 environments (like CI) with no database configured.
 """
 import hashlib
+import re
 from pathlib import Path
 
 from config import get_config
@@ -22,6 +23,20 @@ from tools.sql_guard import scan_sql_file
 from tools.sql_environment_gate import evaluate_sql_approval_policy, infer_environment
 
 MIGRATIONS_TABLE = "_runner_migrations"
+
+# Patterns that mark a migration as non-additive — i.e. it can rename, remove,
+# or mutate existing data/schema rather than only adding new schema. These are
+# never auto-applied even when AUTO_APPLY_MIGRATIONS=true and the file passes
+# sql_guard/sql_environment_gate; a human always reviews and applies them by
+# hand (see supabase/migrations/README.md).
+_NON_ADDITIVE_PATTERNS = [
+    (r"\bDROP\s+", "drop statement (table/column/index/policy/etc.)"),
+    (r"\bTRUNCATE\b", "truncate"),
+    (r"\bDELETE\s+FROM\b", "delete from"),
+    (r"\bUPDATE\s+\w+\s+SET\b", "update ... set (data mutation)"),
+    (r"\bRENAME\b", "rename"),
+    (r"\bALTER\s+COLUMN\b[\s\S]*?\bTYPE\b", "alter column type"),
+]
 
 _MIGRATIONS_TABLE_DDL = f"""
 CREATE TABLE IF NOT EXISTS {MIGRATIONS_TABLE} (
@@ -124,6 +139,21 @@ def _sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def classify_migration_additivity(sql_text: str) -> dict:
+    """Pure classifier: does this SQL only ADD schema, or could it remove/rename/
+    mutate something that already exists?
+
+    Returns {"additive": bool, "reasons": [str, ...]} — reasons is empty when
+    additive. This is intentionally conservative (any DROP, even a guarded
+    `DROP ... IF EXISTS`, counts as non-additive) since auto-apply eligibility
+    is the caller, and a false "non-additive" only costs a human review, while
+    a false "additive" could auto-apply something destructive.
+    """
+    text = sql_text.upper()
+    reasons = [label for pattern, label in _NON_ADDITIVE_PATTERNS if re.search(pattern, text)]
+    return {"additive": len(reasons) == 0, "reasons": reasons}
+
+
 def apply_migration_file(path: str) -> dict:
     """Apply ONE .sql migration file inside a transaction.
 
@@ -211,6 +241,36 @@ def _fetch_applied_filenames(cfg) -> set | None:
     except Exception as e:
         log_event("error", {"tool": "db_apply_pending_migrations", "error": str(e)})
         return None
+
+
+def list_pending_migrations(directory: str) -> dict:
+    """Read-only: which *.sql files in `directory` are NOT yet recorded in the
+    `_runner_migrations` ledger, in filename order. Applies nothing."""
+    cfg = get_config()
+    if not cfg.has_database:
+        return _no_database_result("db_list_pending_migrations")
+
+    dir_path = Path(directory)
+    if not dir_path.exists():
+        return ToolResult(
+            tool="db_list_pending_migrations", success=False, error=f"Directory not found: {directory}"
+        ).model_dump()
+
+    applied = _fetch_applied_filenames(cfg)
+    if applied is None:
+        return ToolResult(
+            tool="db_list_pending_migrations",
+            success=False,
+            error=f"Failed to read {MIGRATIONS_TABLE} ledger.",
+        ).model_dump()
+
+    migration_files = sorted(dir_path.glob("*.sql"), key=lambda p: p.name)
+    pending = [f.name for f in migration_files if f.name not in applied]
+    return ToolResult(
+        tool="db_list_pending_migrations",
+        success=True,
+        data={"pending": pending, "total_count": len(migration_files), "applied_count": len(applied)},
+    ).model_dump()
 
 
 def apply_pending_migrations(directory: str) -> dict:
