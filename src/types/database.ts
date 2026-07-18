@@ -31,8 +31,15 @@ export interface BusinessRecord {
   forbidden_actions: string | null;
   preferred_tools: string | null;
   status: string;
+  // M4b: foreign-repo execution config — see supabase/migrations/0004_businesses_sandbox_config.sql
+  sandbox_config: BusinessSandboxConfig | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface BusinessSandboxConfig {
+  repo_full_name: string;
+  github_token_secret_name: string;
 }
 
 export interface BusinessBlueprintRecord {
@@ -194,6 +201,7 @@ export interface NewBusinessInput {
   forbidden_actions?: string | null;
   preferred_tools?: string | null;
   status?: string;
+  sandbox_config?: BusinessSandboxConfig | null;
 }
 
 export interface NewBusinessBlueprintInput {

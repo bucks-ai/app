@@ -66,21 +66,23 @@ class CodexWorker(BaseWorker):
         task_id = task.get("id", "task")
         log_event("worker_started", {"worker": "codex", "task_id": task_id})
 
+        repo_path = task.get("repo_path") or get_config().repo_path
+
         if shutil.which("codex"):
-            result = self._run_cli(prompt, task_id)
+            result = self._run_cli(prompt, task_id, repo_path=repo_path)
         else:
             result = self._run_outbox(prompt, task_id)
 
         log_event("worker_finished", {"worker": "codex", "task_id": task_id, "success": result.success})
         return result
 
-    def _run_cli(self, prompt: str, task_id: str) -> WorkerResult:
+    def _run_cli(self, prompt: str, task_id: str, repo_path: str | None = None) -> WorkerResult:
         path = self._write_outbox(task_id, prompt)
         # Use `codex exec` subcommand for non-interactive execution.
         # Pass prompt via stdin ("-") to avoid ARG_MAX limits and escaping issues.
         # --dangerously-bypass-approvals-and-sandbox replaces the old --approval-mode full-auto.
         # --json streams JSONL events (agent messages + per-turn token usage) to stdout.
-        cmd = ["codex", "exec", "--json", "--dangerously-bypass-approvals-and-sandbox", "--cd", get_config().repo_path, "-"]
+        cmd = ["codex", "exec", "--json", "--dangerously-bypass-approvals-and-sandbox", "--cd", repo_path or get_config().repo_path, "-"]
         r = run_command(cmd, stdin_data=prompt, timeout=600)
 
         output_text = r.output

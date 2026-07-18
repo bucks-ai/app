@@ -199,10 +199,10 @@ def update_issue_for_task_result(
     }
 
 
-def _rest_headers() -> dict:
+def _rest_headers(token: Optional[str] = None) -> dict:
     cfg = get_config()
     return {
-        "Authorization": f"Bearer {cfg.github_token}",
+        "Authorization": f"Bearer {token or cfg.github_token}",
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
     }
@@ -225,14 +225,22 @@ def _status_code(exc: Exception) -> Optional[int]:
     return getattr(resp, "status_code", None) if resp is not None else None
 
 
-def create_pull_request(repo: str, branch: str, title: str, body: str, base: str = "main") -> dict:
+def create_pull_request(
+    repo: str, branch: str, title: str, body: str, base: str = "main",
+    token: Optional[str] = None,
+) -> dict:
     """Create a PR for ``branch`` -> ``base``.
 
     Idempotent: if an open PR already exists for ``branch``, that PR is
     returned instead of creating a duplicate (``created: False``).
+
+    ``token`` overrides the runner's own ``GITHUB_TOKEN`` — used by M4b
+    business missions to authenticate with a scoped token for the sandboxed
+    repo instead of the runner's own credentials.
     """
     cfg = get_config()
-    if not cfg.has_github:
+    effective_token = token or cfg.github_token
+    if not effective_token:
         log_event("github_degraded", {"reason": "no GITHUB_TOKEN", "action": "create_pull_request"})
         return {"success": False, "reason": "no GITHUB_TOKEN"}
 
@@ -241,7 +249,7 @@ def create_pull_request(repo: str, branch: str, title: str, body: str, base: str
         existing = retry_request(
             requests.get,
             f"{_API_BASE}/repos/{repo}/pulls",
-            headers=_rest_headers(),
+            headers=_rest_headers(effective_token),
             params={"head": f"{owner}:{branch}", "base": base, "state": "open"},
             timeout=15,
         )
@@ -261,7 +269,7 @@ def create_pull_request(repo: str, branch: str, title: str, body: str, base: str
         r = retry_request(
             requests.post,
             f"{_API_BASE}/repos/{repo}/pulls",
-            headers=_rest_headers(),
+            headers=_rest_headers(effective_token),
             json={"title": title, "body": body, "head": branch, "base": base},
             timeout=15,
         )
@@ -294,7 +302,7 @@ def create_pull_request(repo: str, branch: str, title: str, body: str, base: str
         return {"success": False, "error": str(e), "error_body": body}
 
 
-def _fetch_pr_details(repo: str, pr_number: int) -> Optional[dict]:
+def _fetch_pr_details(repo: str, pr_number: int, token: Optional[str] = None) -> Optional[dict]:
     """Best-effort fetch of a PR's current mergeable state. Returns ``None``
     (rather than raising) on any error so a transient failure here degrades to
     "keep polling", not a crash of the whole check-poll loop."""
@@ -302,7 +310,7 @@ def _fetch_pr_details(repo: str, pr_number: int) -> Optional[dict]:
         r = retry_request(
             requests.get,
             f"{_API_BASE}/repos/{repo}/pulls/{pr_number}",
-            headers=_rest_headers(),
+            headers=_rest_headers(token),
             timeout=15,
         )
         r.raise_for_status()
@@ -312,14 +320,14 @@ def _fetch_pr_details(repo: str, pr_number: int) -> Optional[dict]:
         return None
 
 
-def _update_pr_branch(repo: str, pr_number: int) -> bool:
+def _update_pr_branch(repo: str, pr_number: int, token: Optional[str] = None) -> bool:
     """Refresh a PR's merge ref via the update-branch API to re-trigger
     workflows. Best-effort: returns False (does not raise) on failure."""
     try:
         r = retry_request(
             requests.put,
             f"{_API_BASE}/repos/{repo}/pulls/{pr_number}/update-branch",
-            headers=_rest_headers(),
+            headers=_rest_headers(token),
             timeout=15,
         )
         r.raise_for_status()
@@ -338,6 +346,7 @@ def poll_pr_checks(
     now=time.monotonic,
     pr_number: Optional[int] = None,
     empty_grace_s: float = None,
+    token: Optional[str] = None,
 ) -> dict:
     """Poll the check-runs API for ``sha`` until every run completes or the
     timeout elapses.
@@ -359,7 +368,8 @@ def poll_pr_checks(
     actionable reason rather than the generic timeout.
     """
     cfg = get_config()
-    if not cfg.has_github:
+    effective_token = token or cfg.github_token
+    if not effective_token:
         log_event("github_degraded", {"reason": "no GITHUB_TOKEN", "action": "poll_pr_checks"})
         return {"success": False, "timed_out": False, "reason": "no GITHUB_TOKEN", "runs": [], "polls": 0}
 
@@ -382,7 +392,7 @@ def poll_pr_checks(
             r = retry_request(
                 requests.get,
                 f"{_API_BASE}/repos/{repo}/commits/{sha}/check-runs",
-                headers=_rest_headers(),
+                headers=_rest_headers(effective_token),
                 timeout=15,
             )
             r.raise_for_status()
@@ -415,10 +425,10 @@ def poll_pr_checks(
         if not runs:
             if not branch_update_attempted and elapsed >= grace and pr_number is not None:
                 branch_update_attempted = True
-                pr_details = _fetch_pr_details(repo, pr_number)
+                pr_details = _fetch_pr_details(repo, pr_number, effective_token)
                 mergeable_state = (pr_details or {}).get("mergeable_state")
                 if mergeable_state in ("dirty", "behind"):
-                    if _update_pr_branch(repo, pr_number):
+                    if _update_pr_branch(repo, pr_number, effective_token):
                         log_event("pr_branch_updated", {
                             "repo": repo, "pr_number": pr_number,
                             "mergeable_state": mergeable_state, "elapsed": elapsed,
@@ -443,7 +453,9 @@ def poll_pr_checks(
         sleep(interval)
 
 
-def merge_pull_request(repo: str, pr_number: int, method: str = "merge") -> dict:
+def merge_pull_request(
+    repo: str, pr_number: int, method: str = "merge", token: Optional[str] = None,
+) -> dict:
     """Merge a pull request via the REST API.
 
     On rejection (405 — not mergeable / branch protection unmet, 409 — head
@@ -451,7 +463,8 @@ def merge_pull_request(repo: str, pr_number: int, method: str = "merge") -> dict
     in ``error_body`` so the reason is visible in logs rather than swallowed.
     """
     cfg = get_config()
-    if not cfg.has_github:
+    effective_token = token or cfg.github_token
+    if not effective_token:
         log_event("github_degraded", {"reason": "no GITHUB_TOKEN", "action": "merge_pull_request"})
         return {"success": False, "reason": "no GITHUB_TOKEN"}
 
@@ -459,7 +472,7 @@ def merge_pull_request(repo: str, pr_number: int, method: str = "merge") -> dict
         r = retry_request(
             requests.put,
             f"{_API_BASE}/repos/{repo}/pulls/{pr_number}/merge",
-            headers=_rest_headers(),
+            headers=_rest_headers(effective_token),
             json={"merge_method": method},
             timeout=30,
         )

@@ -3,7 +3,7 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Optional
 
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
@@ -117,6 +117,11 @@ from tools.seeded_mission_queue import (
     mark_mission_failed,
 )
 from tools.agent_run_sync import start_agent_run, complete_agent_run, fail_agent_run
+from tools.foreign_repo_workspace import (
+    fetch_business_by_id,
+    prepare_business_repo,
+    resolve_scoped_github_token,
+)
 from workers.chatgpt_worker import ChatGPTWorker
 from workers.claude_worker import ClaudeWorker
 from workers.codex_worker import CodexWorker
@@ -128,6 +133,35 @@ _PROTECTED_BRANCHES = frozenset({
 })
 
 _TASK_PROMPT_TEMPLATE = """You are working inside the bucks.ai repo at {repo_path}.
+
+Task: {title}
+Type: {type}
+Branch: {branch}
+{description_section}
+Complete this task fully. When done, output a structured summary including:
+- Files Created: (bullet list)
+- Files Modified: (bullet list)
+- Check Result: pass/fail
+- Commit Result: (sha or skipped)
+- Push Result: (done or skipped)
+- SQL Required: yes/no
+- SQL File Path: (if applicable)
+- Credentials Needed: (bullet list of secret/API-key NAMES you needed but did not have — names only, never values; write "none" if none blocked you)
+- Resources Needed: (bullet list of external access/services you needed but lacked — write "none" if none blocked you)
+- Known Limitations: (bullet list)
+- Next Task: (suggestions)
+"""
+
+# M4b: used instead of _TASK_PROMPT_TEMPLATE whenever the task's repo_path has
+# been overridden to a business's sandboxed workspace (see
+# resolve_business_repo_if_needed / tools/foreign_repo_workspace.py) — states
+# the foreign target repo explicitly so the worker never assumes it is
+# operating on the bucks-ai repo.
+_BUSINESS_TASK_PROMPT_TEMPLATE = """You are working inside the customer repo {repo_full_name}, checked out at {repo_path}.
+
+This is a BUSINESS'S OWN repository — it is NOT the bucks-ai repo. Do not
+read, reference, or modify anything under the bucks-ai source tree from this
+task; all file operations belong inside {repo_path}.
 
 Task: {title}
 Type: {type}
@@ -166,6 +200,34 @@ def _persist(state: RunnerState, step: str) -> RunnerState:
     state.updated_at = datetime.utcnow().isoformat()
     update_state(_state_dict(state))
     return state
+
+
+def _effective_repo_path(state: RunnerState) -> str:
+    """M4b: a business mission's task carries a ``repo_path`` override (its
+    isolated sandbox workspace, set by ``resolve_business_repo_if_needed``);
+    every other task falls back to the runner's own ``cfg.repo_path``. This is
+    the one place every git/check/diff call site should read the repo path
+    from, so a business task can never accidentally operate on the bucks-ai
+    repo just because a call site forgot to check for the override."""
+    task = state.current_task or {}
+    return task.get("repo_path") or cfg.repo_path
+
+
+def _effective_github_repo(task: dict) -> Optional[str]:
+    """M4b: business missions target their own sandboxed GitHub repo instead
+    of the runner's own ``cfg.github_repo``."""
+    return task.get("business_repo_full_name") or cfg.github_repo
+
+
+def _effective_github_token(task: dict) -> Optional[str]:
+    """M4b: re-resolve the scoped GitHub token fresh from the environment by
+    name for a business mission — never carried across state/log events (see
+    tools/foreign_repo_workspace.py::resolve_scoped_github_token)."""
+    secret_name = task.get("business_github_token_secret_name")
+    if not secret_name:
+        return cfg.github_token
+    result = resolve_scoped_github_token(secret_name)
+    return result.get("token") if result["success"] else None
 
 
 def _compress_context_if_needed(state: RunnerState, *, reason: str) -> RunnerState:
@@ -600,6 +662,154 @@ def choose_worker(state: RunnerState) -> RunnerState:
     return _persist(state, "choose_worker")
 
 
+def resolve_business_repo_if_needed(state: RunnerState) -> RunnerState:
+    """M4b: runner executes missions against a foreign (business) repo.
+
+    Only tasks carrying ``business_id`` are affected — ordinary self-repo
+    tasks pass through untouched. When resolution succeeds,
+    ``state.current_task`` gets a ``repo_path`` override pointing at the
+    business's isolated workspace (``.workspaces/<business_id>/``) plus
+    ``business_repo_full_name`` / ``business_github_token_secret_name`` so the
+    worker prompt and the PR/merge flow target the right repo — see
+    ``tools/foreign_repo_workspace.py::prepare_business_repo``.
+
+    CRITICAL SAFETY: this is the only place a business mission's repo_path is
+    ever set, and it is always the isolated workspace path — never the
+    bucks-ai repo (enforced by ``is_bucks_ai_repo`` / ``guard_business_repo_path``
+    inside ``prepare_business_repo``). A sandbox_config that resolves to the
+    bucks-ai repo, or a missing/unresolvable business, hard-fails the task
+    and halts the loop for human review rather than silently falling back to
+    the runner's own repo.
+
+    A missing GitHub token secret or unconfigured sandbox is treated as a
+    resource-gate request (name only — see tools/resource_gate.py), mirroring
+    ``request_resources_if_needed``, so a human can provision it and unblock
+    the loop the same way as any other missing credential.
+    """
+    task = state.current_task or {}
+    business_id = task.get("business_id")
+    if not business_id:
+        return state
+
+    task_id = state.current_task_id or task.get("id", "unknown")
+
+    business = fetch_business_by_id(str(business_id))
+    if business is None:
+        state.stop_reason = "business_not_found"
+        mark_task_failed(task_id, f"business {business_id} not found for sandboxed mission")
+        log_event("error", {
+            "task_id": task_id,
+            "error": f"business_not_found: business {business_id} not found for sandboxed mission",
+        }, task_id=task_id)
+        return _persist(state, "resolve_business_repo_if_needed")
+
+    result = prepare_business_repo(task, business)
+
+    if result["success"]:
+        task = dict(task)
+        task["repo_path"] = result["repo_path"]
+        task["business_repo_full_name"] = result["repo_full_name"]
+        task["business_github_token_secret_name"] = result["github_token_secret_name"]
+        state.current_task = task
+        log_event("business_repo_workspace_ready", {
+            "task_id": task_id,
+            "business_id": business_id,
+            "repo_full_name": result["repo_full_name"],
+            "repo_path": result["repo_path"],
+        }, task_id=task_id)
+        return _persist(state, "resolve_business_repo_if_needed")
+
+    reason = result["reason"]
+
+    if reason == "forbidden_repo":
+        state.stop_reason = "business_repo_forbidden"
+        mark_task_failed(
+            task_id,
+            f"refused: sandbox repo_full_name '{result['repo_full_name']}' resolves to the bucks-ai repo",
+        )
+        log_event("error", {
+            "task_id": task_id,
+            "error": f"business_repo_forbidden: {result['repo_full_name']}",
+        }, task_id=task_id)
+        return _persist(state, "resolve_business_repo_if_needed")
+
+    if reason == "missing_secret":
+        secret_name = result["secret_name"]
+        requests_dict = {"credentials": [secret_name], "resources": [], "all": [secret_name]}
+        request_path = _RUNNER_DIR / "outbox" / f"{task_id}_resource_request.txt"
+        provided_path = _RUNNER_DIR / "inbox" / f"{task_id}_resources_provided.txt"
+
+        if not request_path.exists():
+            request_path.write_text(format_request_file(
+                task_id, task.get("title", ""), requests_dict, provided_path.name,
+            ))
+            log_event("resource_request_pending", {
+                "task_id": task_id,
+                "credentials_needed": [secret_name],
+                "resources_needed": [],
+                "review_path": str(request_path),
+                "fulfill_by": str(provided_path),
+                "message": f"Business mission needs a GitHub token secret. See {request_path.name}; create {provided_path.name} to unblock.",
+            }, task_id=task_id)
+
+        gate = evaluate_gate({"credentials_needed": [secret_name], "resources_needed": []}, provided=provided_path.exists())
+        if gate["blocked"]:
+            state.resource_request_status = "pending"
+            state.stop_reason = "awaiting_resources"
+            mark_task_blocked(task_id, f"awaiting GitHub token secret: {secret_name}")
+            log_event("resource_request_waiting", {
+                "task_id": task_id,
+                "message": f"Waiting for fulfillment file: {provided_path}",
+                "credentials_needed": [secret_name],
+                "resources_needed": [],
+            }, task_id=task_id)
+        else:
+            state.resource_request_status = "fulfilled"
+            log_event("resource_request_fulfilled", {"task_id": task_id, "count": 1}, task_id=task_id)
+            # Re-attempt now that the human has signalled fulfillment. This
+            # only succeeds if the secret is actually present in this
+            # process's environment (e.g. the runner was restarted after
+            # adding it to .env) — otherwise it blocks again with the same
+            # actionable request, exactly like any other credential gate.
+            retry = prepare_business_repo(task, business)
+            if retry["success"]:
+                task = dict(task)
+                task["repo_path"] = retry["repo_path"]
+                task["business_repo_full_name"] = retry["repo_full_name"]
+                task["business_github_token_secret_name"] = retry["github_token_secret_name"]
+                state.current_task = task
+            else:
+                state.stop_reason = "awaiting_resources"
+                mark_task_blocked(task_id, f"still awaiting GitHub token secret: {secret_name}")
+        return _persist(state, "resolve_business_repo_if_needed")
+
+    # no_sandbox_config / workspace_error — actionable, but not a security
+    # violation. Surface as a resource request rather than a hard failure.
+    resource_label = (
+        "business sandbox_config (repo_full_name + github_token_secret_name)"
+        if reason == "no_sandbox_config"
+        else f"business repo workspace ({result.get('error') or reason})"
+    )
+    requests_dict = {"credentials": [], "resources": [resource_label], "all": [resource_label]}
+    request_path = _RUNNER_DIR / "outbox" / f"{task_id}_resource_request.txt"
+    provided_path = _RUNNER_DIR / "inbox" / f"{task_id}_resources_provided.txt"
+    if not request_path.exists():
+        request_path.write_text(format_request_file(
+            task_id, task.get("title", ""), requests_dict, provided_path.name,
+        ))
+        log_event("resource_request_pending", {
+            "task_id": task_id,
+            "credentials_needed": [],
+            "resources_needed": [resource_label],
+            "review_path": str(request_path),
+            "fulfill_by": str(provided_path),
+        }, task_id=task_id)
+    state.resource_request_status = "pending"
+    state.stop_reason = "awaiting_resources"
+    mark_task_blocked(task_id, f"business repo unavailable: {reason}")
+    return _persist(state, "resolve_business_repo_if_needed")
+
+
 def check_acceptance_criteria(state: RunnerState) -> RunnerState:
     """Task Acceptance Criteria Gate.
 
@@ -674,13 +884,25 @@ def generate_worker_prompt(state: RunnerState) -> RunnerState:
     task = state.current_task or {}
     description = (task.get("description") or "").strip()
     description_section = f"\nDescription:\n{description}\n" if description else ""
-    prompt = _TASK_PROMPT_TEMPLATE.format(
-        repo_path=cfg.repo_path,
-        title=task.get("title", ""),
-        type=task.get("type", "general"),
-        branch=task.get("branch", f"feature/{task.get('id', 'task')}"),
-        description_section=description_section,
-    )
+    repo_path = _effective_repo_path(state)
+    business_repo_full_name = task.get("business_repo_full_name")
+    if business_repo_full_name:
+        prompt = _BUSINESS_TASK_PROMPT_TEMPLATE.format(
+            repo_path=repo_path,
+            repo_full_name=business_repo_full_name,
+            title=task.get("title", ""),
+            type=task.get("type", "general"),
+            branch=task.get("branch", f"feature/{task.get('id', 'task')}"),
+            description_section=description_section,
+        )
+    else:
+        prompt = _TASK_PROMPT_TEMPLATE.format(
+            repo_path=repo_path,
+            title=task.get("title", ""),
+            type=task.get("type", "general"),
+            branch=task.get("branch", f"feature/{task.get('id', 'task')}"),
+            description_section=description_section,
+        )
 
     if cfg.fast_engineering_mode_enabled:
         from tools.fast_engineering_mode import build_engineering_context, format_engineering_injection
@@ -940,7 +1162,8 @@ def check_definition_of_done(state: RunnerState) -> RunnerState:
     summary = state.worker_summary or {}
     task = state.current_task or {}
     raw_output = result.get("output") or ""
-    diff_text = get_diff_text(cfg.repo_path)
+    repo_path = _effective_repo_path(state)
+    diff_text = get_diff_text(repo_path)
 
     decision = guard_definition_of_done(
         summary=summary,
@@ -948,7 +1171,7 @@ def check_definition_of_done(state: RunnerState) -> RunnerState:
         raw_output=raw_output,
         context="check_definition_of_done",
         strict_mode=cfg.definition_of_done_strict_mode,
-        repo_path=cfg.repo_path,
+        repo_path=repo_path,
         diff_text=diff_text,
     )
 
@@ -985,7 +1208,7 @@ def check_independent_code_review(state: RunnerState) -> RunnerState:
 
     task = state.current_task or {}
     summary = state.worker_summary or {}
-    diff_text = get_diff_text(cfg.repo_path)
+    diff_text = get_diff_text(_effective_repo_path(state))
 
     decision = guard_code_review(
         diff_text=diff_text,
@@ -1038,7 +1261,7 @@ def check_high_risk_claude_review(state: RunnerState) -> RunnerState:
 
     task = state.current_task or {}
     summary = state.worker_summary or {}
-    diff_text = get_diff_text(cfg.repo_path)
+    diff_text = get_diff_text(_effective_repo_path(state))
 
     decision = guard_high_risk_claude_review(
         diff_text=diff_text,
@@ -1140,7 +1363,7 @@ def run_checks_if_needed(state: RunnerState) -> RunnerState:
         state.check_output = "[dry-run: check skipped]"
         log_event("dry_run_skip", {"node": "run_checks_if_needed", "task_id": state.current_task_id})
         return _persist(state, "run_checks_if_needed")
-    check = run_check(cfg.repo_path)
+    check = run_check(_effective_repo_path(state))
     state.check_passed = check["success"]
     state.check_output = check.get("output") or ""
     return _persist(state, "run_checks_if_needed")
@@ -1210,7 +1433,7 @@ def auto_repair_if_needed(state: RunnerState) -> RunnerState:
         elapsed = round(time.monotonic() - _start, 2)
 
         if repair_result.success:
-            check = run_check(cfg.repo_path)
+            check = run_check(_effective_repo_path(state))
             state.check_passed = check["success"]
             state.check_output = check.get("output") or ""
 
@@ -1274,7 +1497,7 @@ def check_merge_approval_if_needed(state: RunnerState) -> RunnerState:
     task = state.current_task or {}
     task_id = state.current_task_id or "unknown"
     summary = state.worker_summary or {}
-    diff_text = get_diff_text(cfg.repo_path)
+    diff_text = get_diff_text(_effective_repo_path(state))
 
     approval_path = _RUNNER_DIR / "outbox" / f"{task_id}_merge_approval_request.txt"
     provided_path = _RUNNER_DIR / "inbox" / f"{task_id}_merge_approved.txt"
@@ -1347,30 +1570,32 @@ def commit_push_merge_if_needed(state: RunnerState) -> RunnerState:
         state.error = f"branch_guard: '{branch}' is not a valid task branch"
         return _persist(state, "commit_push_merge_if_needed")
 
-    br = create_branch(cfg.repo_path, branch)
+    repo_path = _effective_repo_path(state)
+
+    br = create_branch(repo_path, branch)
     if not br["success"]:
         return state
 
     state.current_branch = branch
     task_title = task.get("title", "runner task")
-    commit = commit_all(cfg.repo_path, f"Complete: {task_title}")
+    commit = commit_all(repo_path, f"Complete: {task_title}")
     # A commit "landed" either when the runner created one, or when the worker had
     # already committed its own changes (clean tree -> "nothing to commit"). In both
     # cases HEAD is deployable, so record it and run push/merge — otherwise
     # deploy_if_needed wrongly skips with "no committed changes to deploy".
     if commit.get("committed"):
         state.last_commit = commit["sha"]
-        push_branch(cfg.repo_path, branch)
+        push_branch(repo_path, branch)
 
         if cfg.auto_merge:
             if cfg.merge_via_pr:
                 _merge_via_pull_request(state, task, branch)
             else:
-                merge = merge_feature_branch(cfg.repo_path, branch)
+                merge = merge_feature_branch(repo_path, branch)
                 if merge.get("success"):
-                    fetch_pull_main(cfg.repo_path)
+                    fetch_pull_main(repo_path)
                     if cfg.auto_cleanup_branches:
-                        cleanup_feature_branch(cfg.repo_path, branch)
+                        cleanup_feature_branch(repo_path, branch)
 
     return _persist(state, "commit_push_merge_if_needed")
 
@@ -1391,8 +1616,14 @@ def _merge_via_pull_request(state: RunnerState, task: dict, branch: str) -> None
     unlike a local ``git merge`` + direct push to ``main``.
     """
     task_id = state.current_task_id or task.get("id", "unknown")
+    repo_path = _effective_repo_path(state)
+    # M4b: a business mission's PR/merge flow reuses github_tools but targets
+    # the business's own sandboxed repo with its scoped token, not the
+    # runner's own cfg.github_repo/cfg.github_token.
+    github_repo = _effective_github_repo(task)
+    github_token = _effective_github_token(task)
 
-    if not cfg.has_github or not cfg.github_repo:
+    if not github_repo or not github_token:
         log_event("github_degraded", {
             "reason": "no GITHUB_TOKEN/GITHUB_REPO", "action": "merge_via_pr",
         }, task_id=task_id)
@@ -1402,7 +1633,7 @@ def _merge_via_pull_request(state: RunnerState, task: dict, branch: str) -> None
     digest = state.worker_summary_digest or build_run_summary_digest(state.worker_summary or {}, task=task, max_chars=1500)
     body = f"Automated PR for task `{task_id}`.\n\n{digest}"
 
-    pr = create_pull_request(cfg.github_repo, branch, title, body)
+    pr = create_pull_request(github_repo, branch, title, body, token=github_token)
     if not pr.get("success"):
         log_event("error", {
             "task_id": task_id,
@@ -1419,19 +1650,20 @@ def _merge_via_pull_request(state: RunnerState, task: dict, branch: str) -> None
             "reason": "no commits between branch and base; treated as no-op success",
         }, task_id=task_id)
         if cfg.auto_cleanup_branches:
-            cleanup_feature_branch(cfg.repo_path, branch, force=True)
+            cleanup_feature_branch(repo_path, branch, force=True)
         return
 
     state.pr_number = pr.get("number")
     state.pr_url = pr.get("url")
 
-    sha = current_commit_sha(cfg.repo_path)
+    sha = current_commit_sha(repo_path)
     checks = poll_pr_checks(
-        cfg.github_repo,
+        github_repo,
         sha,
         timeout_s=cfg.pr_checks_timeout_s,
         interval_s=cfg.pr_checks_poll_interval_s,
         pr_number=state.pr_number,
+        token=github_token,
     )
 
     if checks.get("timed_out"):
@@ -1455,7 +1687,7 @@ def _merge_via_pull_request(state: RunnerState, task: dict, branch: str) -> None
         )
         return
 
-    merge = merge_pull_request(cfg.github_repo, state.pr_number)
+    merge = merge_pull_request(github_repo, state.pr_number, token=github_token)
     if not merge.get("success"):
         _mark_merge_step_failed(
             state,
@@ -1463,11 +1695,11 @@ def _merge_via_pull_request(state: RunnerState, task: dict, branch: str) -> None
         )
         return
 
-    fetch_pull_main(cfg.repo_path)
+    fetch_pull_main(repo_path)
     if cfg.auto_cleanup_branches:
         # force: the GitHub merge API just confirmed this branch's changes are
         # on main; a squash merge makes local `git branch -d` false-refuse.
-        cleanup_feature_branch(cfg.repo_path, branch, force=True)
+        cleanup_feature_branch(repo_path, branch, force=True)
 
 
 _RUNNER_DIR = Path(__file__).parent
@@ -2500,6 +2732,12 @@ def _route_after_chatgpt(state: RunnerState) -> str:
     return "choose_worker"
 
 
+def _route_after_business_repo(state: RunnerState) -> str:
+    if state.stop_reason:
+        return "decide_continue_or_stop"
+    return "check_acceptance_criteria"
+
+
 def _route_after_acceptance_criteria(state: RunnerState) -> str:
     if state.acceptance_criteria_status == "failed":
         return "decide_continue_or_stop"
@@ -2564,6 +2802,7 @@ def build_graph():
     builder.add_node("seed_mission_queue_if_needed", seed_mission_queue_if_needed)
     builder.add_node("ask_chatgpt_for_task_if_needed", ask_chatgpt_for_task_if_needed)
     builder.add_node("choose_worker", choose_worker)
+    builder.add_node("resolve_business_repo_if_needed", resolve_business_repo_if_needed)
     builder.add_node("check_acceptance_criteria", check_acceptance_criteria)
     builder.add_node("resolve_model", resolve_model_node)
     builder.add_node("generate_worker_prompt", generate_worker_prompt)
@@ -2621,7 +2860,11 @@ def build_graph():
         "decide_continue_or_stop": "decide_continue_or_stop",
         "choose_worker": "choose_worker",
     })
-    builder.add_edge("choose_worker", "check_acceptance_criteria")
+    builder.add_edge("choose_worker", "resolve_business_repo_if_needed")
+    builder.add_conditional_edges("resolve_business_repo_if_needed", _route_after_business_repo, {
+        "check_acceptance_criteria": "check_acceptance_criteria",
+        "decide_continue_or_stop": "decide_continue_or_stop",
+    })
     builder.add_conditional_edges("check_acceptance_criteria", _route_after_acceptance_criteria, {
         "resolve_model": "resolve_model",
         "decide_continue_or_stop": "decide_continue_or_stop",

@@ -89,8 +89,10 @@ class ClaudeWorker(BaseWorker):
             "auth_mode": auth_mode,
         })
 
+        repo_path = task.get("repo_path") or cfg.repo_path
+
         if shutil.which("claude"):
-            result = self._run_cli(prompt, task_id, model=model, auth_mode=auth_mode)
+            result = self._run_cli(prompt, task_id, model=model, auth_mode=auth_mode, repo_path=repo_path)
         else:
             result = self._run_outbox(prompt, task_id)
 
@@ -103,10 +105,11 @@ class ClaudeWorker(BaseWorker):
         task_id: str,
         model: str | None = None,
         auth_mode: str = "api_key",
+        repo_path: str | None = None,
     ) -> WorkerResult:
         cfg = get_config()
+        repo_path = repo_path or cfg.repo_path
         if cfg.claude_hooks_safety_pack_enabled:
-            repo_path = cfg.repo_path
             if cfg.claude_hooks_safety_pack_auto_install:
                 result = write_hooks(repo_path)
                 if result["merged"]:

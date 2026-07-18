@@ -487,17 +487,17 @@ def _wire_for_pr_merge(commit_result, *, create_result, checks_result, merge_res
     graph.push_branch = lambda repo, branch: calls["push"].append(branch)
     graph.current_commit_sha = lambda repo: "deadbeef"
 
-    def _create_pr(repo, branch, title, body):
+    def _create_pr(repo, branch, title, body, **kw):
         calls["create_pr"].append((repo, branch))
         return create_result
     graph.create_pull_request = _create_pr
 
-    def _poll_checks(repo, sha, timeout_s=None, interval_s=None, pr_number=None):
+    def _poll_checks(repo, sha, timeout_s=None, interval_s=None, pr_number=None, **kw):
         calls["poll_checks"].append((repo, sha))
         return checks_result
     graph.poll_pr_checks = _poll_checks
 
-    def _merge_pr(repo, number):
+    def _merge_pr(repo, number, **kw):
         calls["merge_pr"].append((repo, number))
         return merge_result
     graph.merge_pull_request = _merge_pr
