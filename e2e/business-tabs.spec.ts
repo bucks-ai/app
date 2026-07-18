@@ -56,6 +56,20 @@ test.describe("business detail tabs", () => {
 
     const baseUrl = page.url().split("?")[0];
 
+    // Overview: Execute is the primary CTA in the business header with
+    // helper copy that explains the action.
+    await page.goto(`${baseUrl}?tab=overview`);
+    await expect(
+      page.getByRole("button", { name: "Execute", exact: true })
+    ).toBeVisible({ timeout: 15000 });
+    await expect(
+      page.getByText(
+        "Execute queues the runner to turn this business plan into shipped work.",
+        { exact: true }
+      )
+    ).toBeVisible();
+    await assertNoUnhandledError(page);
+
     // Research: the section header always renders; the panel below must
     // land on either the "ready" summary (seeded/generated data) or the
     // "empty" generate-workspace prompt — never its error state.
