@@ -39,8 +39,8 @@ def _landed_state():
 
 
 def _stub_trigger(verdict, calls):
-    def _trigger(project_name=None, project_id=None, poll=True):
-        calls.append({"project_name": project_name, "project_id": project_id})
+    def _trigger(project_name=None, project_id=None, poll=True, token=None):
+        calls.append({"project_name": project_name, "project_id": project_id, "token": token})
         return verdict
     return _trigger
 

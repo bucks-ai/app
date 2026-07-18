@@ -101,6 +101,24 @@ def build_default_scenarios(base_url: str) -> list[dict]:
     ]
 
 
+def build_business_smoke_scenarios(base_url: str) -> list[dict]:
+    """M4b post-deploy smoke check for business missions: HTTP 200 on ``/``
+    plus a non-empty ``<title>`` — deliberately lighter than
+    ``build_default_scenarios`` (whose ``title_contains`` check is skipped
+    entirely when given an empty value) since a freshly scaffolded business
+    site has no known title text to assert against yet."""
+    return [
+        {
+            "name": "business homepage smoke check",
+            "path": "/",
+            "checks": [
+                {"type": "status", "value": "ok"},
+                {"type": "title_non_empty", "value": ""},
+            ],
+        },
+    ]
+
+
 def evaluate_results(results: list[dict]) -> dict:
     """Aggregate scenario results into a summary.
 
@@ -161,6 +179,9 @@ def _run_checks_on_page(page, checks: list[dict]) -> list[str]:
                     failures.append(
                         f"title does not contain {value!r} (got {page.title()!r})"
                     )
+            elif ctype == "title_non_empty":
+                if not page.title().strip():
+                    failures.append("title is empty")
             elif ctype == "text_contains":
                 if value and value not in page.content():
                     failures.append(f"page body does not contain {value!r}")

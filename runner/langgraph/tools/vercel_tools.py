@@ -5,6 +5,7 @@ it reaches a terminal state (READY / ERROR / CANCELED) or a timeout elapses, so
 the runner can wait for an auto-deploy to actually finish instead of firing it
 and immediately moving on.
 """
+import os
 import time
 
 import requests
@@ -21,9 +22,13 @@ _STATES_FAILED = frozenset({"ERROR", "CANCELED", "DELETED"})
 _STATES_IN_PROGRESS = frozenset({"QUEUED", "INITIALIZING", "BUILDING"})
 
 
-def _headers():
+def _headers(token: str = None):
+    """Build the Vercel auth header. *token* overrides the configured
+    ``VERCEL_TOKEN`` when set — used for business-mission deploys, which must
+    authenticate with the business's own scoped token, never the bucks-ai
+    token (see ``resolve_business_vercel_target``)."""
     cfg = get_config()
-    return {"Authorization": f"Bearer {cfg.vercel_token}"}
+    return {"Authorization": f"Bearer {token or cfg.vercel_token}"}
 
 
 def normalize_ready_state(deployment: dict) -> str:
@@ -59,15 +64,15 @@ def normalize_deployment_url(url: str) -> str:
     return f"https://{url}"
 
 
-def get_deployment_status(project_id: str = None) -> dict:
+def get_deployment_status(project_id: str = None, token: str = None) -> dict:
     cfg = get_config()
-    if not cfg.has_vercel:
+    if not (token or cfg.has_vercel):
         log_event("vercel_degraded", {"reason": "no VERCEL_TOKEN"})
         return {"available": False, "reason": "no VERCEL_TOKEN"}
     try:
         url = f"{_BASE}/v6/deployments"
         params = {"projectId": project_id} if project_id else {}
-        r = retry_request(requests.get, url, headers=_headers(), params=params, timeout=15)
+        r = retry_request(requests.get, url, headers=_headers(token), params=params, timeout=15)
         r.raise_for_status()
         deployments = r.json().get("deployments", [])
         latest = deployments[0] if deployments else None
@@ -77,17 +82,17 @@ def get_deployment_status(project_id: str = None) -> dict:
         return {"available": False, "error": str(e)}
 
 
-def get_deployment_by_id(deployment_id: str) -> dict:
+def get_deployment_by_id(deployment_id: str, token: str = None) -> dict:
     """Fetch a single deployment by its id/uid (read-only)."""
     cfg = get_config()
-    if not cfg.has_vercel:
+    if not (token or cfg.has_vercel):
         log_event("vercel_degraded", {"reason": "no VERCEL_TOKEN"})
         return {"available": False, "reason": "no VERCEL_TOKEN"}
     if not deployment_id:
         return {"available": False, "error": "no deployment_id"}
     try:
         url = f"{_BASE}/v13/deployments/{deployment_id}"
-        r = retry_request(requests.get, url, headers=_headers(), timeout=15)
+        r = retry_request(requests.get, url, headers=_headers(token), timeout=15)
         r.raise_for_status()
         return {"available": True, "deployment": r.json()}
     except Exception as e:
@@ -103,6 +108,7 @@ def poll_deployment_until_terminal(
     fetch=None,
     sleep=time.sleep,
     now=time.monotonic,
+    token: str = None,
 ) -> dict:
     """Poll a deployment until it reaches a terminal state or ``timeout`` elapses.
 
@@ -128,7 +134,7 @@ def poll_deployment_until_terminal(
         }
     """
     cfg = get_config()
-    if not cfg.has_vercel:
+    if not (token or cfg.has_vercel):
         log_event("vercel_degraded", {"reason": "no VERCEL_TOKEN", "action": "poll"})
         return {
             "available": False,
@@ -146,9 +152,9 @@ def poll_deployment_until_terminal(
 
     if fetch is None:
         if deployment_id:
-            fetch = lambda: get_deployment_by_id(deployment_id)
+            fetch = lambda: get_deployment_by_id(deployment_id, token=token)
         else:
-            fetch = lambda: get_deployment_status(project_id)
+            fetch = lambda: get_deployment_status(project_id, token=token)
 
     start = now()
     polls = 0
@@ -224,14 +230,26 @@ def poll_deployment_until_terminal(
         sleep(interval)
 
 
-def trigger_deploy(project_name: str = None, project_id: str = None, poll: bool = True) -> dict:
+def trigger_deploy(
+    project_name: str = None,
+    project_id: str = None,
+    poll: bool = True,
+    token: str = None,
+) -> dict:
+    """Trigger (and optionally poll) a Vercel deploy.
+
+    *token* overrides the configured ``VERCEL_TOKEN`` — business missions pass
+    the scoped token resolved by ``resolve_business_vercel_target`` here so the
+    deploy authenticates against the business's own Vercel account, never the
+    bucks-ai one.
+    """
     cfg = get_config()
-    if not cfg.has_vercel:
+    if not (token or cfg.has_vercel):
         return {"success": False, "reason": "no VERCEL_TOKEN"}
     if not cfg.auto_deploy:
         return {"success": False, "reason": "AUTO_DEPLOY=false"}
-    log_event("deploy_started", {"project_name": project_name})
-    status = get_deployment_status(project_id)
+    log_event("deploy_started", {"project_name": project_name, "project_id": project_id})
+    status = get_deployment_status(project_id, token=token)
     latest = status.get("latest") or {}
     result = {"success": status.get("available", False), "status": status}
     result["url"] = normalize_deployment_url(latest.get("url"))
@@ -243,6 +261,7 @@ def trigger_deploy(project_name: str = None, project_id: str = None, poll: bool 
         verdict = poll_deployment_until_terminal(
             deployment_id=deployment_id,
             project_id=project_id,
+            token=token,
         )
         result["poll"] = verdict
         # The polled deployment record is the freshest source of the final URL
@@ -257,3 +276,66 @@ def trigger_deploy(project_name: str = None, project_id: str = None, poll: bool 
 
     log_event("deploy_completed", {"status": status, "poll": result.get("poll"), "url": result.get("url")})
     return result
+
+
+# ---------------------------------------------------------------------------
+# M4b: business-mission deploy targeting
+#
+# A business mission's deploy must target that business's OWN Vercel project
+# using a token scoped to it — never the bucks-ai project/token this runner
+# otherwise deploys with. The business's target lives on
+# ``businesses.sandbox_config`` (JSONB; see
+# supabase/migrations/0004_businesses_sandbox_config.sql,
+# 0005_business_sandbox_config_vercel_target.sql) under the keys
+# ``vercel_project_id`` / ``vercel_token_secret_name`` — the latter names an
+# environment variable, never a token value (external containment convention;
+# mirrors ``tools/foreign_repo_workspace.py::resolve_scoped_github_token``).
+# ---------------------------------------------------------------------------
+
+def resolve_scoped_vercel_token(secret_name: str) -> dict:
+    """Read a Vercel token from the environment by *secret_name*.
+
+    Returns ``{"success": True, "token": ..., "secret_name": ...}`` or
+    ``{"success": False, "error": "missing_secret"/"no_secret_name", "secret_name": ...}``.
+    Callers must only ever surface ``secret_name`` in logs — never ``token``.
+    """
+    secret_name = (secret_name or "").strip()
+    if not secret_name:
+        return {"success": False, "error": "no_secret_name"}
+    token = os.environ.get(secret_name)
+    if not token:
+        return {"success": False, "error": "missing_secret", "secret_name": secret_name}
+    return {"success": True, "token": token, "secret_name": secret_name}
+
+
+def resolve_business_vercel_target(sandbox_config: dict) -> dict:
+    """Resolve a business mission's Vercel deploy target from its
+    ``sandbox_config`` dict (as fetched onto a ``businesses`` row).
+
+    Returns one of:
+      {"success": True, "project_id": ..., "token": ..., "secret_name": ...}
+      {"success": False, "reason": "partial_sandbox_config"}
+      {"success": False, "reason": "missing_secret", "secret_name": ...}
+
+    CRITICAL SAFETY: this function never returns a bucks-ai fallback target.
+    When ``vercel_project_id`` or ``vercel_token_secret_name`` is missing —
+    a "partial" sandbox_config — the caller must skip the deploy for that
+    business entirely rather than substituting the runner's own
+    ``VERCEL_PROJECT_ID``/``VERCEL_TOKEN``.
+    """
+    sandbox_config = sandbox_config or {}
+    project_id = (sandbox_config.get("vercel_project_id") or "").strip()
+    secret_name = (sandbox_config.get("vercel_token_secret_name") or "").strip()
+    if not project_id or not secret_name:
+        return {"success": False, "reason": "partial_sandbox_config"}
+
+    token_result = resolve_scoped_vercel_token(secret_name)
+    if not token_result["success"]:
+        return {"success": False, "reason": "missing_secret", "secret_name": secret_name}
+
+    return {
+        "success": True,
+        "project_id": project_id,
+        "token": token_result["token"],
+        "secret_name": secret_name,
+    }

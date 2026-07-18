@@ -96,3 +96,17 @@ itself. Any future runner code that reads a business's sandbox config (e.g.
 to clone its repo or deploy to its Vercel project) must resolve the token by
 looking up that name in its own environment — never by reading a token value
 out of this table, because no such value is ever written there.
+
+## 0004_businesses_sandbox_config.sql / 0005_business_sandbox_config_vercel_target.sql — the runtime sandbox_config shape
+
+Note this is a *second*, separate representation of sandbox config from the
+`business_sandbox` table above: the runner's graph nodes
+(`runner/langgraph/tools/foreign_repo_workspace.py`,
+`runner/langgraph/tools/vercel_tools.py`) read a JSONB `sandbox_config` column
+directly on `businesses`, not the `business_sandbox` table. `0004` added
+`repo_full_name` / `github_token_secret_name` for foreign-repo execution
+(M4b task 05); `0005` documents the additional `vercel_project_id` /
+`vercel_token_secret_name` keys used to target a business's own Vercel
+project for deploys (M4b task 06) — same secret-name-only convention. A
+future task should reconcile these two representations; until then, the
+runner only ever reads `businesses.sandbox_config`.
