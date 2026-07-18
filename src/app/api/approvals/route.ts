@@ -2,6 +2,7 @@ import { hasSupabaseEnv } from "@/lib/supabase/env";
 import { requireUser } from "@/lib/api-auth";
 import { getPendingApprovalsForOwner } from "@/lib/approvals";
 import { apiError } from "@/lib/api-error";
+import { APPROVALS_SCHEMA_SQL_FILE } from "@/types/approval-ui";
 
 // ---------------------------------------------------------------------------
 // GET /api/approvals
@@ -21,10 +22,17 @@ export async function GET() {
   const result = await getPendingApprovalsForOwner(user.id);
   if (result.error || !result.data) {
     if (result.code === "approvals_schema_missing") {
-      return Response.json({ ok: true, data: { approvals: [] } });
+      return Response.json({
+        ok: true,
+        data: {
+          approvals: [],
+          emptyState: "approvals_schema_missing",
+          sqlFile: APPROVALS_SCHEMA_SQL_FILE,
+        },
+      });
     }
     return apiError(result.error ?? "Could not load approvals.", result.code ?? "approvals_fetch_failed", 500);
   }
 
-  return Response.json({ ok: true, data: { approvals: result.data } });
+  return Response.json({ ok: true, data: { approvals: result.data, emptyState: "none" } });
 }

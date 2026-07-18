@@ -66,7 +66,10 @@ describe("GET /api/approvals", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
       ok: true,
-      data: { approvals: [{ id: "approval-1", request_type: "merge_approval", status: "pending" }] },
+      data: {
+        approvals: [{ id: "approval-1", request_type: "merge_approval", status: "pending" }],
+        emptyState: "none",
+      },
     });
   });
 
@@ -81,7 +84,14 @@ describe("GET /api/approvals", () => {
     const response = await GET();
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ ok: true, data: { approvals: [] } });
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      data: {
+        approvals: [],
+        emptyState: "approvals_schema_missing",
+        sqlFile: "supabase/m4a-approvals-queue.sql",
+      },
+    });
   });
 
   it("returns a 500 envelope for other fetch failures", async () => {

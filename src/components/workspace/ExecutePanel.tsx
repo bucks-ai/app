@@ -78,24 +78,28 @@ export function ExecutePanel({ businessId }: ExecutePanelProps) {
   const statusTone = mission ? (STATUS_TONE[mission.status] ?? STATUS_TONE.queued) : null;
 
   return (
-    <div className="flex shrink-0 flex-col items-end gap-1.5">
-      <div className="flex items-center gap-2">
+    <div className="flex w-full min-w-[16rem] shrink-0 flex-col gap-2 sm:w-auto lg:items-end">
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          aria-label="Execute"
+          onClick={handleExecute}
+          disabled={executing}
+          className="rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-accent-contrast shadow-[var(--shadow-soft)] transition-colors hover:bg-accent-hover disabled:opacity-50"
+        >
+          {executing ? "Executing..." : "Execute"}
+        </button>
         {statusLabel ? (
           <span
-            className={`rounded border px-2 py-1 font-mono text-[10px] uppercase tracking-widest ${statusTone}`}
+            className={`rounded border px-2.5 py-1 text-xs font-semibold ${statusTone}`}
           >
             {statusLabel}
           </span>
         ) : null}
-        <button
-          type="button"
-          onClick={handleExecute}
-          disabled={executing}
-          className="rounded-md bg-accent px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-accent-contrast transition-colors hover:bg-accent-hover disabled:opacity-50"
-        >
-          {executing ? "Executing..." : mission ? "Execute again" : "Execute"}
-        </button>
       </div>
+      <p className="max-w-xs text-xs leading-5 text-muted lg:text-right">
+        Execute queues the runner to turn this business plan into shipped work.
+      </p>
       {error ? <p className="max-w-xs text-right text-xs text-error">{error}</p> : null}
     </div>
   );
