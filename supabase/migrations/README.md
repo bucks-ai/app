@@ -26,6 +26,28 @@ NNNN_description.sql
 
 ## How migrations are applied
 
+Every runner loop start runs `graph.check_pending_migrations_if_needed`
+(right after the launch readiness scorecard, before any task is dispatched):
+
+1. If no database is configured (`DATABASE_URL` / `DIRECT_DATABASE_URL` both
+   unset), the check no-ops.
+2. Otherwise it compares this directory against the `_runner_migrations`
+   ledger and **always** logs a loud `migrations_pending` event (in the
+   curated Slack notification set) listing any un-applied filenames — this
+   fires whether or not auto-apply is on, so un-applied migrations can no
+   longer go unnoticed.
+3. If `AUTO_APPLY_MIGRATIONS=true` (default `false`), it walks the pending
+   files in filename order and applies each one that is classified
+   **additive-only** by `db_tools.classify_migration_additivity` — no `DROP`,
+   `TRUNCATE`, `DELETE`, `UPDATE ... SET`, `RENAME`, or `ALTER COLUMN ...
+   TYPE`. The first non-additive file, or one blocked by the SQL guard/
+   environment gate below, stops the pass for that run (so later files are
+   never applied out of order) and logs `migration_auto_apply_blocked` — it
+   was already surfaced by `migrations_pending` for a human to apply by hand.
+
+The underlying tools, used both by the startup check and available for manual
+scripting:
+
 - `db_tools.apply_migration_file(path)` applies a single file inside one
   transaction, gated by `tools/sql_guard.scan_sql_file` (blocks destructive
   statements) and `tools/sql_environment_gate` (requires human approval in
@@ -36,9 +58,18 @@ NNNN_description.sql
 - `db_tools.apply_pending_migrations(dir)` applies every `*.sql` file in this
   directory in filename order, skipping any filename already present in the
   `_runner_migrations` ledger.
-- Both require `DATABASE_URL` (read) and `DIRECT_DATABASE_URL` (apply,
-  preferred — falls back to `DATABASE_URL`) to be configured; without them,
-  both functions no-op with a clear error.
+- `db_tools.list_pending_migrations(dir)` is the read-only version — lists
+  un-applied filenames without applying anything.
+- `db_tools.classify_migration_additivity(sql_text)` is a pure classifier
+  (`{"additive": bool, "reasons": [...]}`) used to decide auto-apply
+  eligibility; non-additive changes always require a human to run
+  `apply_migration_file`/`apply_pending_migrations` by hand.
+- All of the above require `DATABASE_URL` (read) and `DIRECT_DATABASE_URL`
+  (apply, preferred — falls back to `DATABASE_URL`) to be configured; without
+  them, they no-op with a clear error.
+
+See `runner/langgraph/README.md` (**Startup Migration Check**) for the full
+node behavior.
 
 ## 0001_runner_migrations.sql
 

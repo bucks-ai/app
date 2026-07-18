@@ -324,6 +324,7 @@ Copy `.env.example` to `.env` and fill in:
 | `AUTO_APPLY_SQL` | Auto-apply scanned SQL (default: true) — **keep false until SQL parsing is verified** |
 | `SQL_ENVIRONMENT` | Target deployment environment used by the SQL approval gate: `production`, `staging`, `development`, or `preview`. When unset, inferred from `SUPABASE_URL` (URL containing "prod" → production, "stag" → staging, otherwise development). |
 | `SQL_APPROVAL_POLICY` | Controls when SQL approval is required: `auto` (defer to legacy `REQUIRE_SQL_APPROVAL`), `require_on_production` (default — require approval only when `SQL_ENVIRONMENT=production`), `require_on_warning` (require approval when the SQL scan has warnings or blocked terms), `always_require` (require approval in all environments). |
+| `AUTO_APPLY_MIGRATIONS` | Auto-apply pending `supabase/migrations/*.sql` files at loop startup (default: false — see **Startup Migration Check**). Un-applied migrations are always logged loudly via `migrations_pending` regardless of this flag; setting it `true` additionally applies additive-only, guard/gate-passing files automatically. |
 | `ACCEPTANCE_CRITERIA_GATE_ENABLED` | Validate that tasks include concrete acceptance criteria before executing the worker (default: true) |
 | `ACCEPTANCE_CRITERIA_STRICT_MODE` | Block task execution when criteria are missing; false (default) logs a warning but proceeds |
 | `CLAUDE_SUBAGENT_PACK_ENABLED` | Inject specialised subagent context into Claude worker prompts based on task type/title (default: true) |
@@ -601,6 +602,34 @@ without merge rights will see the same 405/409 rejections a human would.
 Set `MERGE_VIA_PR=false` to fall back to the old direct-merge path
 (`merge_feature.sh`, local `git merge` + push to `main`) unchanged — an
 escape hatch for lab/sandbox repos that don't have branch protection.
+
+---
+
+## Startup Migration Check
+
+Before the first task of every loop run, `check_pending_migrations_if_needed`
+(runs right after the launch readiness scorecard) closes the gap where merged
+migrations under `supabase/migrations/` used to sit un-applied indefinitely
+because nothing called `tools/db_tools.py::apply_pending_migrations`:
+
+1. Skips entirely when no database is configured (`DATABASE_URL` /
+   `DIRECT_DATABASE_URL` both unset).
+2. Compares `supabase/migrations/*.sql` against the `_runner_migrations`
+   ledger via `db_tools.list_pending_migrations`. Any un-applied filenames are
+   always logged via a loud `migrations_pending` event (in the curated Slack
+   set) — this fires regardless of `AUTO_APPLY_MIGRATIONS`.
+3. When `AUTO_APPLY_MIGRATIONS=true`, walks the pending files in filename
+   order and auto-applies each one via `apply_migration_file` (which itself
+   re-checks `sql_guard` + `sql_environment_gate`) — but only when
+   `db_tools.classify_migration_additivity` first classifies the file as
+   additive-only (no `DROP`, `TRUNCATE`, `DELETE`, `UPDATE ... SET`, `RENAME`,
+   or `ALTER COLUMN ... TYPE`). Successful applies log `migration_applied`.
+4. The first non-additive file, or one blocked by the SQL guard/environment
+   gate, stops the auto-apply pass for that run (later files are never
+   applied out of order) and logs `migration_auto_apply_blocked` — it was
+   already surfaced via `migrations_pending` for a human to apply by hand.
+
+See `supabase/migrations/README.md` for the migration file conventions.
 
 ---
 
@@ -1031,6 +1060,7 @@ Allowed with warnings: `DROP TABLE IF EXISTS`, `DROP POLICY IF EXISTS`, `DROP TR
 ## LangGraph Nodes
 
 0b. `check_launch_readiness_if_needed` — scores the runner system across four dimensions (config completeness, credentials available, safety gates active, operational health) immediately after hook installation; writes a human-readable report to `outbox/launch_readiness_scorecard.txt`; in strict mode a failing score halts the loop before any task is dispatched
+0c. `check_pending_migrations_if_needed` — compares `supabase/migrations/` against the `_runner_migrations` ledger and loudly alerts on any un-applied files; auto-applies additive-only ones when `AUTO_APPLY_MIGRATIONS=true` (see **Startup Migration Check**)
 1. `load_next_task` — fetch next queued task from `.runtime/tasks.local.json`; rewrites protected branch names to `feature/<task-id>` and persists the rewritten branch back to the task queue before dispatch
 2. `ask_chatgpt_for_task_if_needed` — ask ChatGPT for next task if queue empty
 3. `choose_worker` — route to Claude or Codex based on task type

@@ -52,6 +52,8 @@ _DEFAULT_SLACK_EVENTS = frozenset({
     "claude_subscription_cooldown_resumed",
     "loop_blocked_on_claude_subscription_cooldown",
     "analytics_report_ready",
+    "migrations_pending",
+    "migration_applied",
 })
 
 
@@ -172,6 +174,9 @@ class RunnerConfig:
     )
     sql_approval_policy: str = field(
         default_factory=lambda: os.getenv("SQL_APPROVAL_POLICY", "require_on_production")
+    )
+    auto_apply_migrations: bool = field(
+        default_factory=lambda: os.getenv("AUTO_APPLY_MIGRATIONS", "false").lower() == "true"
     )
     resource_gate_enabled: bool = field(
         default_factory=lambda: os.getenv("RESOURCE_GATE", "true").lower() == "true"
@@ -525,6 +530,7 @@ class RunnerConfig:
             "require_sql_approval": self.require_sql_approval,
             "sql_environment": self.sql_environment,
             "sql_approval_policy": self.sql_approval_policy,
+            "auto_apply_migrations": self.auto_apply_migrations,
             "resource_gate_enabled": self.resource_gate_enabled,
             "failure_guard_enabled": self.failure_guard_enabled,
             "max_task_retries": self.max_task_retries,

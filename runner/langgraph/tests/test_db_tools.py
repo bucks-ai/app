@@ -20,6 +20,7 @@ from types import SimpleNamespace
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+import config as config_module
 from config import RunnerConfig
 import tools.db_tools as db_tools
 
@@ -99,6 +100,31 @@ def test_report_includes_database_flags():
     assert report["has_direct_database_url"] is False
     # never leak the actual connection string
     assert "postgresql://x" not in str(report.values())
+
+
+# ── AUTO_APPLY_MIGRATIONS config ────────────────────────────────────────────
+
+def test_auto_apply_migrations_defaults_false():
+    with mock.patch.dict(os.environ, {}, clear=False):
+        os.environ.pop("AUTO_APPLY_MIGRATIONS", None)
+        cfg = RunnerConfig()
+    assert cfg.auto_apply_migrations is False
+
+
+def test_auto_apply_migrations_reads_env_true():
+    with mock.patch.dict(os.environ, {"AUTO_APPLY_MIGRATIONS": "true"}):
+        cfg = RunnerConfig()
+    assert cfg.auto_apply_migrations is True
+
+
+def test_report_includes_auto_apply_migrations():
+    cfg = RunnerConfig(database_url="postgresql://x")
+    assert cfg.report()["auto_apply_migrations"] is False
+
+
+def test_migrations_pending_and_applied_are_in_curated_slack_set():
+    assert "migrations_pending" in config_module._DEFAULT_SLACK_EVENTS
+    assert "migration_applied" in config_module._DEFAULT_SLACK_EVENTS
 
 
 # ── inspect_schema ────────────────────────────────────────────────────────
@@ -426,12 +452,135 @@ def test_fetch_applied_filenames_uses_direct_url_and_creates_table():
     assert any("CREATE TABLE IF NOT EXISTS _runner_migrations" in s for s, _ in fake_conn.executed)
 
 
+# ── list_pending_migrations ───────────────────────────────────────────────
+
+def test_list_pending_migrations_no_op_without_database():
+    with mock.patch("tools.db_tools.get_config") as mock_cfg, \
+         mock.patch("tools.db_tools._connect") as mock_connect:
+        mock_cfg.return_value = RunnerConfig(database_url=None, direct_database_url=None)
+        result = db_tools.list_pending_migrations("/some/dir")
+    assert result["success"] is False
+    assert "not configured" in result["error"]
+    mock_connect.assert_not_called()
+
+
+def test_list_pending_migrations_missing_directory():
+    with mock.patch("tools.db_tools.get_config") as mock_cfg:
+        mock_cfg.return_value = _cfg_for_apply()
+        result = db_tools.list_pending_migrations("/definitely/not/a/real/dir")
+    assert result["success"] is False
+    assert "not found" in result["error"]
+
+
+def test_list_pending_migrations_detects_unapplied_files():
+    with tempfile.TemporaryDirectory() as d:
+        Path(d, "0001_first.sql").write_text("select 1;")
+        Path(d, "0002_second.sql").write_text("select 1;")
+        Path(d, "0003_third.sql").write_text("select 1;")
+        with mock.patch("tools.db_tools.get_config") as mock_cfg, \
+             mock.patch("tools.db_tools._fetch_applied_filenames", return_value={"0001_first.sql"}):
+            mock_cfg.return_value = _cfg_for_apply()
+            result = db_tools.list_pending_migrations(d)
+
+    assert result["success"] is True
+    assert result["data"]["pending"] == ["0002_second.sql", "0003_third.sql"]
+    assert result["data"]["total_count"] == 3
+    assert result["data"]["applied_count"] == 1
+
+
+def test_list_pending_migrations_empty_when_all_applied():
+    with tempfile.TemporaryDirectory() as d:
+        Path(d, "0001_first.sql").write_text("select 1;")
+        with mock.patch("tools.db_tools.get_config") as mock_cfg, \
+             mock.patch("tools.db_tools._fetch_applied_filenames", return_value={"0001_first.sql"}):
+            mock_cfg.return_value = _cfg_for_apply()
+            result = db_tools.list_pending_migrations(d)
+
+    assert result["success"] is True
+    assert result["data"]["pending"] == []
+
+
+def test_list_pending_migrations_ledger_read_failure():
+    with tempfile.TemporaryDirectory() as d:
+        Path(d, "0001_first.sql").write_text("select 1;")
+        with mock.patch("tools.db_tools.get_config") as mock_cfg, \
+             mock.patch("tools.db_tools._fetch_applied_filenames", return_value=None):
+            mock_cfg.return_value = _cfg_for_apply()
+            result = db_tools.list_pending_migrations(d)
+
+    assert result["success"] is False
+    assert "ledger" in result["error"]
+
+
+# ── classify_migration_additivity ───────────────────────────────────────────
+
+def test_classify_additivity_create_table_is_additive():
+    result = db_tools.classify_migration_additivity("CREATE TABLE IF NOT EXISTS foo (id int);")
+    assert result == {"additive": True, "reasons": []}
+
+
+def test_classify_additivity_add_column_is_additive():
+    sql = "ALTER TABLE public.agent_runs ADD COLUMN IF NOT EXISTS cost_usd NUMERIC;"
+    result = db_tools.classify_migration_additivity(sql)
+    assert result["additive"] is True
+
+
+def test_classify_additivity_create_index_and_constraint_is_additive():
+    sql = (
+        "ALTER TABLE public.missions ADD CONSTRAINT missions_check CHECK (x IN ('a'));\n"
+        "CREATE INDEX IF NOT EXISTS idx_missions_x ON public.missions(x);\n"
+        "COMMENT ON COLUMN public.missions.x IS 'docs';"
+    )
+    result = db_tools.classify_migration_additivity(sql)
+    assert result["additive"] is True
+
+
+def test_classify_additivity_drop_table_is_non_additive():
+    result = db_tools.classify_migration_additivity("DROP TABLE IF EXISTS foo;")
+    assert result["additive"] is False
+    assert result["reasons"] == ["drop statement (table/column/index/policy/etc.)"]
+
+
+def test_classify_additivity_drop_column_is_non_additive():
+    result = db_tools.classify_migration_additivity("ALTER TABLE foo DROP COLUMN bar;")
+    assert result["additive"] is False
+
+
+def test_classify_additivity_truncate_is_non_additive():
+    result = db_tools.classify_migration_additivity("TRUNCATE foo;")
+    assert result["additive"] is False
+
+
+def test_classify_additivity_delete_is_non_additive():
+    result = db_tools.classify_migration_additivity("DELETE FROM foo WHERE id = 1;")
+    assert result["additive"] is False
+
+
+def test_classify_additivity_update_is_non_additive():
+    result = db_tools.classify_migration_additivity("UPDATE foo SET bar = 1 WHERE id = 1;")
+    assert result["additive"] is False
+
+
+def test_classify_additivity_rename_is_non_additive():
+    result = db_tools.classify_migration_additivity("ALTER TABLE foo RENAME TO bar;")
+    assert result["additive"] is False
+
+
+def test_classify_additivity_alter_column_type_is_non_additive():
+    result = db_tools.classify_migration_additivity("ALTER TABLE foo ALTER COLUMN bar TYPE text;")
+    assert result["additive"] is False
+
+
 if __name__ == "__main__":
     tests = [
         test_has_database_false_without_either_url,
         test_has_database_true_with_database_url_only,
         test_has_database_true_with_direct_database_url_only,
         test_report_includes_database_flags,
+        test_auto_apply_migrations_defaults_false,
+        test_auto_apply_migrations_reads_env_true,
+        test_report_includes_auto_apply_migrations,
+        test_migrations_pending_and_applied_are_in_curated_slack_set,
         test_inspect_schema_no_op_without_database,
         test_inspect_schema_success,
         test_inspect_schema_handles_connection_error,
@@ -451,6 +600,21 @@ if __name__ == "__main__":
         test_apply_pending_migrations_stops_on_first_failure,
         test_apply_pending_migrations_ledger_read_failure,
         test_fetch_applied_filenames_uses_direct_url_and_creates_table,
+        test_list_pending_migrations_no_op_without_database,
+        test_list_pending_migrations_missing_directory,
+        test_list_pending_migrations_detects_unapplied_files,
+        test_list_pending_migrations_empty_when_all_applied,
+        test_list_pending_migrations_ledger_read_failure,
+        test_classify_additivity_create_table_is_additive,
+        test_classify_additivity_add_column_is_additive,
+        test_classify_additivity_create_index_and_constraint_is_additive,
+        test_classify_additivity_drop_table_is_non_additive,
+        test_classify_additivity_drop_column_is_non_additive,
+        test_classify_additivity_truncate_is_non_additive,
+        test_classify_additivity_delete_is_non_additive,
+        test_classify_additivity_update_is_non_additive,
+        test_classify_additivity_rename_is_non_additive,
+        test_classify_additivity_alter_column_type_is_non_additive,
     ]
     passed = failed = 0
     for t in tests:
