@@ -316,7 +316,7 @@ def test_node_business_not_found_hard_fails():
         original = graph.fetch_business_by_id
         graph.fetch_business_by_id = lambda bid: None
         try:
-            out = graph.resolve_business_repo_if_needed(_state({"id": "t1", "business_id": "biz-x"}))
+            out = graph.resolve_business_repo_if_needed(_state({"id": "t1", "business_id": "biz-x", "runner_target": "business"}))
         finally:
             graph.fetch_business_by_id = original
         assert out.stop_reason == "business_not_found"
@@ -336,7 +336,7 @@ def test_node_success_overrides_repo_path():
             "github_token_secret_name": "ACME_TOKEN",
         }
         try:
-            out = graph.resolve_business_repo_if_needed(_state({"id": "t1", "business_id": "biz-x"}))
+            out = graph.resolve_business_repo_if_needed(_state({"id": "t1", "business_id": "biz-x", "runner_target": "business"}))
         finally:
             graph.fetch_business_by_id = original_fetch
             graph.prepare_business_repo = original_prepare
@@ -356,7 +356,7 @@ def test_node_forbidden_repo_hard_fails():
             "success": False, "reason": "forbidden_repo", "repo_full_name": "bucks-ai/bucks-ai",
         }
         try:
-            out = graph.resolve_business_repo_if_needed(_state({"id": "t1", "business_id": "biz-x"}))
+            out = graph.resolve_business_repo_if_needed(_state({"id": "t1", "business_id": "biz-x", "runner_target": "business"}))
         finally:
             graph.fetch_business_by_id = original_fetch
             graph.prepare_business_repo = original_prepare
@@ -375,7 +375,7 @@ def test_node_missing_secret_blocks_and_writes_resource_request():
             "success": False, "reason": "missing_secret", "secret_name": "ACME_GH_TOKEN",
         }
         try:
-            out = graph.resolve_business_repo_if_needed(_state({"id": "t1", "business_id": "biz-x"}))
+            out = graph.resolve_business_repo_if_needed(_state({"id": "t1", "business_id": "biz-x", "runner_target": "business"}))
         finally:
             graph.fetch_business_by_id = original_fetch
             graph.prepare_business_repo = original_prepare
@@ -402,7 +402,7 @@ def test_node_missing_secret_fulfilled_retries_successfully():
             "github_token_secret_name": "ACME_GH_TOKEN",
         }
         try:
-            out = graph.resolve_business_repo_if_needed(_state({"id": "t1", "business_id": "biz-x"}))
+            out = graph.resolve_business_repo_if_needed(_state({"id": "t1", "business_id": "biz-x", "runner_target": "business"}))
         finally:
             graph.fetch_business_by_id = original_fetch
             graph.prepare_business_repo = original_prepare
@@ -418,7 +418,7 @@ def test_node_no_sandbox_config_blocks_as_resource_request():
         graph.fetch_business_by_id = lambda bid: {"id": bid, "sandbox_config": None}
         graph.prepare_business_repo = lambda task, business: {"success": False, "reason": "no_sandbox_config"}
         try:
-            out = graph.resolve_business_repo_if_needed(_state({"id": "t1", "business_id": "biz-x"}))
+            out = graph.resolve_business_repo_if_needed(_state({"id": "t1", "business_id": "biz-x", "runner_target": "business"}))
         finally:
             graph.fetch_business_by_id = original_fetch
             graph.prepare_business_repo = original_prepare

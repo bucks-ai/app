@@ -262,6 +262,9 @@ class RunnerConfig:
     seeded_mission_queue_strict: bool = field(
         default_factory=lambda: os.getenv("SEEDED_MISSION_QUEUE_STRICT", "false").lower() == "true"
     )
+    business_execution_enabled: bool = field(
+        default_factory=lambda: os.getenv("BUSINESS_EXECUTION_ENABLED", "false").lower() == "true"
+    )
     planner_quality_gate_v2_enabled: bool = field(
         default_factory=lambda: os.getenv("PLANNER_QUALITY_GATE_V2", "true").lower() == "true"
     )
@@ -558,6 +561,7 @@ class RunnerConfig:
             "mission_compiler_enabled": self.mission_compiler_enabled,
             "seeded_mission_queue_enabled": self.seeded_mission_queue_enabled,
             "seeded_mission_queue_strict": self.seeded_mission_queue_strict,
+            "business_execution_enabled": self.business_execution_enabled,
             "planner_quality_gate_v2_enabled": self.planner_quality_gate_v2_enabled,
             "planner_scope_guard_enabled": self.planner_scope_guard_enabled,
             "acceptance_criteria_gate_enabled": self.acceptance_criteria_gate_enabled,

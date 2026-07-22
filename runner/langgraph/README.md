@@ -360,6 +360,7 @@ Copy `.env.example` to `.env` and fill in:
 | `LAUNCH_READINESS_SCORECARD_PASS_THRESHOLD` | Minimum weighted launch readiness score (0.0–1.0) required to proceed (default: 0.7) |
 | `SEEDED_MISSION_QUEUE` | Poll Supabase for queued missions and seed the local task queue when empty (default: true) |
 | `SEEDED_MISSION_QUEUE_STRICT` | Hard-stop the loop when the seeded mission queue is exhausted instead of falling through to the ChatGPT planner; also suppresses the post-task ChatGPT call (default: false) |
+| `BUSINESS_EXECUTION_ENABLED` | Allow `fetch_next_queued_mission` to claim `runner_target: "business"` missions — still gated per-mission on the business having a fully configured sandbox (repo, Vercel project, both secret names) and those secrets actually resolving in the runner env; any failing condition logs `business_mission_blocked` and leaves the mission queued (default: false) |
 | `FAST_ENGINEERING_MODE` | Pre-inject a runner workspace snapshot (LangGraph nodes, tools, tests, architecture invariants) into worker prompts for reliable runner development; skips exploratory reads and orients Claude immediately (default: false) |
 | `RESOURCE_GATE` | Pause the loop when a worker reports it needs a missing credential/resource (default: true) |
 | `FAILURE_GUARD` | Retry failed tasks and stop the loop on repeated failures (default: true) |
