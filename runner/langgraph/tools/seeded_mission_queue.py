@@ -173,6 +173,7 @@ def seed_tasks_from_mission(mission: dict, mission_tasks: list[dict]) -> list[di
             "seeded_task_id": str(row.get("id", "")),
             "business_id": business_id,
             "user_id": user_id,
+            "runner_target": mission.get("runner_target", "self"),
             "created_at": now,
         }
         if row.get("preferred_worker"):
