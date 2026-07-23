@@ -686,6 +686,44 @@ in `tests/test_resource_gate.py`, which also covers the graph node.
 
 ---
 
+## Business Mission Claim Gate (M4b)
+
+> **A `runner_target="business"` mission is only claimed once
+> `BUSINESS_EXECUTION_ENABLED` is on, its business's sandbox is fully
+> configured, and its secrets actually resolve — otherwise it stays queued,
+> untouched, indefinitely.**
+
+`tools/seeded_mission_queue.py::fetch_next_queued_mission` used to
+hard-filter on `runner_target = "self"` (M4a) — every business mission sat
+queued no matter what. `evaluate_business_mission_claim` (same module)
+replaces that blanket refusal with a narrower gate a business mission must
+clear in full: the `BUSINESS_EXECUTION_ENABLED` flag (see the env table
+above), a `businesses.sandbox_config` with all four of `repo_full_name`,
+`github_token_secret_name`, `vercel_project_id`, and
+`vercel_token_secret_name` set, and both named secrets resolving via
+`resolve_scoped_github_token`/`resolve_scoped_vercel_token`. Any failing
+condition leaves the mission `queued` and logs `business_mission_blocked`
+with the failing condition's name (and, for a `secret_unresolved` failure,
+the secret name) — never a secret value. `fetch_next_queued_mission` then
+keeps scanning past a blocked business mission so it can never starve a
+later self mission or a different business's claimable one. See
+`tests/test_seeded_mission_queue.py` for every refusal path and the
+full-config claim path.
+
+**Known limitation:** a separate `business_sandbox` table + founder-facing
+Settings tab (`src/lib/sandbox.ts`,
+`supabase/migrations/0004_business_sandbox.sql`) computes its own
+unconfigured/partial/configured status, but nothing currently writes those
+fields through to `businesses.sandbox_config`. This gate deliberately reads
+`sandbox_config` — the column the execution pipeline below actually consumes
+— so a mission that clears it is guaranteed to also clear
+`resolve_business_repo_if_needed`/`deploy_if_needed` instead of being
+claimed and immediately blocking on a resource-gate request. Until the two
+stores are reconciled, configuring a sandbox via the Settings tab alone does
+**not** make a business's missions claimable.
+
+---
+
 ## Foreign (Business) Repo Execution (M4b)
 
 > **Lets the runner work outside its own repo, safely, when a claimed
