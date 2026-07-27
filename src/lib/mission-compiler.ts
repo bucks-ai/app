@@ -7,6 +7,15 @@
 // (supabase/missions.sql, supabase/m4a-seed-mission.sql) and the Python
 // compiler's slug/branch conventions (runner/langgraph/tools/mission_compiler.py).
 //
+// Every mission compiled here is runner_target: "business" (src/lib/missions.ts)
+// and, once M4b's claim gate allows it, executes against that business's OWN
+// freshly scaffolded repo (runner/langgraph/tools/foreign_repo_workspace.py) —
+// never the bucks-ai repo. The three core sections below assume that fresh
+// scaffold already exists (e.g. a Next.js starter template) and give the
+// worker concrete, self-contained starter work — build the landing page,
+// wire a starter analytics stub, deploy — rather than bucks-ai-specific tasks
+// like scaffolding infrastructure or CI from nothing.
+//
 // Pure — no I/O. The caller (src/lib/missions.ts) handles inserting the
 // compiled tasks into Supabase.
 
@@ -72,68 +81,61 @@ interface SectionSpec {
   branchSlug: string;
 }
 
-function buildMvpSection(blueprint: Record<string, unknown>): SectionSpec {
+function buildLandingPageSection(blueprint: Record<string, unknown>): SectionSpec {
   const mvpScope = asStringArray(blueprint.mvpScope);
   const summary = asString(blueprint.businessSummary) ?? "the saved launch blueprint";
   const items = mvpScope.length > 0 ? mvpScope.slice(0, 3) : [summary];
 
   return {
-    title: `Build MVP: ${items[0]}`,
-    description: `Implement the first MVP scope item(s) from the blueprint: ${items.join("; ")}.`,
+    title: `Build landing page section: ${items[0]}`,
+    description: `In the fresh scaffolded repo, build the landing page section(s) covering: ${items.join("; ")}.`,
     type: "frontend",
-    branchSlug: "mvp-scope",
+    branchSlug: "landing-page",
   };
 }
 
-function buildInfraSection(blueprint: Record<string, unknown>): SectionSpec {
+function buildAnalyticsStubSection(blueprint: Record<string, unknown>): SectionSpec {
+  const analyticsPlan = asRecord(blueprint.analyticsPlan);
+  const northStar = asString(analyticsPlan?.northStarMetric);
+  const events = asStringArray(analyticsPlan?.events);
+
+  return {
+    title: northStar ? `Wire analytics stub: ${northStar}` : "Wire analytics stub",
+    description:
+      events.length > 0
+        ? `Wire a starter analytics stub capturing the blueprint's planned events: ${events.slice(0, 5).join(", ")}.`
+        : "Wire a starter analytics stub (a single page-view or signup event is enough) so this fresh scaffold has working instrumentation from day one.",
+    type: "backend",
+    branchSlug: "analytics-stub",
+  };
+}
+
+function buildDeploySection(blueprint: Record<string, unknown>): SectionSpec {
   const stack = asStringArray(blueprint.suggestedStack);
   const tools = asStringArray(blueprint.requiredTools);
   const items = stack.length > 0 ? stack : tools;
 
   return {
-    title:
-      items.length > 0
-        ? `Set up infrastructure: ${items.slice(0, 3).join(", ")}`
-        : "Set up starter infrastructure",
+    title: "Deploy the scaffolded app",
     description:
       items.length > 0
-        ? `Scaffold the suggested stack and tool setup: ${items.join(", ")}.`
-        : "Scaffold a starter repo, environment config, and CI for this business.",
+        ? `Deploy the fresh scaffolded repo (${items.slice(0, 3).join(", ")}) to its Vercel project and verify the production build.`
+        : "Deploy the fresh scaffolded repo to its Vercel project and verify the production build.",
     type: "infra",
-    branchSlug: "infra-setup",
+    branchSlug: "deploy",
   };
 }
 
-function buildGoToMarketSection(blueprint: Record<string, unknown>): SectionSpec {
+function buildGoToMarketSection(blueprint: Record<string, unknown>): SectionSpec | null {
   const motion =
-    asString(blueprint.goToMarketMotion) ??
-    asString(asRecord(blueprint.marketingPlan)?.motion) ??
-    "an initial go-to-market motion";
+    asString(blueprint.goToMarketMotion) ?? asString(asRecord(blueprint.marketingPlan)?.motion);
+  if (!motion) return null;
 
   return {
     title: `Execute go-to-market: ${motion}`,
     description: `Kick off the blueprint's go-to-market motion: ${motion}.`,
     type: "general",
     branchSlug: "go-to-market",
-  };
-}
-
-function buildAnalyticsSection(blueprint: Record<string, unknown>): SectionSpec | null {
-  const analyticsPlan = asRecord(blueprint.analyticsPlan);
-  const northStar = asString(analyticsPlan?.northStarMetric);
-  const events = asStringArray(analyticsPlan?.events);
-  if (!northStar && events.length === 0) return null;
-
-  return {
-    title: northStar
-      ? `Instrument analytics: ${northStar}`
-      : "Instrument starter analytics events",
-    description:
-      events.length > 0
-        ? `Wire capture for the blueprint's analytics plan events: ${events.slice(0, 5).join(", ")}.`
-        : `Wire capture for the blueprint's north-star metric: ${northStar}.`,
-    type: "backend",
-    branchSlug: "analytics-instrumentation",
   };
 }
 
@@ -151,20 +153,22 @@ function buildRiskSection(blueprint: Record<string, unknown>): SectionSpec | nul
 
 /**
  * Compiles a saved business blueprint into an ordered list of 3-5 starter
- * mission tasks. Deterministic — the same blueprint always compiles to the
- * same tasks. `missionSlug` seeds branch names, mirroring the Python
- * compiler's `feature/{mission_slug}/{title_slug}` convention.
+ * mission tasks, assuming the mission executes against a FRESH scaffolded
+ * repo (see the module-level comment above) rather than the bucks-ai repo.
+ * Deterministic — the same blueprint always compiles to the same tasks.
+ * `missionSlug` seeds branch names, mirroring the Python compiler's
+ * `feature/{mission_slug}/{title_slug}` convention.
  */
 export function compileBlueprintToMissionTasks(
   blueprint: Record<string, unknown>,
   missionSlug: string
 ): CompiledMissionTask[] {
   const core: SectionSpec[] = [
-    buildMvpSection(blueprint),
-    buildInfraSection(blueprint),
-    buildGoToMarketSection(blueprint),
+    buildLandingPageSection(blueprint),
+    buildAnalyticsStubSection(blueprint),
+    buildDeploySection(blueprint),
   ];
-  const optional = [buildAnalyticsSection(blueprint), buildRiskSection(blueprint)].filter(
+  const optional = [buildGoToMarketSection(blueprint), buildRiskSection(blueprint)].filter(
     (section): section is SectionSpec => section !== null
   );
 

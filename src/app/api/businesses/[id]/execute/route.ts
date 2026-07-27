@@ -5,10 +5,11 @@
 //
 // CRITICAL SAFETY: every mission created here is runner_target: "business"
 // (src/lib/missions.ts::createMissionFromBlueprint). The runner's claim gate
-// (runner/langgraph/tools/seeded_mission_queue.py::fetch_next_queued_mission)
-// only ever claims runner_target: "self" missions, so a mission created here
-// sits visibly queued and is never executed against the bucks-ai repo until
-// M4b lands per-business sandboxing.
+// (runner/langgraph/tools/seeded_mission_queue.py::fetch_next_queued_mission,
+// ::evaluate_business_mission_claim) only claims a business mission once
+// BUSINESS_EXECUTION_ENABLED is on and that business's sandbox is fully
+// configured with secrets that resolve in the runner's env — otherwise a
+// mission created here sits visibly queued and untouched.
 //
 // GET /api/businesses/[id]/execute
 // Returns the business's most recent mission (or null) so the UI can show

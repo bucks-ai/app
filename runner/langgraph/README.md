@@ -360,6 +360,7 @@ Copy `.env.example` to `.env` and fill in:
 | `LAUNCH_READINESS_SCORECARD_PASS_THRESHOLD` | Minimum weighted launch readiness score (0.0–1.0) required to proceed (default: 0.7) |
 | `SEEDED_MISSION_QUEUE` | Poll Supabase for queued missions and seed the local task queue when empty (default: true) |
 | `SEEDED_MISSION_QUEUE_STRICT` | Hard-stop the loop when the seeded mission queue is exhausted instead of falling through to the ChatGPT planner; also suppresses the post-task ChatGPT call (default: false) |
+| `BUSINESS_EXECUTION_ENABLED` | Allow `fetch_next_queued_mission` to claim `runner_target: "business"` missions — still gated per-mission on the business having a fully configured sandbox (repo, Vercel project, both secret names) and those secrets actually resolving in the runner env; any failing condition logs `business_mission_blocked` and leaves the mission queued (default: false) |
 | `FAST_ENGINEERING_MODE` | Pre-inject a runner workspace snapshot (LangGraph nodes, tools, tests, architecture invariants) into worker prompts for reliable runner development; skips exploratory reads and orients Claude immediately (default: false) |
 | `RESOURCE_GATE` | Pause the loop when a worker reports it needs a missing credential/resource (default: true) |
 | `FAILURE_GUARD` | Retry failed tasks and stop the loop on repeated failures (default: true) |
@@ -682,6 +683,44 @@ it lacked a credential surfaces an actionable request rather than a bare failure
 The decision helpers in `tools/resource_gate.py` (`collect_requests`,
 `evaluate_gate`, `format_request_file`) are pure/side-effect free and unit-tested
 in `tests/test_resource_gate.py`, which also covers the graph node.
+
+---
+
+## Business Mission Claim Gate (M4b)
+
+> **A `runner_target="business"` mission is only claimed once
+> `BUSINESS_EXECUTION_ENABLED` is on, its business's sandbox is fully
+> configured, and its secrets actually resolve — otherwise it stays queued,
+> untouched, indefinitely.**
+
+`tools/seeded_mission_queue.py::fetch_next_queued_mission` used to
+hard-filter on `runner_target = "self"` (M4a) — every business mission sat
+queued no matter what. `evaluate_business_mission_claim` (same module)
+replaces that blanket refusal with a narrower gate a business mission must
+clear in full: the `BUSINESS_EXECUTION_ENABLED` flag (see the env table
+above), a `businesses.sandbox_config` with all four of `repo_full_name`,
+`github_token_secret_name`, `vercel_project_id`, and
+`vercel_token_secret_name` set, and both named secrets resolving via
+`resolve_scoped_github_token`/`resolve_scoped_vercel_token`. Any failing
+condition leaves the mission `queued` and logs `business_mission_blocked`
+with the failing condition's name (and, for a `secret_unresolved` failure,
+the secret name) — never a secret value. `fetch_next_queued_mission` then
+keeps scanning past a blocked business mission so it can never starve a
+later self mission or a different business's claimable one. See
+`tests/test_seeded_mission_queue.py` for every refusal path and the
+full-config claim path.
+
+**Known limitation:** a separate `business_sandbox` table + founder-facing
+Settings tab (`src/lib/sandbox.ts`,
+`supabase/migrations/0004_business_sandbox.sql`) computes its own
+unconfigured/partial/configured status, but nothing currently writes those
+fields through to `businesses.sandbox_config`. This gate deliberately reads
+`sandbox_config` — the column the execution pipeline below actually consumes
+— so a mission that clears it is guaranteed to also clear
+`resolve_business_repo_if_needed`/`deploy_if_needed` instead of being
+claimed and immediately blocking on a resource-gate request. Until the two
+stores are reconciled, configuring a sandbox via the Settings tab alone does
+**not** make a business's missions claimable.
 
 ---
 

@@ -709,6 +709,14 @@ def resolve_business_repo_if_needed(state: RunnerState) -> RunnerState:
     the loop the same way as any other missing credential.
     """
     task = state.current_task or {}
+    # Only genuine business-target missions get foreign-repo resolution. Every
+    # seeded task carries a business_id (inherited from its mission), so keying
+    # off business_id alone wrongly funnels self-targeted dev tasks (all of
+    # M0–M4b's own work) through business-repo resolution and blocks them on a
+    # sandbox they never need. Mirror the claim gate: act only on runner_target
+    # == "business". Absent/legacy tasks default to "self" and skip safely.
+    if task.get("runner_target", "self") != "business":
+        return state
     business_id = task.get("business_id")
     if not business_id:
         return state

@@ -133,10 +133,12 @@ export interface ApprovalRecord {
 // column from supabase/migrations/0003_missions_runner_target.sql.
 //
 // CRITICAL SAFETY: runner_target gates what the runner is allowed to claim
-// (runner/langgraph/tools/seeded_mission_queue.py::fetch_next_queued_mission).
-// "self" = runner may execute against the bucks-ai repo. "business" = created
-// via the app's Execute button for a customer business; must sit queued and
-// never be claimed until M4b lands per-business sandboxing.
+// (runner/langgraph/tools/seeded_mission_queue.py::fetch_next_queued_mission,
+// ::evaluate_business_mission_claim). "self" = runner may execute against
+// the bucks-ai repo. "business" = created via the app's Execute button for a
+// customer business; claimed only when M4b's stricter gate allows it
+// (BUSINESS_EXECUTION_ENABLED, a complete sandbox, resolvable secrets),
+// otherwise it sits queued untouched.
 export interface MissionRecord {
   id: string;
   business_id: string;

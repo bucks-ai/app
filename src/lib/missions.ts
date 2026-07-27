@@ -4,9 +4,11 @@
 //
 // CRITICAL SAFETY: createMissionFromBlueprint always inserts
 // runner_target: "business", never "self" — missions created from the app
-// for a customer business must stay outside what the runner-side claim gate
-// (runner/langgraph/tools/seeded_mission_queue.py) will pick up, until M4b
-// lands per-business sandboxing. See
+// for a customer business are only ever claimed by the runner-side claim
+// gate (runner/langgraph/tools/seeded_mission_queue.py::evaluate_business_mission_claim,
+// M4b) once BUSINESS_EXECUTION_ENABLED is on AND that business's sandbox is
+// fully configured with secrets that resolve in the runner's env; otherwise
+// the mission sits queued untouched. See
 // supabase/migrations/0003_missions_runner_target.sql.
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";

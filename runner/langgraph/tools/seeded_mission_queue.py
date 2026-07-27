@@ -19,12 +19,37 @@ All Supabase calls degrade gracefully when the client is unavailable — the
 caller checks ``cfg.has_supabase`` before invoking any function here, but each
 function also returns a safe no-op dict on error so callers do not need to
 handle exceptions.
+
+CRITICAL SAFETY — the M4b business-mission claim gate (``fetch_next_queued_mission``):
+a ``runner_target: "business"`` mission (created via the app's Execute button)
+may only be claimed when ALL of the following hold:
+
+  1. ``BUSINESS_EXECUTION_ENABLED=true`` (``cfg.business_execution_enabled``).
+  2. The mission's business has a fully "configured" sandbox — its
+     ``businesses.sandbox_config`` carries all four keys (``repo_full_name``,
+     ``github_token_secret_name``, ``vercel_project_id``,
+     ``vercel_token_secret_name``), mirroring ``src/lib/sandbox.ts::computeSandboxStatus``.
+  3. Both named secrets actually resolve in this runner process's environment.
+
+Any failing condition leaves the mission queued (never claimed, never marked
+running) and logs a ``business_mission_blocked`` event naming the failing
+condition and, where relevant, which secret name failed to resolve — never a
+secret value.
 """
 from datetime import datetime, timezone
 from typing import Optional
 
 from tools.mission_compiler import _slug
 from tools.log_tools import log_event
+from tools.foreign_repo_workspace import fetch_business_by_id, resolve_scoped_github_token
+from tools.vercel_tools import resolve_scoped_vercel_token
+
+_REQUIRED_SANDBOX_FIELDS = (
+    "repo_full_name",
+    "github_token_secret_name",
+    "vercel_project_id",
+    "vercel_token_secret_name",
+)
 
 
 def _now_iso() -> str:
@@ -43,16 +68,74 @@ def _get_client():
 # Read helpers
 # ---------------------------------------------------------------------------
 
+def evaluate_business_mission_claim(mission: dict) -> dict:
+    """Gate a ``runner_target: "business"`` mission for claiming (M4b).
+
+    Returns ``{"allowed": True}`` or ``{"allowed": False, "reason": ..., ...}``
+    where ``reason`` is one of:
+
+      - ``business_execution_disabled`` — ``BUSINESS_EXECUTION_ENABLED`` is not set.
+      - ``missing_business_id`` — the mission row carries no ``business_id``.
+      - ``business_not_found`` — the business row could not be fetched.
+      - ``sandbox_not_configured`` — one or more of the four required
+        ``sandbox_config`` fields is missing; ``missing_fields`` names which.
+      - ``secret_unresolved`` — a named secret is not set in the runner env;
+        ``secret_name`` names which (never the value).
+
+    Never returns or logs a secret value — only field/secret *names*.
+    """
+    from config import get_config
+    cfg = get_config()
+
+    if not cfg.business_execution_enabled:
+        return {"allowed": False, "reason": "business_execution_disabled"}
+
+    business_id = mission.get("business_id")
+    if not business_id:
+        return {"allowed": False, "reason": "missing_business_id"}
+
+    business = fetch_business_by_id(str(business_id))
+    if business is None:
+        return {"allowed": False, "reason": "business_not_found"}
+
+    sandbox_config = business.get("sandbox_config") or {}
+    missing_fields = [
+        field for field in _REQUIRED_SANDBOX_FIELDS
+        if not str(sandbox_config.get(field) or "").strip()
+    ]
+    if missing_fields:
+        return {"allowed": False, "reason": "sandbox_not_configured", "missing_fields": missing_fields}
+
+    github_secret_name = str(sandbox_config["github_token_secret_name"]).strip()
+    github_result = resolve_scoped_github_token(github_secret_name)
+    if not github_result["success"]:
+        return {"allowed": False, "reason": "secret_unresolved", "secret_name": github_secret_name}
+
+    vercel_secret_name = str(sandbox_config["vercel_token_secret_name"]).strip()
+    vercel_result = resolve_scoped_vercel_token(vercel_secret_name)
+    if not vercel_result["success"]:
+        return {"allowed": False, "reason": "secret_unresolved", "secret_name": vercel_secret_name}
+
+    return {"allowed": True}
+
+
 def fetch_next_queued_mission() -> Optional[dict]:
-    """Return the first queued, self-targeted mission row from Supabase, or None.
+    """Return the first claimable queued mission row from Supabase, or None.
 
-    CRITICAL SAFETY: filters on ``runner_target = "self"``. Until M4b lands
-    per-business sandboxing, the runner must never claim a mission created
-    for a customer business (``runner_target = "business"``, e.g. via the
-    app's Execute button) — those must sit visibly queued and untouched.
+    Fetches queued missions ordered by ``created_at`` ascending (oldest
+    first) and returns the first one this runner may claim:
 
-    Ordered by ``created_at`` ascending so the oldest mission runs first.
-    Returns None on any error so the caller can fall through gracefully.
+      - ``runner_target: "self"`` (or absent/legacy) missions are always
+        claimable.
+      - ``runner_target: "business"`` missions are claimable only when
+        ``evaluate_business_mission_claim`` allows it — see that function's
+        docstring for the full M4b gate. A blocked business mission is
+        skipped (left queued, untouched) and a ``business_mission_blocked``
+        event is logged naming the failing condition; the scan continues to
+        the next candidate mission.
+
+    Returns None on any error, or when no candidate is claimable, so the
+    caller can fall through gracefully.
     """
     try:
         client = _get_client()
@@ -60,19 +143,38 @@ def fetch_next_queued_mission() -> Optional[dict]:
             client.table("missions")
             .select("*")
             .eq("status", "queued")
-            .eq("runner_target", "self")
             .order("created_at")
-            .limit(1)
+            .limit(20)
             .execute()
         )
         rows = result.data or []
-        return rows[0] if rows else None
     except Exception as e:
         log_event("seeded_mission_queue_error", {
             "op": "fetch_next_queued_mission",
             "error": str(e),
         })
         return None
+
+    for row in rows:
+        target = row.get("runner_target") or "self"
+        if target == "self":
+            return row
+        if target != "business":
+            continue
+
+        gate = evaluate_business_mission_claim(row)
+        if gate["allowed"]:
+            return row
+
+        log_event("business_mission_blocked", {
+            "mission_id": row.get("id"),
+            "business_id": row.get("business_id"),
+            "reason": gate["reason"],
+            **({"missing_fields": gate["missing_fields"]} if "missing_fields" in gate else {}),
+            **({"secret_name": gate["secret_name"]} if "secret_name" in gate else {}),
+        })
+
+    return None
 
 
 def fetch_mission_tasks(mission_id: str) -> list[dict]:
@@ -173,6 +275,7 @@ def seed_tasks_from_mission(mission: dict, mission_tasks: list[dict]) -> list[di
             "seeded_task_id": str(row.get("id", "")),
             "business_id": business_id,
             "user_id": user_id,
+            "runner_target": mission.get("runner_target", "self"),
             "created_at": now,
         }
         if row.get("preferred_worker"):
