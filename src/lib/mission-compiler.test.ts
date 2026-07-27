@@ -70,14 +70,33 @@ describe("compileBlueprintToMissionTasks", () => {
     });
   });
 
-  it("includes an analytics task when analyticsPlan data is present", () => {
-    const tasks = compileBlueprintToMissionTasks(fullBlueprint, "acme-mission");
+  it("always includes an analytics stub task, even with no analyticsPlan data", () => {
+    const tasks = compileBlueprintToMissionTasks(minimalBlueprint, "acme-mission");
     expect(tasks.some((t) => t.title.toLowerCase().includes("analytics"))).toBe(true);
   });
 
-  it("omits the analytics task when analyticsPlan data is absent", () => {
+  it("always includes a landing page task and a deploy task (fresh-repo core sections)", () => {
     const tasks = compileBlueprintToMissionTasks(minimalBlueprint, "acme-mission");
-    expect(tasks.some((t) => t.title.toLowerCase().includes("analytics"))).toBe(false);
+    expect(tasks.some((t) => t.title.toLowerCase().includes("landing page"))).toBe(true);
+    expect(tasks.some((t) => t.title.toLowerCase().includes("deploy"))).toBe(true);
+  });
+
+  it("does not assume the bucks-ai repo or ask to scaffold infrastructure from scratch", () => {
+    const tasks = compileBlueprintToMissionTasks(fullBlueprint, "acme-mission");
+    const text = tasks.map((t) => `${t.title} ${t.description}`).join(" ").toLowerCase();
+    expect(text).not.toContain("bucks-ai");
+    expect(text).not.toContain("scaffold a starter repo");
+    expect(text).toContain("fresh scaffolded repo");
+  });
+
+  it("omits the go-to-market task when the blueprint has no motion data", () => {
+    const tasks = compileBlueprintToMissionTasks(minimalBlueprint, "acme-mission");
+    expect(tasks.some((t) => t.title.toLowerCase().includes("go-to-market"))).toBe(false);
+  });
+
+  it("includes the go-to-market task when the blueprint has motion data", () => {
+    const tasks = compileBlueprintToMissionTasks(fullBlueprint, "acme-mission");
+    expect(tasks.some((t) => t.title.toLowerCase().includes("go-to-market"))).toBe(true);
   });
 
   it("is deterministic for the same input", () => {

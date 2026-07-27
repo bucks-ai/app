@@ -23,7 +23,9 @@ from tools.seeded_mission_queue import (
     seed_tasks_from_mission,
     check_mission_completion,
     fetch_next_queued_mission,
+    evaluate_business_mission_claim,
 )
+import tools.seeded_mission_queue as smq
 import graph
 from state import RunnerState
 
@@ -243,13 +245,14 @@ def test_check_completion_blocked_counts_as_terminal():
 
 
 # ---------------------------------------------------------------------------
-# fetch_next_queued_mission — CRITICAL SAFETY: runner_target claim gate
+# fetch_next_queued_mission — CRITICAL SAFETY: M4b business-mission claim gate
 #
-# Until M4b lands per-business sandboxing, the runner must NEVER claim a
-# mission created for a customer business (runner_target="business", e.g.
-# via the app's Execute button, src/app/api/businesses/[id]/execute). Only
-# runner_target="self" missions may be claimed and executed against the
-# bucks-ai repo.
+# A mission created for a customer business (runner_target="business", e.g.
+# via the app's Execute button, src/app/api/businesses/[id]/execute) may only
+# be claimed when evaluate_business_mission_claim allows it: config enabled,
+# a fully configured sandbox, and both secrets resolving in the runner env.
+# Any failing condition leaves the mission queued and untouched.
+# runner_target="self" missions are always claimable, as before M4b.
 # ---------------------------------------------------------------------------
 
 def _stub_filtering_client(rows):
@@ -293,7 +296,6 @@ def _stub_filtering_client(rows):
 
 
 def _with_filtering_stub_client(rows, fn):
-    import tools.seeded_mission_queue as smq
     original = smq._get_client
     smq._get_client = lambda: _stub_filtering_client(rows)
     try:
@@ -302,12 +304,46 @@ def _with_filtering_stub_client(rows, fn):
         smq._get_client = original
 
 
-def test_fetch_next_queued_mission_skips_business_target():
+def _patch(obj, **attrs):
+    """Set *attrs* on *obj*, returning the originals for restoration.
+
+    Manual patch/restore (no pytest monkeypatch fixture) so every test here
+    stays runnable both under pytest and via this file's standalone
+    ``__main__`` runner, matching ``_with_stub_client`` / ``_restore_graph_seeded``
+    above.
+    """
+    originals = {name: getattr(obj, name) for name in attrs}
+    for name, value in attrs.items():
+        setattr(obj, name, value)
+    return originals
+
+
+def _unpatch(obj, originals):
+    for name, value in originals.items():
+        setattr(obj, name, value)
+
+
+_FULL_SANDBOX_CONFIG = {
+    "repo_full_name": "acme/landing",
+    "github_token_secret_name": "ACME_GITHUB_TOKEN",
+    "vercel_project_id": "prj_acme",
+    "vercel_token_secret_name": "ACME_VERCEL_TOKEN",
+}
+
+
+def test_fetch_next_queued_mission_skips_business_target_when_disabled():
     rows = [
-        {"id": "biz-1", "status": "queued", "runner_target": "business", "created_at": "2026-01-01"},
+        {"id": "biz-1", "status": "queued", "runner_target": "business",
+         "business_id": "b-1", "created_at": "2026-01-01"},
     ]
-    result = _with_filtering_stub_client(rows, fetch_next_queued_mission)
-    assert result is None
+    from config import get_config
+    original = get_config().business_execution_enabled
+    get_config().business_execution_enabled = False
+    try:
+        result = _with_filtering_stub_client(rows, fetch_next_queued_mission)
+        assert result is None
+    finally:
+        get_config().business_execution_enabled = original
 
 
 def test_fetch_next_queued_mission_claims_self_target():
@@ -319,23 +355,210 @@ def test_fetch_next_queued_mission_claims_self_target():
     assert result["id"] == "self-1"
 
 
-def test_fetch_next_queued_mission_prefers_self_over_business():
+def test_fetch_next_queued_mission_prefers_self_over_blocked_business():
     rows = [
-        {"id": "biz-1", "status": "queued", "runner_target": "business", "created_at": "2026-01-01"},
+        {"id": "biz-1", "status": "queued", "runner_target": "business",
+         "business_id": "b-1", "created_at": "2026-01-01"},
         {"id": "self-1", "status": "queued", "runner_target": "self", "created_at": "2026-01-02"},
     ]
-    result = _with_filtering_stub_client(rows, fetch_next_queued_mission)
-    assert result is not None
-    assert result["id"] == "self-1"
+    from config import get_config
+    original = get_config().business_execution_enabled
+    get_config().business_execution_enabled = False
+    try:
+        result = _with_filtering_stub_client(rows, fetch_next_queued_mission)
+        assert result is not None
+        assert result["id"] == "self-1"
+    finally:
+        get_config().business_execution_enabled = original
 
 
-def test_fetch_next_queued_mission_none_when_only_business_targets():
+def test_fetch_next_queued_mission_none_when_only_business_targets_disabled():
     rows = [
-        {"id": "biz-1", "status": "queued", "runner_target": "business", "created_at": "2026-01-01"},
-        {"id": "biz-2", "status": "queued", "runner_target": "business", "created_at": "2026-01-02"},
+        {"id": "biz-1", "status": "queued", "runner_target": "business",
+         "business_id": "b-1", "created_at": "2026-01-01"},
+        {"id": "biz-2", "status": "queued", "runner_target": "business",
+         "business_id": "b-2", "created_at": "2026-01-02"},
     ]
-    result = _with_filtering_stub_client(rows, fetch_next_queued_mission)
-    assert result is None
+    from config import get_config
+    original = get_config().business_execution_enabled
+    get_config().business_execution_enabled = False
+    try:
+        result = _with_filtering_stub_client(rows, fetch_next_queued_mission)
+        assert result is None
+    finally:
+        get_config().business_execution_enabled = original
+
+
+def test_fetch_next_queued_mission_logs_business_mission_blocked():
+    rows = [
+        {"id": "biz-1", "status": "queued", "runner_target": "business",
+         "business_id": "b-1", "created_at": "2026-01-01"},
+    ]
+    from config import get_config
+    original = get_config().business_execution_enabled
+    get_config().business_execution_enabled = False
+    captured_events = []
+    log_original = _patch(smq, log_event=lambda event_type, payload: captured_events.append((event_type, payload)))
+    try:
+        result = _with_filtering_stub_client(rows, fetch_next_queued_mission)
+        assert result is None
+        assert any(e[0] == "business_mission_blocked" for e in captured_events)
+        blocked = [e[1] for e in captured_events if e[0] == "business_mission_blocked"][0]
+        assert blocked["reason"] == "business_execution_disabled"
+        assert blocked["mission_id"] == "biz-1"
+    finally:
+        get_config().business_execution_enabled = original
+        _unpatch(smq, log_original)
+
+
+def test_fetch_next_queued_mission_claims_business_when_fully_configured():
+    rows = [
+        {"id": "biz-1", "status": "queued", "runner_target": "business",
+         "business_id": "b-1", "created_at": "2026-01-01"},
+    ]
+    from config import get_config
+    original = get_config().business_execution_enabled
+    get_config().business_execution_enabled = True
+    originals = _patch(
+        smq,
+        fetch_business_by_id=lambda bid: {"id": "b-1", "sandbox_config": _FULL_SANDBOX_CONFIG},
+        resolve_scoped_github_token=lambda name: {"success": True, "token": "x", "secret_name": name},
+        resolve_scoped_vercel_token=lambda name: {"success": True, "token": "x", "secret_name": name},
+    )
+    try:
+        result = _with_filtering_stub_client(rows, fetch_next_queued_mission)
+        assert result is not None
+        assert result["id"] == "biz-1"
+    finally:
+        get_config().business_execution_enabled = original
+        _unpatch(smq, originals)
+
+
+# ---------------------------------------------------------------------------
+# evaluate_business_mission_claim — every refusal path + the full-config pass
+# ---------------------------------------------------------------------------
+
+def test_claim_refused_when_business_execution_disabled():
+    from config import get_config
+    original = get_config().business_execution_enabled
+    get_config().business_execution_enabled = False
+    try:
+        result = evaluate_business_mission_claim({"business_id": "b-1"})
+        assert result == {"allowed": False, "reason": "business_execution_disabled"}
+    finally:
+        get_config().business_execution_enabled = original
+
+
+def test_claim_refused_when_missing_business_id():
+    from config import get_config
+    original = get_config().business_execution_enabled
+    get_config().business_execution_enabled = True
+    try:
+        result = evaluate_business_mission_claim({})
+        assert result == {"allowed": False, "reason": "missing_business_id"}
+    finally:
+        get_config().business_execution_enabled = original
+
+
+def test_claim_refused_when_business_not_found():
+    from config import get_config
+    original = get_config().business_execution_enabled
+    get_config().business_execution_enabled = True
+    originals = _patch(smq, fetch_business_by_id=lambda bid: None)
+    try:
+        result = evaluate_business_mission_claim({"business_id": "b-1"})
+        assert result == {"allowed": False, "reason": "business_not_found"}
+    finally:
+        get_config().business_execution_enabled = original
+        _unpatch(smq, originals)
+
+
+def test_claim_refused_when_sandbox_not_configured():
+    from config import get_config
+    original = get_config().business_execution_enabled
+    get_config().business_execution_enabled = True
+    originals = _patch(smq, fetch_business_by_id=lambda bid: {"id": "b-1", "sandbox_config": {
+        "repo_full_name": "acme/landing",
+        # github_token_secret_name missing
+        "vercel_project_id": "prj_acme",
+        # vercel_token_secret_name missing
+    }})
+    try:
+        result = evaluate_business_mission_claim({"business_id": "b-1"})
+        assert result["allowed"] is False
+        assert result["reason"] == "sandbox_not_configured"
+        assert set(result["missing_fields"]) == {"github_token_secret_name", "vercel_token_secret_name"}
+    finally:
+        get_config().business_execution_enabled = original
+        _unpatch(smq, originals)
+
+
+def test_claim_refused_when_sandbox_config_absent():
+    from config import get_config
+    original = get_config().business_execution_enabled
+    get_config().business_execution_enabled = True
+    originals = _patch(smq, fetch_business_by_id=lambda bid: {"id": "b-1", "sandbox_config": None})
+    try:
+        result = evaluate_business_mission_claim({"business_id": "b-1"})
+        assert result["allowed"] is False
+        assert result["reason"] == "sandbox_not_configured"
+        assert len(result["missing_fields"]) == 4
+    finally:
+        get_config().business_execution_enabled = original
+        _unpatch(smq, originals)
+
+
+def test_claim_refused_when_github_secret_unresolved():
+    from config import get_config
+    original = get_config().business_execution_enabled
+    get_config().business_execution_enabled = True
+    originals = _patch(
+        smq,
+        fetch_business_by_id=lambda bid: {"id": "b-1", "sandbox_config": _FULL_SANDBOX_CONFIG},
+        resolve_scoped_github_token=lambda name: {"success": False, "error": "missing_secret", "secret_name": name},
+    )
+    try:
+        result = evaluate_business_mission_claim({"business_id": "b-1"})
+        assert result == {"allowed": False, "reason": "secret_unresolved", "secret_name": "ACME_GITHUB_TOKEN"}
+    finally:
+        get_config().business_execution_enabled = original
+        _unpatch(smq, originals)
+
+
+def test_claim_refused_when_vercel_secret_unresolved():
+    from config import get_config
+    original = get_config().business_execution_enabled
+    get_config().business_execution_enabled = True
+    originals = _patch(
+        smq,
+        fetch_business_by_id=lambda bid: {"id": "b-1", "sandbox_config": _FULL_SANDBOX_CONFIG},
+        resolve_scoped_github_token=lambda name: {"success": True, "token": "x", "secret_name": name},
+        resolve_scoped_vercel_token=lambda name: {"success": False, "error": "missing_secret", "secret_name": name},
+    )
+    try:
+        result = evaluate_business_mission_claim({"business_id": "b-1"})
+        assert result == {"allowed": False, "reason": "secret_unresolved", "secret_name": "ACME_VERCEL_TOKEN"}
+    finally:
+        get_config().business_execution_enabled = original
+        _unpatch(smq, originals)
+
+
+def test_claim_allowed_when_fully_configured():
+    from config import get_config
+    original = get_config().business_execution_enabled
+    get_config().business_execution_enabled = True
+    originals = _patch(
+        smq,
+        fetch_business_by_id=lambda bid: {"id": "b-1", "sandbox_config": _FULL_SANDBOX_CONFIG},
+        resolve_scoped_github_token=lambda name: {"success": True, "token": "x", "secret_name": name},
+        resolve_scoped_vercel_token=lambda name: {"success": True, "token": "x", "secret_name": name},
+    )
+    try:
+        result = evaluate_business_mission_claim({"business_id": "b-1"})
+        assert result == {"allowed": True}
+    finally:
+        get_config().business_execution_enabled = original
+        _unpatch(smq, originals)
 
 
 # ---------------------------------------------------------------------------
