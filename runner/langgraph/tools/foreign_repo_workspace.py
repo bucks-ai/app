@@ -1,8 +1,10 @@
 """M4b: runner executes missions against a foreign (business) repo.
 
 Lets the runner work outside its own repo, safely, when a claimed mission's
-business has a ``sandbox_config`` (see
-``supabase/migrations/0004_businesses_sandbox_config.sql``):
+business has a configured ``business_sandbox`` row (see
+``supabase/migrations/0004_business_sandbox.sql`` and
+``tools/business_sandbox.py::fetch_business_sandbox`` — the single source of
+truth; ``businesses.sandbox_config`` is deprecated and never read here):
 
     {"repo_full_name": "owner/name", "github_token_secret_name": "ENV_VAR_NAME"}
 
@@ -32,6 +34,7 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
+from tools.business_sandbox import fetch_business_sandbox
 from tools.log_tools import log_event
 
 _WORKSPACES_DIRNAME = ".workspaces"
@@ -210,12 +213,15 @@ def prepare_business_repo(task: dict, business: dict, cfg=None, git_run=None) ->
         from config import get_config
         cfg = get_config()
 
-    sandbox = (business or {}).get("sandbox_config") or {}
+    business_id = str((business or {}).get("id") or task.get("business_id") or "")
+    if not business_id:
+        return {"success": False, "reason": "no_sandbox_config"}
+
+    sandbox = fetch_business_sandbox(business_id) or {}
     repo_full_name = (sandbox.get("repo_full_name") or "").strip()
     secret_name = (sandbox.get("github_token_secret_name") or "").strip()
-    business_id = str((business or {}).get("id") or task.get("business_id") or "")
 
-    if not repo_full_name or not secret_name or not business_id:
+    if not repo_full_name or not secret_name:
         return {"success": False, "reason": "no_sandbox_config"}
 
     if is_bucks_ai_repo(repo_full_name, cfg):

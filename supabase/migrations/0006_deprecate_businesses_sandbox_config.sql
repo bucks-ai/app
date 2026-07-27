@@ -1,0 +1,31 @@
+-- =============================================================================
+-- bucks.ai — businesses.sandbox_config: DEPRECATED, do not use
+-- =============================================================================
+-- M4b sandbox-config reconciliation: the founder-facing Settings tab
+-- (src/lib/sandbox.ts, supabase/migrations/0004_business_sandbox.sql) writes
+-- per-business sandbox configuration into the RLS-protected, typed
+-- `business_sandbox` table. Nothing ever synced that table onto this column,
+-- so a founder filling out the Settings UI had no effect on what the runner
+-- actually executed against (confirmed live 2026-07-26: `business_sandbox`
+-- had zero rows while businesses.sandbox_config was read by every runner
+-- code path).
+--
+-- `business_sandbox` is now the single source of truth. As of this
+-- migration, nothing in the runner (tools/foreign_repo_workspace.py::
+-- prepare_business_repo, tools/seeded_mission_queue.py::
+-- evaluate_business_mission_claim, tools/vercel_tools.py::
+-- resolve_business_vercel_target via graph.py::_resolve_business_deploy_target)
+-- reads or writes this column anymore — see tools/business_sandbox.py::
+-- fetch_business_sandbox.
+--
+-- This column is intentionally NOT dropped (no destructive migration): any
+-- data already written to it is left untouched. It is simply dead. A future
+-- migration may drop it once it has been confirmed unused in every
+-- environment.
+--
+-- Comment-only (COMMENT ON COLUMN), so this migration is additive and
+-- eligible for AUTO_APPLY_MIGRATIONS like 0005 before it.
+-- =============================================================================
+
+COMMENT ON COLUMN public.businesses.sandbox_config IS
+  'DEPRECATED — dead column, do not read or write. The single source of truth for per-business sandbox configuration is the business_sandbox table (supabase/migrations/0004_business_sandbox.sql), read via runner/langgraph/tools/business_sandbox.py::fetch_business_sandbox. This column is left in place only so existing data is not destroyed; no runner code path consults it.';

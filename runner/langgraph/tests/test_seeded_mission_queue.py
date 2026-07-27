@@ -421,7 +421,8 @@ def test_fetch_next_queued_mission_claims_business_when_fully_configured():
     get_config().business_execution_enabled = True
     originals = _patch(
         smq,
-        fetch_business_by_id=lambda bid: {"id": "b-1", "sandbox_config": _FULL_SANDBOX_CONFIG},
+        fetch_business_by_id=lambda bid: {"id": "b-1"},
+        fetch_business_sandbox=lambda bid: _FULL_SANDBOX_CONFIG,
         resolve_scoped_github_token=lambda name: {"success": True, "token": "x", "secret_name": name},
         resolve_scoped_vercel_token=lambda name: {"success": True, "token": "x", "secret_name": name},
     )
@@ -477,12 +478,16 @@ def test_claim_refused_when_sandbox_not_configured():
     from config import get_config
     original = get_config().business_execution_enabled
     get_config().business_execution_enabled = True
-    originals = _patch(smq, fetch_business_by_id=lambda bid: {"id": "b-1", "sandbox_config": {
-        "repo_full_name": "acme/landing",
-        # github_token_secret_name missing
-        "vercel_project_id": "prj_acme",
-        # vercel_token_secret_name missing
-    }})
+    originals = _patch(
+        smq,
+        fetch_business_by_id=lambda bid: {"id": "b-1"},
+        fetch_business_sandbox=lambda bid: {
+            "repo_full_name": "acme/landing",
+            # github_token_secret_name missing
+            "vercel_project_id": "prj_acme",
+            # vercel_token_secret_name missing
+        },
+    )
     try:
         result = evaluate_business_mission_claim({"business_id": "b-1"})
         assert result["allowed"] is False
@@ -497,7 +502,34 @@ def test_claim_refused_when_sandbox_config_absent():
     from config import get_config
     original = get_config().business_execution_enabled
     get_config().business_execution_enabled = True
-    originals = _patch(smq, fetch_business_by_id=lambda bid: {"id": "b-1", "sandbox_config": None})
+    originals = _patch(
+        smq,
+        fetch_business_by_id=lambda bid: {"id": "b-1"},
+        fetch_business_sandbox=lambda bid: None,
+    )
+    try:
+        result = evaluate_business_mission_claim({"business_id": "b-1"})
+        assert result["allowed"] is False
+        assert result["reason"] == "sandbox_not_configured"
+        assert len(result["missing_fields"]) == 4
+    finally:
+        get_config().business_execution_enabled = original
+        _unpatch(smq, originals)
+
+
+def test_claim_refused_when_only_legacy_business_sandbox_config_populated():
+    """A business whose only populated sandbox data lives on the deprecated
+    businesses.sandbox_config JSONB column (business_sandbox table empty)
+    must be refused exactly like an unconfigured business — no silent
+    stale-data fallback onto the legacy column."""
+    from config import get_config
+    original = get_config().business_execution_enabled
+    get_config().business_execution_enabled = True
+    originals = _patch(
+        smq,
+        fetch_business_by_id=lambda bid: {"id": "b-1", "sandbox_config": _FULL_SANDBOX_CONFIG},
+        fetch_business_sandbox=lambda bid: None,
+    )
     try:
         result = evaluate_business_mission_claim({"business_id": "b-1"})
         assert result["allowed"] is False
@@ -514,7 +546,8 @@ def test_claim_refused_when_github_secret_unresolved():
     get_config().business_execution_enabled = True
     originals = _patch(
         smq,
-        fetch_business_by_id=lambda bid: {"id": "b-1", "sandbox_config": _FULL_SANDBOX_CONFIG},
+        fetch_business_by_id=lambda bid: {"id": "b-1"},
+        fetch_business_sandbox=lambda bid: _FULL_SANDBOX_CONFIG,
         resolve_scoped_github_token=lambda name: {"success": False, "error": "missing_secret", "secret_name": name},
     )
     try:
@@ -531,7 +564,8 @@ def test_claim_refused_when_vercel_secret_unresolved():
     get_config().business_execution_enabled = True
     originals = _patch(
         smq,
-        fetch_business_by_id=lambda bid: {"id": "b-1", "sandbox_config": _FULL_SANDBOX_CONFIG},
+        fetch_business_by_id=lambda bid: {"id": "b-1"},
+        fetch_business_sandbox=lambda bid: _FULL_SANDBOX_CONFIG,
         resolve_scoped_github_token=lambda name: {"success": True, "token": "x", "secret_name": name},
         resolve_scoped_vercel_token=lambda name: {"success": False, "error": "missing_secret", "secret_name": name},
     )
@@ -549,7 +583,8 @@ def test_claim_allowed_when_fully_configured():
     get_config().business_execution_enabled = True
     originals = _patch(
         smq,
-        fetch_business_by_id=lambda bid: {"id": "b-1", "sandbox_config": _FULL_SANDBOX_CONFIG},
+        fetch_business_by_id=lambda bid: {"id": "b-1"},
+        fetch_business_sandbox=lambda bid: _FULL_SANDBOX_CONFIG,
         resolve_scoped_github_token=lambda name: {"success": True, "token": "x", "secret_name": name},
         resolve_scoped_vercel_token=lambda name: {"success": True, "token": "x", "secret_name": name},
     )

@@ -117,6 +117,7 @@ from tools.seeded_mission_queue import (
     mark_mission_failed,
 )
 from tools.agent_run_sync import start_agent_run, complete_agent_run, fail_agent_run
+from tools.business_sandbox import fetch_business_sandbox
 from tools.foreign_repo_workspace import (
     fetch_business_by_id,
     prepare_business_repo,
@@ -240,14 +241,17 @@ def _resolve_business_deploy_target(task: dict) -> dict:
     — i.e. ``success`` plus either ``project_id``/``token``/``secret_name`` or
     a ``reason`` (``partial_sandbox_config`` / ``missing_secret``).
 
+    Reads the business's ``business_sandbox`` row (``tools/business_sandbox.py::
+    fetch_business_sandbox`` — the single source of truth; the deprecated
+    ``businesses.sandbox_config`` JSONB column is never read here).
+
     CRITICAL SAFETY: never falls back to ``cfg.vercel_project_id`` /
     ``cfg.vercel_token`` — see ``tools/vercel_tools.py::resolve_business_vercel_target``.
     """
     business_id = task.get("business_id")
     if not business_id:
         return {"applicable": False}
-    business = fetch_business_by_id(str(business_id))
-    sandbox_config = (business or {}).get("sandbox_config") or {}
+    sandbox_config = fetch_business_sandbox(str(business_id)) or {}
     target = resolve_business_vercel_target(sandbox_config)
     return {"applicable": True, "business_id": business_id, **target}
 
@@ -816,7 +820,8 @@ def resolve_business_repo_if_needed(state: RunnerState) -> RunnerState:
     # no_sandbox_config / workspace_error — actionable, but not a security
     # violation. Surface as a resource request rather than a hard failure.
     resource_label = (
-        "business sandbox_config (repo_full_name + github_token_secret_name)"
+        "business_sandbox configuration (repo_full_name + github_token_secret_name — "
+        "configure via the business's Settings tab)"
         if reason == "no_sandbox_config"
         else f"business repo workspace ({result.get('error') or reason})"
     )
