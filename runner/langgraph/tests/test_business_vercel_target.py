@@ -269,13 +269,10 @@ def test_deploy_if_needed_targets_business_project_and_token():
     graph.cfg.vercel_token = "bucks-ai-token"
 
     os.environ["TEST_BIZ2_VERCEL_TOKEN"] = "biz-scoped-token"
-    original_fetch = graph.fetch_business_by_id
-    graph.fetch_business_by_id = lambda bid: {
-        "id": bid,
-        "sandbox_config": {
-            "vercel_project_id": "prj_biz_999",
-            "vercel_token_secret_name": "TEST_BIZ2_VERCEL_TOKEN",
-        },
+    original_fetch_sandbox = graph.fetch_business_sandbox
+    graph.fetch_business_sandbox = lambda bid: {
+        "vercel_project_id": "prj_biz_999",
+        "vercel_token_secret_name": "TEST_BIZ2_VERCEL_TOKEN",
     }
     try:
         state = graph.deploy_if_needed(_landed_business_state("biz-42"))
@@ -285,7 +282,7 @@ def test_deploy_if_needed_targets_business_project_and_token():
         assert calls[0]["token"] == "biz-scoped-token", calls
         assert state.deploy_ready is True
     finally:
-        graph.fetch_business_by_id = original_fetch
+        graph.fetch_business_sandbox = original_fetch_sandbox
         del os.environ["TEST_BIZ2_VERCEL_TOKEN"]
 
 
@@ -298,18 +295,15 @@ def test_deploy_if_needed_refuses_fallback_on_partial_sandbox_config():
     graph.cfg.vercel_project_id = "prj_bucks_ai"
     graph.cfg.vercel_token = "bucks-ai-token"
 
-    original_fetch = graph.fetch_business_by_id
-    graph.fetch_business_by_id = lambda bid: {
-        "id": bid,
-        "sandbox_config": {"vercel_project_id": "prj_biz_999"},
-    }
+    original_fetch_sandbox = graph.fetch_business_sandbox
+    graph.fetch_business_sandbox = lambda bid: {"vercel_project_id": "prj_biz_999"}
     try:
         state = graph.deploy_if_needed(_landed_business_state("biz-43"))
 
         assert calls == [], "must never deploy to the bucks-ai project on partial config"
         assert state.deploy_result is None, state.deploy_result
     finally:
-        graph.fetch_business_by_id = original_fetch
+        graph.fetch_business_sandbox = original_fetch_sandbox
 
 
 def test_deploy_if_needed_refuses_fallback_on_missing_secret():
@@ -320,13 +314,10 @@ def test_deploy_if_needed_refuses_fallback_on_missing_secret():
     graph.cfg.vercel_token = "bucks-ai-token"
 
     os.environ.pop("TEST_BIZ_NOPE_TOKEN", None)
-    original_fetch = graph.fetch_business_by_id
-    graph.fetch_business_by_id = lambda bid: {
-        "id": bid,
-        "sandbox_config": {
-            "vercel_project_id": "prj_biz_999",
-            "vercel_token_secret_name": "TEST_BIZ_NOPE_TOKEN",
-        },
+    original_fetch_sandbox = graph.fetch_business_sandbox
+    graph.fetch_business_sandbox = lambda bid: {
+        "vercel_project_id": "prj_biz_999",
+        "vercel_token_secret_name": "TEST_BIZ_NOPE_TOKEN",
     }
     try:
         state = graph.deploy_if_needed(_landed_business_state("biz-44"))
@@ -334,7 +325,39 @@ def test_deploy_if_needed_refuses_fallback_on_missing_secret():
         assert calls == [], "must never deploy when the scoped secret does not resolve"
         assert state.deploy_result is None, state.deploy_result
     finally:
-        graph.fetch_business_by_id = original_fetch
+        graph.fetch_business_sandbox = original_fetch_sandbox
+
+
+def test_deploy_if_needed_ignores_legacy_business_sandbox_config_column():
+    """A business whose only populated Vercel target lives on the deprecated
+    businesses.sandbox_config JSONB column (business_sandbox table empty)
+    must skip the deploy entirely — no silent stale-data fallback."""
+    calls = []
+    graph.trigger_deploy = _stub_trigger({"success": True}, calls)
+    graph.cfg.auto_deploy = True
+    graph.cfg.vercel_project_id = "prj_bucks_ai"
+    graph.cfg.vercel_token = "bucks-ai-token"
+
+    original_fetch_by_id = graph.fetch_business_by_id
+    original_fetch_sandbox = graph.fetch_business_sandbox
+    os.environ["TEST_BIZ_LEGACY_TOKEN"] = "biz-scoped-token"
+    graph.fetch_business_by_id = lambda bid: {
+        "id": bid,
+        "sandbox_config": {
+            "vercel_project_id": "prj_biz_legacy",
+            "vercel_token_secret_name": "TEST_BIZ_LEGACY_TOKEN",
+        },
+    }
+    graph.fetch_business_sandbox = lambda bid: None
+    try:
+        state = graph.deploy_if_needed(_landed_business_state("biz-legacy"))
+
+        assert calls == [], "must never deploy using the deprecated sandbox_config column"
+        assert state.deploy_result is None, state.deploy_result
+    finally:
+        graph.fetch_business_by_id = original_fetch_by_id
+        graph.fetch_business_sandbox = original_fetch_sandbox
+        del os.environ["TEST_BIZ_LEGACY_TOKEN"]
 
 
 def test_deploy_if_needed_self_mission_unaffected():
@@ -409,6 +432,7 @@ if __name__ == "__main__":
         test_deploy_if_needed_targets_business_project_and_token,
         test_deploy_if_needed_refuses_fallback_on_partial_sandbox_config,
         test_deploy_if_needed_refuses_fallback_on_missing_secret,
+        test_deploy_if_needed_ignores_legacy_business_sandbox_config_column,
         test_deploy_if_needed_self_mission_unaffected,
         test_build_business_smoke_scenarios_shape,
         test_title_non_empty_check_passes_for_real_title,

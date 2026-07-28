@@ -97,16 +97,28 @@ to clone its repo or deploy to its Vercel project) must resolve the token by
 looking up that name in its own environment — never by reading a token value
 out of this table, because no such value is ever written there.
 
-## 0004_businesses_sandbox_config.sql / 0005_business_sandbox_config_vercel_target.sql — the runtime sandbox_config shape
+## 0004_businesses_sandbox_config.sql / 0005_business_sandbox_config_vercel_target.sql — DEPRECATED, superseded by business_sandbox
 
-Note this is a *second*, separate representation of sandbox config from the
-`business_sandbox` table above: the runner's graph nodes
-(`runner/langgraph/tools/foreign_repo_workspace.py`,
-`runner/langgraph/tools/vercel_tools.py`) read a JSONB `sandbox_config` column
-directly on `businesses`, not the `business_sandbox` table. `0004` added
-`repo_full_name` / `github_token_secret_name` for foreign-repo execution
-(M4b task 05); `0005` documents the additional `vercel_project_id` /
-`vercel_token_secret_name` keys used to target a business's own Vercel
-project for deploys (M4b task 06) — same secret-name-only convention. A
-future task should reconcile these two representations; until then, the
-runner only ever reads `businesses.sandbox_config`.
+These two migrations added a *second*, separate representation of sandbox
+config directly on `businesses` — a JSONB `sandbox_config` column — which the
+runner's graph nodes originally read instead of the `business_sandbox` table
+above. `0004` added `repo_full_name` / `github_token_secret_name` for
+foreign-repo execution (M4b task 05); `0005` documented the additional
+`vercel_project_id` / `vercel_token_secret_name` keys used to target a
+business's own Vercel project for deploys (M4b task 06).
+
+**This was reconciled in `0006_deprecate_businesses_sandbox_config.sql`:**
+nothing writes to `business_sandbox` from the founder-facing Settings tab
+ever synced onto `businesses.sandbox_config`, so a founder configuring their
+sandbox via the UI had no effect on what the runner executed against
+(confirmed live 2026-07-26 — `business_sandbox` had zero rows while every
+runner code path still read the JSONB column). `business_sandbox` is now the
+single source of truth: `runner/langgraph/tools/business_sandbox.py::
+fetch_business_sandbox` is the one read path, consumed by
+`tools/foreign_repo_workspace.py::prepare_business_repo`,
+`tools/seeded_mission_queue.py::evaluate_business_mission_claim`, and
+`tools/vercel_tools.py::resolve_business_vercel_target` (via
+`graph.py::_resolve_business_deploy_target`). `businesses.sandbox_config` is
+left in place (not dropped — no destructive migration) but is dead: no runner
+code path reads or writes it anymore, and a business with data only on that
+legacy column is correctly treated as unconfigured.

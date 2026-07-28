@@ -698,7 +698,8 @@ hard-filter on `runner_target = "self"` (M4a) — every business mission sat
 queued no matter what. `evaluate_business_mission_claim` (same module)
 replaces that blanket refusal with a narrower gate a business mission must
 clear in full: the `BUSINESS_EXECUTION_ENABLED` flag (see the env table
-above), a `businesses.sandbox_config` with all four of `repo_full_name`,
+above), a `business_sandbox` row (`tools/business_sandbox.py::
+fetch_business_sandbox`) with all four of `repo_full_name`,
 `github_token_secret_name`, `vercel_project_id`, and
 `vercel_token_secret_name` set, and both named secrets resolving via
 `resolve_scoped_github_token`/`resolve_scoped_vercel_token`. Any failing
@@ -710,17 +711,18 @@ later self mission or a different business's claimable one. See
 `tests/test_seeded_mission_queue.py` for every refusal path and the
 full-config claim path.
 
-**Known limitation:** a separate `business_sandbox` table + founder-facing
-Settings tab (`src/lib/sandbox.ts`,
-`supabase/migrations/0004_business_sandbox.sql`) computes its own
-unconfigured/partial/configured status, but nothing currently writes those
-fields through to `businesses.sandbox_config`. This gate deliberately reads
-`sandbox_config` — the column the execution pipeline below actually consumes
-— so a mission that clears it is guaranteed to also clear
-`resolve_business_repo_if_needed`/`deploy_if_needed` instead of being
-claimed and immediately blocking on a resource-gate request. Until the two
-stores are reconciled, configuring a sandbox via the Settings tab alone does
-**not** make a business's missions claimable.
+**`business_sandbox` is the single source of truth (M4b sandbox-config
+reconciliation):** the founder-facing Settings tab (`src/lib/sandbox.ts`,
+`supabase/migrations/0004_business_sandbox.sql`) writes
+unconfigured/partial/configured sandbox state to `business_sandbox`, and this
+gate — along with `resolve_business_repo_if_needed` and `deploy_if_needed`
+below — reads that same table via `tools/business_sandbox.py::
+fetch_business_sandbox`. The deprecated `businesses.sandbox_config` JSONB
+column (`supabase/migrations/0004_businesses_sandbox_config.sql`,
+`0005_business_sandbox_config_vercel_target.sql`,
+`0006_deprecate_businesses_sandbox_config.sql`) is never read or written by
+any runner code path; a business with data only on that legacy column is
+correctly treated as unconfigured.
 
 ---
 
@@ -733,8 +735,11 @@ Every mission carries a `runner_target` (`self` or `business` —
 `supabase/migrations/0003_missions_runner_target.sql`). Only a `business`
 mission has a `business_id`; the graph node
 `resolve_business_repo_if_needed` runs right after `choose_worker` and, for
-those tasks only, resolves the business's `sandbox_config` (a JSONB column
-on `businesses` — `supabase/migrations/0004_businesses_sandbox_config.sql`):
+those tasks only, resolves the business's sandbox config from the
+`business_sandbox` table (`supabase/migrations/0004_business_sandbox.sql`,
+read via `tools/business_sandbox.py::fetch_business_sandbox` — the single
+source of truth; the deprecated `businesses.sandbox_config` JSONB column is
+never read):
 
 ```json
 {"repo_full_name": "owner/name", "github_token_secret_name": "SOME_ENV_VAR_NAME"}
@@ -910,10 +915,14 @@ For a business mission (`task["business_id"]` set — see **Foreign-Repo
 Execution** above), `deploy_if_needed` targets **that business's own Vercel
 project**, never the bucks-ai one:
 
-1. `_resolve_business_deploy_target` re-fetches the business row and reads
-   `sandbox_config.vercel_project_id` / `sandbox_config.vercel_token_secret_name`
-   (the same JSONB column `foreign_repo_workspace.py` reads for the GitHub
-   side — see `supabase/migrations/0005_business_sandbox_config_vercel_target.sql`).
+1. `_resolve_business_deploy_target` calls `tools/business_sandbox.py::
+   fetch_business_sandbox` and reads `vercel_project_id` /
+   `vercel_token_secret_name` off the `business_sandbox` row (the same table
+   `foreign_repo_workspace.py` reads for the GitHub side — see
+   `supabase/migrations/0004_business_sandbox.sql`; the deprecated JSONB
+   `businesses.sandbox_config` column from
+   `supabase/migrations/0005_business_sandbox_config_vercel_target.sql` is
+   never read).
 2. `tools.vercel_tools.resolve_business_vercel_target` requires **both**
    fields to be present and the named secret to resolve in the runner's own
    environment (`resolve_scoped_vercel_token` — name only, never a stored

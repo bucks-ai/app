@@ -28,6 +28,7 @@ from types import SimpleNamespace
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+import tools.foreign_repo_workspace as frw
 from tools.foreign_repo_workspace import (
     workspace_dir_for_business,
     is_bucks_ai_repo,
@@ -39,6 +40,20 @@ from tools.foreign_repo_workspace import (
 )
 import graph
 from state import RunnerState
+
+_ORIGINAL_FETCH_BUSINESS_SANDBOX = frw.fetch_business_sandbox
+
+
+def _with_sandbox(sandbox, fn):
+    """Run *fn* with ``fetch_business_sandbox`` stubbed to return *sandbox*
+    (the business_sandbox row) regardless of business_id — the single source
+    of truth these tests exercise, replacing the deprecated
+    ``businesses.sandbox_config`` JSONB column."""
+    frw.fetch_business_sandbox = lambda business_id: sandbox
+    try:
+        return fn()
+    finally:
+        frw.fetch_business_sandbox = _ORIGINAL_FETCH_BUSINESS_SANDBOX
 
 # Silence the flight recorder and disk persistence during tests.
 graph.log_event = lambda *a, **k: None
@@ -210,15 +225,16 @@ def _always_success_git_run(args, cwd, token, timeout=120):
 
 def test_prepare_business_repo_success():
     task = {"business_id": "biz-1"}
-    business = {
-        "id": "biz-1",
-        "sandbox_config": {"repo_full_name": "acme/widgets", "github_token_secret_name": "TEST_M4B_TOK"},
-    }
+    business = {"id": "biz-1"}
+    sandbox = {"repo_full_name": "acme/widgets", "github_token_secret_name": "TEST_M4B_TOK"}
     os.environ["TEST_M4B_TOK"] = "shhh-token"
     try:
         with tempfile.TemporaryDirectory() as d:
             cfg = _cfg(repo_path=str(Path(d) / "bucks-ai"))
-            result = prepare_business_repo(task, business, cfg, git_run=_always_success_git_run)
+            result = _with_sandbox(
+                sandbox,
+                lambda: prepare_business_repo(task, business, cfg, git_run=_always_success_git_run),
+            )
     finally:
         del os.environ["TEST_M4B_TOK"]
         import shutil
@@ -231,16 +247,35 @@ def test_prepare_business_repo_success():
 
 
 def test_prepare_business_repo_no_sandbox_config():
-    result = prepare_business_repo({"business_id": "biz-2"}, {"id": "biz-2"}, _cfg())
+    result = _with_sandbox(
+        None, lambda: prepare_business_repo({"business_id": "biz-2"}, {"id": "biz-2"}, _cfg())
+    )
+    assert result == {"success": False, "reason": "no_sandbox_config"}
+
+
+def test_prepare_business_repo_ignores_legacy_business_sandbox_config_column():
+    """A business whose only populated sandbox data lives on the deprecated
+    businesses.sandbox_config JSONB column (business_sandbox table empty)
+    must be treated as unconfigured — no silent stale-data fallback."""
+    business = {
+        "id": "biz-legacy",
+        "sandbox_config": {"repo_full_name": "acme/widgets", "github_token_secret_name": "LEGACY_TOK"},
+    }
+    result = _with_sandbox(
+        None,
+        lambda: prepare_business_repo({"business_id": "biz-legacy"}, business, _cfg()),
+    )
     assert result == {"success": False, "reason": "no_sandbox_config"}
 
 
 def test_prepare_business_repo_forbidden_repo():
-    business = {
-        "id": "biz-3",
-        "sandbox_config": {"repo_full_name": "bucks-ai/bucks-ai", "github_token_secret_name": "X"},
-    }
-    result = prepare_business_repo({"business_id": "biz-3"}, business, _cfg(github_repo="bucks-ai/bucks-ai"))
+    sandbox = {"repo_full_name": "bucks-ai/bucks-ai", "github_token_secret_name": "X"}
+    result = _with_sandbox(
+        sandbox,
+        lambda: prepare_business_repo(
+            {"business_id": "biz-3"}, {"id": "biz-3"}, _cfg(github_repo="bucks-ai/bucks-ai")
+        ),
+    )
     assert result["success"] is False
     assert result["reason"] == "forbidden_repo"
     assert result["repo_full_name"] == "bucks-ai/bucks-ai"
@@ -248,11 +283,11 @@ def test_prepare_business_repo_forbidden_repo():
 
 def test_prepare_business_repo_missing_secret():
     os.environ.pop("TEST_M4B_TOK_MISSING", None)
-    business = {
-        "id": "biz-4",
-        "sandbox_config": {"repo_full_name": "acme/widgets", "github_token_secret_name": "TEST_M4B_TOK_MISSING"},
-    }
-    result = prepare_business_repo({"business_id": "biz-4"}, business, _cfg())
+    sandbox = {"repo_full_name": "acme/widgets", "github_token_secret_name": "TEST_M4B_TOK_MISSING"}
+    result = _with_sandbox(
+        sandbox,
+        lambda: prepare_business_repo({"business_id": "biz-4"}, {"id": "biz-4"}, _cfg()),
+    )
     assert result == {"success": False, "reason": "missing_secret", "secret_name": "TEST_M4B_TOK_MISSING"}
 
 
@@ -262,11 +297,13 @@ def test_prepare_business_repo_workspace_error():
 
     os.environ["TEST_M4B_TOK_WS"] = "shhh"
     try:
-        business = {
-            "id": "biz-5",
-            "sandbox_config": {"repo_full_name": "acme/widgets", "github_token_secret_name": "TEST_M4B_TOK_WS"},
-        }
-        result = prepare_business_repo({"business_id": "biz-5"}, business, _cfg(), git_run=failing_git_run)
+        sandbox = {"repo_full_name": "acme/widgets", "github_token_secret_name": "TEST_M4B_TOK_WS"}
+        result = _with_sandbox(
+            sandbox,
+            lambda: prepare_business_repo(
+                {"business_id": "biz-5"}, {"id": "biz-5"}, _cfg(), git_run=failing_git_run
+            ),
+        )
     finally:
         del os.environ["TEST_M4B_TOK_WS"]
         import shutil
@@ -328,7 +365,7 @@ def test_node_success_overrides_repo_path():
     def body(outbox, inbox, failed, blocked):
         original_fetch = graph.fetch_business_by_id
         original_prepare = graph.prepare_business_repo
-        graph.fetch_business_by_id = lambda bid: {"id": bid, "sandbox_config": {}}
+        graph.fetch_business_by_id = lambda bid: {"id": bid}
         graph.prepare_business_repo = lambda task, business: {
             "success": True,
             "repo_path": "/tmp/.workspaces/biz-x",
@@ -351,7 +388,7 @@ def test_node_forbidden_repo_hard_fails():
     def body(outbox, inbox, failed, blocked):
         original_fetch = graph.fetch_business_by_id
         original_prepare = graph.prepare_business_repo
-        graph.fetch_business_by_id = lambda bid: {"id": bid, "sandbox_config": {}}
+        graph.fetch_business_by_id = lambda bid: {"id": bid}
         graph.prepare_business_repo = lambda task, business: {
             "success": False, "reason": "forbidden_repo", "repo_full_name": "bucks-ai/bucks-ai",
         }
@@ -370,7 +407,7 @@ def test_node_missing_secret_blocks_and_writes_resource_request():
     def body(outbox, inbox, failed, blocked):
         original_fetch = graph.fetch_business_by_id
         original_prepare = graph.prepare_business_repo
-        graph.fetch_business_by_id = lambda bid: {"id": bid, "sandbox_config": {}}
+        graph.fetch_business_by_id = lambda bid: {"id": bid}
         graph.prepare_business_repo = lambda task, business: {
             "success": False, "reason": "missing_secret", "secret_name": "ACME_GH_TOKEN",
         }
@@ -394,7 +431,7 @@ def test_node_missing_secret_fulfilled_retries_successfully():
         (inbox / "t1_resources_provided.txt").write_text("ok")
         original_fetch = graph.fetch_business_by_id
         original_prepare = graph.prepare_business_repo
-        graph.fetch_business_by_id = lambda bid: {"id": bid, "sandbox_config": {}}
+        graph.fetch_business_by_id = lambda bid: {"id": bid}
         graph.prepare_business_repo = lambda task, business: {
             "success": True,
             "repo_path": "/tmp/.workspaces/biz-x",
@@ -415,7 +452,7 @@ def test_node_no_sandbox_config_blocks_as_resource_request():
     def body(outbox, inbox, failed, blocked):
         original_fetch = graph.fetch_business_by_id
         original_prepare = graph.prepare_business_repo
-        graph.fetch_business_by_id = lambda bid: {"id": bid, "sandbox_config": None}
+        graph.fetch_business_by_id = lambda bid: {"id": bid}
         graph.prepare_business_repo = lambda task, business: {"success": False, "reason": "no_sandbox_config"}
         try:
             out = graph.resolve_business_repo_if_needed(_state({"id": "t1", "business_id": "biz-x", "runner_target": "business"}))
@@ -425,7 +462,7 @@ def test_node_no_sandbox_config_blocks_as_resource_request():
         assert out.stop_reason == "awaiting_resources"
         req_file = outbox / "t1_resource_request.txt"
         assert req_file.exists()
-        assert "sandbox_config" in req_file.read_text()
+        assert "business_sandbox" in req_file.read_text()
         assert blocked and blocked[0][0] == "t1"
     _with_temp_runner_dir(body)
 
@@ -479,6 +516,7 @@ if __name__ == "__main__":
         test_guard_passes_when_repo_path_differs,
         test_prepare_business_repo_success,
         test_prepare_business_repo_no_sandbox_config,
+        test_prepare_business_repo_ignores_legacy_business_sandbox_config_column,
         test_prepare_business_repo_forbidden_repo,
         test_prepare_business_repo_missing_secret,
         test_prepare_business_repo_workspace_error,

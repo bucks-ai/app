@@ -25,8 +25,10 @@ a ``runner_target: "business"`` mission (created via the app's Execute button)
 may only be claimed when ALL of the following hold:
 
   1. ``BUSINESS_EXECUTION_ENABLED=true`` (``cfg.business_execution_enabled``).
-  2. The mission's business has a fully "configured" sandbox — its
-     ``businesses.sandbox_config`` carries all four keys (``repo_full_name``,
+  2. The mission's business has a fully "configured" ``business_sandbox`` row
+     (see ``tools/business_sandbox.py::fetch_business_sandbox`` — the single
+     source of truth; ``businesses.sandbox_config`` is deprecated and never
+     read here) carrying all four keys (``repo_full_name``,
      ``github_token_secret_name``, ``vercel_project_id``,
      ``vercel_token_secret_name``), mirroring ``src/lib/sandbox.ts::computeSandboxStatus``.
   3. Both named secrets actually resolve in this runner process's environment.
@@ -41,6 +43,7 @@ from typing import Optional
 
 from tools.mission_compiler import _slug
 from tools.log_tools import log_event
+from tools.business_sandbox import fetch_business_sandbox
 from tools.foreign_repo_workspace import fetch_business_by_id, resolve_scoped_github_token
 from tools.vercel_tools import resolve_scoped_vercel_token
 
@@ -78,7 +81,7 @@ def evaluate_business_mission_claim(mission: dict) -> dict:
       - ``missing_business_id`` — the mission row carries no ``business_id``.
       - ``business_not_found`` — the business row could not be fetched.
       - ``sandbox_not_configured`` — one or more of the four required
-        ``sandbox_config`` fields is missing; ``missing_fields`` names which.
+        ``business_sandbox`` fields is missing; ``missing_fields`` names which.
       - ``secret_unresolved`` — a named secret is not set in the runner env;
         ``secret_name`` names which (never the value).
 
@@ -98,7 +101,7 @@ def evaluate_business_mission_claim(mission: dict) -> dict:
     if business is None:
         return {"allowed": False, "reason": "business_not_found"}
 
-    sandbox_config = business.get("sandbox_config") or {}
+    sandbox_config = fetch_business_sandbox(str(business_id)) or {}
     missing_fields = [
         field for field in _REQUIRED_SANDBOX_FIELDS
         if not str(sandbox_config.get(field) or "").strip()

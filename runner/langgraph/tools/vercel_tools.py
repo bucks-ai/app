@@ -283,13 +283,16 @@ def trigger_deploy(
 #
 # A business mission's deploy must target that business's OWN Vercel project
 # using a token scoped to it — never the bucks-ai project/token this runner
-# otherwise deploys with. The business's target lives on
-# ``businesses.sandbox_config`` (JSONB; see
-# supabase/migrations/0004_businesses_sandbox_config.sql,
-# 0005_business_sandbox_config_vercel_target.sql) under the keys
-# ``vercel_project_id`` / ``vercel_token_secret_name`` — the latter names an
-# environment variable, never a token value (external containment convention;
-# mirrors ``tools/foreign_repo_workspace.py::resolve_scoped_github_token``).
+# otherwise deploys with. The business's target lives on the ``business_sandbox``
+# table (see supabase/migrations/0004_business_sandbox.sql and
+# tools/business_sandbox.py::fetch_business_sandbox — the single source of
+# truth; ``businesses.sandbox_config`` is deprecated and never read) under the
+# keys ``vercel_project_id`` / ``vercel_token_secret_name`` — the latter names
+# an environment variable, never a token value (external containment
+# convention; mirrors ``tools/foreign_repo_workspace.py::resolve_scoped_github_token``).
+# ``resolve_business_vercel_target`` below takes that dict as a plain
+# ``sandbox_config`` argument — callers (``graph.py::_resolve_business_deploy_target``)
+# fetch it from ``business_sandbox`` before calling in.
 # ---------------------------------------------------------------------------
 
 def resolve_scoped_vercel_token(secret_name: str) -> dict:
@@ -310,7 +313,8 @@ def resolve_scoped_vercel_token(secret_name: str) -> dict:
 
 def resolve_business_vercel_target(sandbox_config: dict) -> dict:
     """Resolve a business mission's Vercel deploy target from its
-    ``sandbox_config`` dict (as fetched onto a ``businesses`` row).
+    ``sandbox_config`` dict (as fetched from ``business_sandbox`` via
+    ``tools/business_sandbox.py::fetch_business_sandbox``).
 
     Returns one of:
       {"success": True, "project_id": ..., "token": ..., "secret_name": ...}
