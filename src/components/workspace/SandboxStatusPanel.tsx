@@ -42,6 +42,7 @@ export function SandboxStatusPanel({ businessId }: SandboxStatusPanelProps) {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [savingField, setSavingField] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [editingFields, setEditingFields] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -97,6 +98,19 @@ export function SandboxStatusPanel({ businessId }: SandboxStatusPanelProps) {
     setStatus(parsed.status);
     setFields(parsed.fields);
     setDrafts((prev) => ({ ...prev, [field]: "" }));
+    setEditingFields((prev) => ({ ...prev, [field]: false }));
+  }
+
+  function startEditing(field: string, currentValue: string | null) {
+    setSaveError(null);
+    setDrafts((prev) => ({ ...prev, [field]: currentValue ?? "" }));
+    setEditingFields((prev) => ({ ...prev, [field]: true }));
+  }
+
+  function cancelEditing(field: string) {
+    setSaveError(null);
+    setDrafts((prev) => ({ ...prev, [field]: "" }));
+    setEditingFields((prev) => ({ ...prev, [field]: false }));
   }
 
   return (
@@ -155,8 +169,17 @@ export function SandboxStatusPanel({ businessId }: SandboxStatusPanelProps) {
                   variant={field.configured ? "success" : "neutral"}
                 />
               </div>
-              {field.configured ? (
-                <p className="mt-1 font-mono text-xs text-muted">{field.value}</p>
+              {field.configured && !editingFields[field.field] ? (
+                <div className="mt-1 flex items-center justify-between gap-2">
+                  <p className="font-mono text-xs text-muted">{field.value}</p>
+                  <button
+                    type="button"
+                    onClick={() => startEditing(field.field, field.value)}
+                    className="shrink-0 rounded border border-border bg-elevated px-2 py-0.5 text-[11px] font-medium text-secondary hover:border-accent"
+                  >
+                    Change
+                  </button>
+                </div>
               ) : (
                 <div className="mt-2 flex gap-2">
                   <input
@@ -167,6 +190,7 @@ export function SandboxStatusPanel({ businessId }: SandboxStatusPanelProps) {
                     }
                     placeholder={`Set ${field.label.toLowerCase()}`}
                     className="w-full rounded border border-border bg-surface px-2 py-1 text-xs text-secondary outline-none focus:border-accent"
+                    autoFocus={field.configured}
                   />
                   <button
                     type="button"
@@ -176,6 +200,16 @@ export function SandboxStatusPanel({ businessId }: SandboxStatusPanelProps) {
                   >
                     {savingField === field.field ? "Saving…" : "Save"}
                   </button>
+                  {field.configured && (
+                    <button
+                      type="button"
+                      onClick={() => cancelEditing(field.field)}
+                      disabled={savingField === field.field}
+                      className="shrink-0 rounded border border-border px-2 py-1 text-xs text-muted disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                  )}
                 </div>
               )}
             </div>
