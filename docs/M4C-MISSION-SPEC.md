@@ -225,6 +225,37 @@ a binding legal act, provider terms prohibit automated signup, and an unattended
 ingests foreign repo contents (M4b) must not hold account-creation or spending powers. See
 `STRATEGY.md` §6.3.
 
+**THE 30-SECOND SETUP HANDOFF — how credential requests actually work (founder decision 2026-07-31).**
+The founder makes all purchases and completes all signups personally. The babysitter's job is to make
+that take ~30 seconds instead of ~30 minutes. When a credential is needed, the request must arrive
+**fully prepared, not as a vague ask**:
+- The exact signup URL, deep-linked as far into the flow as the vendor allows.
+- Precisely which plan/tier to pick and why (and whether the free tier suffices — usually it does).
+- Every field value pre-computed and copy-pasteable (project name, domain, region, scopes/permissions
+  to tick).
+- The exact `.env` variable NAME to paste the resulting key into, and where the file lives.
+- Why it's needed — which mission/task is blocked — in one line.
+- A single "done" action to unblock (write the inbox fulfillment file), so the founder never has to
+  hunt for how to resume the loop.
+Anti-goal: a bare "Resource needed: an ESP" like the M4b requests. That forces the founder to do the
+research the agent should have done.
+
+**Prefer vendors with sanctioned programmatic onboarding** where a choice exists (Stripe Connect
+sub-accounts, AWS Organizations, Twilio subaccounts) — vendor-blessed account creation removes the
+handoff entirely, legitimately.
+
+**DEFERRED — autonomous agent spending (revisit post-revenue).** Researched 2026-07-31: capped agent
+spending is now standardised and legitimate ([AP2 mandates](https://www.crossmint.com/learn/agentic-payments-protocols-compared)
+from Stripe/Adyen/Mastercard/Visa/Amex; [Stripe Issuing virtual cards with per-agent
+limits](https://www.mindstudio.ai/blog/agentic-payments-ap2-x42-explained)). **Explicitly deferred by
+the founder: pre-revenue, not a bottleneck, founder makes all purchases.** Revisit when bucks.ai has
+paying customers — at which point the same mechanism also gives each customer business its own capped
+budget. **NOT deferred-because-risky; deferred-because-unnecessary-yet.**
+**Permanently rejected (unchanged): automated signup.** Agent-completed signup flows are a recognised
+fraud vector that vendors actively detect and terminate ([synthetic/duplicate sign-ups at
+scale](https://www.trustsphere.ai/post/when-shopping-agents-open-accounts-autonomous-ai-is-industrialising-synthetic-and-duplicate-sign-up));
+losing the Stripe or GitHub account is existential.
+
 **Dependency batch-ahead:** on startup, parse the ENTIRE approved roadmap, extract every external
 dependency, and issue ONE consolidated credential request up front. One ~30-minute founder
 session for the whole roadmap instead of N ambushes. **The list must be GENEROUS, not minimal** —
