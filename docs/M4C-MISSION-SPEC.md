@@ -120,7 +120,20 @@ Required:
 ### m4c-05 — Environment & deploy ownership
 **Type:** infra
 
+**Framing (founder question 2026-07-31: "the runner should have access to all my accounts like
+Vercel, PostHog etc so it can deploy and test without needing me — which mission covers this?"):
+it already HAS that access. Access was never the blocker.** `.env` already holds `VERCEL_TOKEN`,
+`POSTHOG_PERSONAL_API_KEY`, `GITHUB_TOKEN`, `SUPABASE_SERVICE_ROLE_KEY`, `SENTRY_AUTH_TOKEN` and
+the Slack tokens. During M4b the runner held the Vercel token the entire time and still never
+deployed, never noticed production was serving stale code, never wired the git integration, and
+never applied pending migrations. **The gap is AGENCY, not credentials — using the access it
+already has, proactively, without being told.** This task is that agency. (m4c-09 is the
+complement: *creating new* resources under those same parent accounts.)
+
 Required:
+- **Proactively use existing account access.** Deploy via the Vercel API/CLI, query PostHog to
+  verify analytics actually fire, apply migrations via Supabase, check Sentry for new errors
+  post-deploy — as normal parts of finishing a task, never as something the founder triggers.
 - **Migrations:** detect pending migrations and apply additive/guarded ones automatically
   (`AUTO_APPLY_MIGRATIONS`) instead of halting or warning on every run forever. (M4b: 6
   pending migrations silently blocked startup; `0006` then warned on every subsequent run.)
@@ -167,6 +180,19 @@ Founder: *"I approve everything, don't wait for me."*
   a human to create an account — auto-clicking can't conjure a token, so **skip that task, keep
   working everything else, auto-requeue the moment the credential lands.** Never block the whole
   loop on one gate.
+
+**Clarification (founder question 2026-07-31: "isn't the runner the one approving credentials —
+what's the point of the gate?"): APPROVALS and CREDENTIAL GATES are different things.**
+An *approval* is a DECISION ("merge this PR", "apply this migration") — the runner makes these
+itself; that is this task. A *credential gate* is a THING THAT DOESN'T EXIST YET ("there is no
+Resend account anywhere") — clicking "approved" cannot conjure it into being. It is a request for
+materials, not for permission. **So the value of this item is not the gate; it is the
+SKIP-AND-CONTINUE behaviour** — today a single missing credential halts the entire loop (observed
+repeatedly across M4b); afterwards the runner sets that one task aside, keeps working everything
+else, and resumes it the instant the credential appears. Note also that **m4c-09 shrinks this gate
+to near-zero**: with parent-child provisioning the runner mints its own child credentials from
+existing parent accounts, so the only residual case is a vendor with no parent account at all —
+and the dependency batch-ahead collects all of those in one request, up front.
 
 ---
 
