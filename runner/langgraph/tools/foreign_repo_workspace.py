@@ -31,6 +31,7 @@ CRITICAL SAFETY invariants (all unit-tested in
 """
 import os
 import subprocess
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -179,24 +180,51 @@ def guard_business_repo_path(repo_path: str, cfg=None) -> None:
         )
 
 
-def fetch_business_by_id(business_id: str) -> Optional[dict]:
-    """Return the Supabase ``businesses`` row for *business_id*, or ``None``
-    on any error (degrades gracefully, mirroring tools/seeded_mission_queue.py)."""
-    try:
-        from config import get_config
-        from supabase import create_client
-        cfg = get_config()
-        client = create_client(cfg.supabase_url, cfg.supabase_service_role_key)
-        result = (
-            client.table("businesses").select("*").eq("id", business_id).limit(1).execute()
-        )
-        rows = result.data or []
-        return rows[0] if rows else None
-    except Exception as e:
-        log_event("foreign_repo_workspace_error", {
-            "op": "fetch_business_by_id", "business_id": business_id, "error": str(e),
-        })
-        return None
+def fetch_business_by_id(business_id: str, attempts: int = 3) -> Optional[dict]:
+    """Return the Supabase ``businesses`` row for *business_id*, or ``None``.
+
+    Retries transient failures before giving up. This matters because the
+    caller cannot distinguish "this business does not exist" from "we could
+    not reach Supabase" — both surface as ``None``, and the graph reports the
+    latter to the founder as ``business_not_found``, which is actively
+    misleading (observed 2026-07-30: a degraded network turned a healthy
+    business into a hard ``Loop stopped: business_not_found``).
+
+    A genuine empty result (query succeeded, zero rows) returns ``None``
+    immediately — only exceptions are retried, with linear backoff.
+    """
+    last_error: Optional[Exception] = None
+    for attempt in range(1, attempts + 1):
+        try:
+            from config import get_config
+            from supabase import create_client
+            cfg = get_config()
+            client = create_client(cfg.supabase_url, cfg.supabase_service_role_key)
+            result = (
+                client.table("businesses").select("*").eq("id", business_id).limit(1).execute()
+            )
+            rows = result.data or []
+            # Query succeeded. Zero rows genuinely means "not found" — do not retry.
+            return rows[0] if rows else None
+        except Exception as e:
+            last_error = e
+            log_event("foreign_repo_workspace_error", {
+                "op": "fetch_business_by_id",
+                "business_id": business_id,
+                "error": str(e),
+                "attempt": attempt,
+                "attempts": attempts,
+                "will_retry": attempt < attempts,
+            })
+            if attempt < attempts:
+                time.sleep(2 * attempt)  # 2s, 4s
+
+    log_event("business_lookup_unreachable", {
+        "business_id": business_id,
+        "error": str(last_error) if last_error else "unknown",
+        "note": "infrastructure failure, NOT a missing business — do not report as business_not_found",
+    })
+    return None
 
 
 def prepare_business_repo(task: dict, business: dict, cfg=None, git_run=None) -> dict:
