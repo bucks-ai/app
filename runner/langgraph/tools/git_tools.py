@@ -52,6 +52,14 @@ def create_branch(repo_path: str, branch: str) -> dict:
 
 def run_check(repo_path: str) -> dict:
     log_event("check_started", {"repo_path": repo_path})
+    # scripts/check.sh is a bucks-ai convention (see AGENTS.md); business/foreign
+    # repos resolved via tools/foreign_repo_workspace.py have no such script and
+    # never will, so a missing script is "no check configured" — not a failure.
+    # Treating it as a failure sent every business mission into an unwinnable
+    # auto-repair loop (the worker can't create a check that isn't part of its task).
+    if not os.path.isfile(os.path.join(repo_path, "scripts", "check.sh")):
+        log_event("check_skipped", {"repo_path": repo_path, "reason": "no scripts/check.sh"})
+        return {"success": True, "output": "[check skipped: no scripts/check.sh in this repo]"}
     r = run_command(["bash", "scripts/check.sh"], cwd=repo_path, timeout=300)
     event_type = "check_passed" if r.success else "check_failed"
     log_event(event_type, {"output": r.output[-1000:] if r.output else ""})

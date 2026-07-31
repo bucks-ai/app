@@ -14,6 +14,9 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Autonomous runner Python venv (contains JS bundles that are not app code)
     "runner/langgraph/.venv/**",
+    // M4b: cloned customer repos the runner checks out to execute business
+    // missions (see .gitignore) — not bucks-ai source, must never be linted here
+    "runner/langgraph/.workspaces/**",
   ]),
 ]);
 
