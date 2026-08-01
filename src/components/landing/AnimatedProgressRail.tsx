@@ -31,7 +31,7 @@ export function AnimatedProgressRail({ stages }: { stages: RailStage[] }) {
               {String(index + 1).padStart(2, "0")}
             </span>
             <h3 className="mt-4 text-sm font-semibold text-foreground">{stage.label}</h3>
-            <p className="mt-2 text-sm leading-6 text-secondary">{stage.detail}</p>
+            <p className="mt-2 text-sm leading-6 text-foreground-secondary">{stage.detail}</p>
             <StatusPill
               label={stage.status}
               variant={variantForStatus(stage.status)}

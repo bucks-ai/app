@@ -49,7 +49,7 @@ export function ExecutionTimeline({ events }: ExecutionTimelineProps) {
               >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
-                    <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted">
+                    <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
                       {new Date(event.createdAt).toLocaleString()}
                     </p>
                     <h3 className="mt-2 text-sm font-semibold text-foreground">
@@ -59,9 +59,9 @@ export function ExecutionTimeline({ events }: ExecutionTimelineProps) {
                   <ExecutionStatusPill label={formatCategory(event.category)} />
                 </div>
                 {event.message && event.message !== event.title ? (
-                  <p className="mt-3 text-sm leading-6 text-secondary">{event.message}</p>
+                  <p className="mt-3 text-sm leading-6 text-foreground-secondary">{event.message}</p>
                 ) : null}
-                <div className="mt-3 flex flex-wrap gap-2 text-xs leading-5 text-muted">
+                <div className="mt-3 flex flex-wrap gap-2 text-xs leading-5 text-muted-foreground">
                   {event.actor ? <span>Actor: {event.actor}</span> : null}
                   {event.status ? <span>Status: {event.status}</span> : null}
                   {summary ? <span className="break-words">{summary}</span> : null}
@@ -70,7 +70,7 @@ export function ExecutionTimeline({ events }: ExecutionTimelineProps) {
             );
           })
         ) : (
-          <p className="rounded-md border border-border bg-surface p-4 text-sm leading-6 text-secondary">
+          <p className="rounded-md border border-border bg-surface p-4 text-sm leading-6 text-foreground-secondary">
             No execution events recorded yet.
           </p>
         )}

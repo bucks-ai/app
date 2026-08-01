@@ -111,7 +111,7 @@ export function OperatingTeamPanel({ businessId }: OperatingTeamPanelProps) {
         <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
           Operating Team
         </p>
-        <p className="mt-3 text-sm leading-6 text-secondary">
+        <p className="mt-3 text-sm leading-6 text-foreground-secondary">
           No agents are available for this business yet.
         </p>
       </div>

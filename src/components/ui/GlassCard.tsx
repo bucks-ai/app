@@ -10,6 +10,14 @@ type GlassCardProps = {
   interactive?: boolean;
   delay?: number;
   as?: "div" | "section" | "article";
+  variant?: "glass" | "solid" | "elevated" | "neumorphic";
+};
+
+const variantClasses = {
+  glass: "glass-surface glass-highlight",
+  solid: "solid-surface",
+  elevated: "elevated-surface glass-highlight",
+  neumorphic: "neumorphic-soft",
 };
 
 export function GlassCard({
@@ -19,6 +27,7 @@ export function GlassCard({
   interactive = false,
   delay = 0,
   as = "div",
+  variant = "glass",
 }: GlassCardProps) {
   const reducedMotion = useReducedMotion();
   const MotionTag =
@@ -26,8 +35,8 @@ export function GlassCard({
 
   return (
     <MotionTag
-      className={`glass-surface glass-highlight relative overflow-hidden rounded-card ${
-        interactive ? "cursor-pointer" : ""
+      className={`${variantClasses[variant]} relative overflow-hidden rounded-card ${
+        interactive ? "interactive-surface cursor-pointer" : ""
       } ${className}`}
       initial={false}
       animate={reducedMotion ? undefined : { opacity: 1, y: 0 }}
@@ -38,6 +47,7 @@ export function GlassCard({
           ? {
               y: -5,
               scale: 1.01,
+              borderColor: "color-mix(in srgb, var(--accent) 42%, var(--border))",
               transition: { duration: 0.2, ease: [0.16, 1, 0.3, 1] },
             }
           : undefined

@@ -15,7 +15,7 @@ export function Footer() {
             >
               bucks<span className="text-accent">.ai</span>
             </Link>
-            <p className="mt-2 max-w-xs text-xs leading-relaxed text-muted">
+            <p className="mt-2 max-w-xs text-xs leading-relaxed text-muted-foreground">
               Autonomous execution infrastructure for AI software businesses.
             </p>
           </div>
@@ -23,19 +23,19 @@ export function Footer() {
           <nav aria-label="Footer" className="flex flex-wrap items-center justify-center gap-3 sm:gap-6">
             <Link
               href="/dashboard"
-              className="inline-flex min-h-11 items-center text-xs text-secondary transition-colors duration-200 hover:text-foreground"
+              className="inline-flex min-h-11 items-center text-xs text-foreground-secondary transition-colors duration-200 hover:text-foreground"
             >
               Enter console
             </Link>
             <Link
               href="/tools"
-              className="inline-flex min-h-11 items-center text-xs text-secondary transition-colors duration-200 hover:text-foreground"
+              className="inline-flex min-h-11 items-center text-xs text-foreground-secondary transition-colors duration-200 hover:text-foreground"
             >
               Tool registry
             </Link>
             <Link
               href="/#execution-flow"
-              className="inline-flex min-h-11 items-center text-xs text-secondary transition-colors duration-200 hover:text-foreground"
+              className="inline-flex min-h-11 items-center text-xs text-foreground-secondary transition-colors duration-200 hover:text-foreground"
             >
               Execution flow
             </Link>
@@ -44,7 +44,7 @@ export function Footer() {
 
         {/* pipeline signature */}
         <div className="mt-10 flex flex-col items-center justify-between gap-4 border-t border-border-subtle pt-6 sm:flex-row">
-          <div className="flex flex-wrap items-center justify-center font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted">
+          <div className="flex flex-wrap items-center justify-center font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
             {pipeline.map((stage, i) => (
               <span key={stage} className="inline-flex items-center">
                 {i > 0 && (
@@ -54,7 +54,7 @@ export function Footer() {
               </span>
             ))}
           </div>
-          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted">
+          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
             © {new Date().getFullYear()} bucks.ai
           </span>
         </div>

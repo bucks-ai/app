@@ -141,7 +141,7 @@ export function DeploymentExecutionPanel({
           <h2 className="mt-4 text-3xl font-semibold tracking-tight text-foreground">
             Vercel project creation
           </h2>
-          <p className="mt-3 text-sm leading-7 text-secondary sm:text-base">
+          <p className="mt-3 text-sm leading-7 text-foreground-secondary sm:text-base">
             Prepare a deployable starter and create a Vercel project after the
             GitHub repo exists and Vercel is approved in the Tool Setup Queue.
           </p>

@@ -53,12 +53,12 @@ export function WorkspaceRightRail({
   return (
     <aside className="space-y-3">
       {/* Progress snapshot */}
-      <div className="rounded-xl border border-border bg-surface p-4 shadow-[var(--shadow-soft)]">
+      <div className="solid-surface rounded-xl p-4">
         <div className="flex items-center justify-between gap-3">
           <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
             Progress
           </p>
-          <span className="font-mono text-[10px] uppercase tracking-widest text-secondary">
+          <span className="font-mono text-[10px] uppercase tracking-widest text-foreground-secondary">
             {progress}%
           </span>
         </div>
@@ -72,7 +72,7 @@ export function WorkspaceRightRail({
           <button
             type="button"
             onClick={() => onTabChange("actions")}
-            className="rounded-lg border border-warning/20 bg-warning/8 px-2.5 py-2 text-left transition-colors hover:border-warning/40"
+            className="interactive-surface min-h-20 rounded-lg border border-warning/20 bg-warning/8 px-2.5 py-2 text-left transition-colors hover:border-warning/40"
           >
             <span className="block font-mono text-[10px] uppercase tracking-widest text-warning">
               Approvals
@@ -84,7 +84,7 @@ export function WorkspaceRightRail({
           <button
             type="button"
             onClick={() => onTabChange("actions")}
-            className="rounded-lg border border-error/20 bg-error/8 px-2.5 py-2 text-left transition-colors hover:border-error/40"
+            className="interactive-surface min-h-20 rounded-lg border border-error/20 bg-error/8 px-2.5 py-2 text-left transition-colors hover:border-error/40"
           >
             <span className="block font-mono text-[10px] uppercase tracking-widest text-error">
               Blockers
@@ -98,7 +98,7 @@ export function WorkspaceRightRail({
 
       {/* Key blockers */}
       {blockers.length > 0 ? (
-        <div className="rounded-xl border border-border bg-surface p-4 shadow-[var(--shadow-soft)]">
+        <div className="solid-surface rounded-xl p-4">
           <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-error">
             Key blockers
           </p>
@@ -110,7 +110,7 @@ export function WorkspaceRightRail({
               >
                 <p className="text-xs font-medium text-foreground">{blocker.title}</p>
                 {blocker.description ? (
-                  <p className="mt-0.5 line-clamp-2 text-xs leading-5 text-secondary">
+                  <p className="mt-0.5 line-clamp-2 text-xs leading-5 text-foreground-secondary">
                     {blocker.description}
                   </p>
                 ) : null}
@@ -120,7 +120,7 @@ export function WorkspaceRightRail({
               <button
                 type="button"
                 onClick={() => onTabChange("actions")}
-                className="w-full text-left font-mono text-[10px] uppercase tracking-widest text-muted transition-colors hover:text-secondary"
+                className="w-full text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground transition-colors hover:text-foreground-secondary"
               >
                 +{blockers.length - 3} more in Actions
               </button>
@@ -130,7 +130,7 @@ export function WorkspaceRightRail({
       ) : null}
 
       {/* Deploy + assets */}
-      <div className="rounded-xl border border-border bg-surface p-4 shadow-[var(--shadow-soft)]">
+      <div className="solid-surface rounded-xl p-4">
         <div className="flex items-center justify-between gap-2">
           <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
             Deploy &amp; assets
@@ -140,7 +140,7 @@ export function WorkspaceRightRail({
         <button
           type="button"
           onClick={() => onTabChange("deploy")}
-          className="mt-3 w-full rounded-lg border border-border bg-background px-3 py-2 text-left text-xs font-semibold text-secondary transition-colors hover:border-accent/40 hover:text-foreground"
+          className="mt-3 min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 text-left text-xs font-semibold text-foreground-secondary transition-colors hover:border-accent/40 hover:text-foreground"
         >
           {deploymentStatusLabel(deploymentStatus)}
         </button>

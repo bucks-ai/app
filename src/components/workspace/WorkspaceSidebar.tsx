@@ -95,24 +95,37 @@ export function WorkspaceSidebar({
   const groups: Array<"Plan" | "Build" | "Operate"> = ["Plan", "Build", "Operate"];
 
   return (
-    <aside className="hidden w-72 shrink-0 border-r border-border lg:block">
+    <aside className="hidden w-72 shrink-0 border-r border-border/80 bg-background/35 backdrop-blur lg:block">
       <div className="sticky top-[69px] flex max-h-[calc(100vh-69px)] flex-col gap-4 overflow-y-auto px-3 py-4">
-        <div className="rounded-xl border border-border bg-elevated p-3.5">
+        <div className="solid-surface rounded-xl p-3.5">
           <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
             Workspace
           </p>
           <h2 className="mt-1.5 truncate text-sm font-semibold text-foreground">
             {business.name}
           </h2>
-          <p className="mt-1 truncate font-mono text-[10px] uppercase tracking-widest text-muted">
+          <p className="mt-1 truncate font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
             {phase} &middot; {progress}%
           </p>
+          <div
+            role="progressbar"
+            aria-label={`${business.name} workspace progress`}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={progress}
+            className="mt-3 h-1.5 overflow-hidden rounded-full bg-border shadow-[var(--inset-highlight)]"
+          >
+            <div
+              className="h-full rounded-full bg-accent transition-all duration-700"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
         </div>
 
         <nav aria-label="Workspace sections" className="space-y-4">
           {groups.map((group) => (
             <div key={group}>
-              <p className="px-2 font-mono text-[10px] uppercase tracking-[0.22em] text-muted">
+              <p className="px-2 font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
                 {group}
               </p>
               <div className="mt-2 space-y-1">
@@ -126,17 +139,18 @@ export function WorkspaceSidebar({
                       key={tab.key}
                       type="button"
                       onClick={() => onTabChange(tab.key)}
-                      className={`flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors ${
+                      className={`interactive-surface flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors ${
                         isActive
-                          ? "border-accent/45 bg-accent/12 text-foreground"
-                          : "border-transparent text-secondary hover:border-border hover:bg-elevated hover:text-foreground"
+                          ? "border-accent/45 bg-[linear-gradient(135deg,var(--accent-soft),var(--accent-blue-soft))] text-foreground shadow-[var(--shadow-soft)]"
+                          : "border-transparent text-foreground-secondary hover:border-border hover:bg-elevated hover:text-foreground"
                       }`}
+                      aria-current={isActive ? "page" : undefined}
                     >
                       <span
                         className={`flex h-7 w-8 shrink-0 items-center justify-center rounded-md border font-mono text-[10px] ${
                           isActive
                             ? "border-accent/40 bg-accent/15 text-accent"
-                            : "border-border bg-background text-muted"
+                            : "border-border bg-background text-muted-foreground"
                         }`}
                       >
                         {meta.marker}
@@ -150,7 +164,7 @@ export function WorkspaceSidebar({
                             </span>
                           ) : null}
                         </span>
-                        <span className="mt-0.5 block truncate text-xs text-muted">
+                        <span className="mt-0.5 block truncate text-xs text-muted-foreground">
                           {meta.description}
                         </span>
                       </span>

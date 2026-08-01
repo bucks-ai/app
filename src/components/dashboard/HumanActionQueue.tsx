@@ -11,7 +11,7 @@ export function HumanActionQueue({ actions }: HumanActionQueueProps) {
       {actions.map((action) => (
         <div
           key={`${action.business}-${action.title}`}
-          className="rounded-md border border-warning/25 bg-warning/10 p-4"
+          className="interactive-surface rounded-lg border border-warning/30 bg-[linear-gradient(135deg,var(--warning-soft),rgba(255,255,255,0.02))] p-4 hover:border-warning/50"
         >
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
@@ -24,7 +24,7 @@ export function HumanActionQueue({ actions }: HumanActionQueueProps) {
             </div>
             <StatusPill label={action.status} variant="warning" />
           </div>
-          <p className="mt-3 text-sm leading-6 text-warning">{action.reason}</p>
+          <p className="mt-3 text-sm leading-6 text-foreground-secondary">{action.reason}</p>
         </div>
       ))}
     </div>

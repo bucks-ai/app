@@ -25,7 +25,7 @@ export function GitHubRepoResult({
         </div>
         <StatusPill label={result.private ? "Private" : "Public"} variant="neutral" />
       </div>
-      <p className="mt-3 text-sm leading-6 text-secondary">{description}</p>
+      <p className="mt-3 text-sm leading-6 text-foreground-secondary">{description}</p>
       <a
         href={result.repoUrl}
         target="_blank"

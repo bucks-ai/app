@@ -97,11 +97,11 @@ export function ActionsTab({ business, executionStatus }: ActionsTabProps) {
 
   if (actions.length === 0) {
     return (
-      <div className="rounded-lg border border-border bg-surface p-8 text-center">
-        <p className="font-mono text-xs uppercase tracking-[0.24em] text-muted">
+      <div className="solid-surface rounded-lg p-8 text-center">
+        <p className="font-mono text-xs uppercase tracking-[0.24em] text-muted-foreground">
           No pending actions
         </p>
-        <p className="mt-2 text-sm text-muted">
+        <p className="mt-2 text-sm text-muted-foreground">
           All current actions are complete or no inputs are needed.
         </p>
       </div>
@@ -113,7 +113,7 @@ export function ActionsTab({ business, executionStatus }: ActionsTabProps) {
       {actions.map((action) => (
         <div
           key={action.id}
-          className={`rounded-lg border bg-surface p-4 ${
+          className={`interactive-surface rounded-lg border bg-surface/90 p-4 ${
             action.category === "approval"
               ? "border-warning/20"
               : action.category === "blocker"
@@ -136,7 +136,7 @@ export function ActionsTab({ business, executionStatus }: ActionsTabProps) {
                 </h3>
               </div>
               {action.description ? (
-                <p className="mt-1.5 text-xs leading-5 text-secondary">
+                <p className="mt-1.5 text-xs leading-5 text-foreground-secondary">
                   {action.description}
                 </p>
               ) : null}

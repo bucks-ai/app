@@ -50,7 +50,7 @@ export function ValidationOverviewCard({
         <button
           type="button"
           onClick={onOpenValidation}
-          className="font-mono text-[10px] uppercase tracking-widest text-muted transition-colors hover:text-secondary"
+          className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground transition-colors hover:text-foreground-secondary"
         >
           Open
         </button>
@@ -59,15 +59,15 @@ export function ValidationOverviewCard({
       {summary ? (
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <ValidationStatusBadge value={summary.status} />
-          <span className="rounded border border-border bg-background px-2.5 py-1 text-xs text-secondary">
+          <span className="rounded border border-border bg-background px-2.5 py-1 text-xs text-foreground-secondary">
             {summary.leadCount} leads
           </span>
-          <span className="rounded border border-border bg-background px-2.5 py-1 text-xs text-secondary">
+          <span className="rounded border border-border bg-background px-2.5 py-1 text-xs text-foreground-secondary">
             {summary.feedbackNoteCount} feedback
           </span>
         </div>
       ) : (
-        <p className="mt-3 text-sm leading-6 text-muted">{message}</p>
+        <p className="mt-3 text-sm leading-6 text-muted-foreground">{message}</p>
       )}
     </div>
   );

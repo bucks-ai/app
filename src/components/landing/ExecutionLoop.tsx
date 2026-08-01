@@ -96,7 +96,7 @@ function LoopConsole({ active }: { active: number }) {
     <div className="glass-surface glass-highlight relative overflow-hidden rounded-card">
       <div className="relative z-10">
         <div className="flex items-center justify-between gap-3 border-b border-border-subtle px-4 py-3">
-          <span className="font-mono text-xs text-muted">
+          <span className="font-mono text-xs text-muted-foreground">
             execution-loop · step {String(active + 1).padStart(2, "0")}/07
           </span>
           <StatusPill label={step.label} variant="accent" />
@@ -115,7 +115,7 @@ function LoopConsole({ active }: { active: number }) {
                         ? "border-status-done/45 text-status-done"
                         : state === "running"
                           ? "pulse-ring border-accent bg-accent-soft text-accent-bright"
-                          : "border-border text-muted"
+                          : "border-border text-muted-foreground"
                     }`}
                     title={s.label}
                   >
@@ -166,7 +166,7 @@ function LoopConsole({ active }: { active: number }) {
             >
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-xl border border-border bg-background/72 p-3">
-                  <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted">
+                  <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
                     Artifact
                   </p>
                   <p className="mt-2 text-sm font-semibold text-foreground">
@@ -174,21 +174,21 @@ function LoopConsole({ active }: { active: number }) {
                   </p>
                 </div>
                 <div className="rounded-xl border border-border bg-background/72 p-3">
-                  <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted">
+                  <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
                     Permissions
                   </p>
-                  <p className="mt-2 font-mono text-xs leading-5 text-secondary">
+                  <p className="mt-2 font-mono text-xs leading-5 text-foreground-secondary">
                     {step.permission}
                   </p>
                 </div>
               </div>
 
               <div className="mt-3 rounded-xl border border-border bg-background/72 p-3">
-                <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted">
+                <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
                   Last log line
                 </p>
-                <p className="mt-2 grid grid-cols-[3rem_minmax(0,1fr)] gap-2 text-sm leading-5 text-secondary">
-                  <span className="font-mono text-[10px] text-muted">
+                <p className="mt-2 grid grid-cols-[3rem_minmax(0,1fr)] gap-2 text-sm leading-5 text-foreground-secondary">
+                  <span className="font-mono text-[10px] text-muted-foreground">
                     {`0${active + 2}:1${active}`}
                   </span>
                   <span>
@@ -275,16 +275,16 @@ export function ExecutionLoop() {
                   </div>
                   <h3
                     className={`mt-3 text-xl font-semibold tracking-tight transition-colors duration-300 ${
-                      isActive ? "text-foreground" : "text-secondary"
+                      isActive ? "text-foreground" : "text-foreground-secondary"
                     }`}
                   >
                     {step.headline}
                   </h3>
-                  <p className="mt-2.5 text-sm leading-7 text-secondary">
+                  <p className="mt-2.5 text-sm leading-7 text-foreground-secondary">
                     {step.body}
                   </p>
-                  <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.16em] text-muted lg:hidden">
-                    Artifact: <span className="text-secondary">{step.artifact}</span>
+                  <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground lg:hidden">
+                    Artifact: <span className="text-foreground-secondary">{step.artifact}</span>
                   </p>
                 </li>
               );

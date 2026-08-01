@@ -54,13 +54,13 @@ export function OperatingTeamSummaryHeader({
                     : "border-border bg-background"
             }`}
           >
-            <p className="font-mono text-[10px] uppercase tracking-widest text-secondary">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-foreground-secondary">
               Primary team action
             </p>
             <p className="mt-1 text-sm font-semibold text-foreground">
               {nextAction.title}
             </p>
-            <p className="mt-1 break-words text-xs leading-5 text-secondary">
+            <p className="mt-1 break-words text-xs leading-5 text-foreground-secondary">
               {nextAction.description}
             </p>
           </div>
@@ -79,7 +79,7 @@ export function OperatingTeamSummaryHeader({
             key={metric.label}
             className="rounded border border-border bg-background px-3 py-2.5"
           >
-            <p className="font-mono text-[10px] uppercase tracking-widest text-muted">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
               {metric.label}
             </p>
             <p className={`mt-1 text-xl font-semibold ${metric.tone}`}>

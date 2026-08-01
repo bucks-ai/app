@@ -14,7 +14,7 @@ export function ResearchHypothesesPanel({
         <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
           Research hypotheses
         </p>
-        <span className="font-mono text-[10px] uppercase tracking-widest text-muted">
+        <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
           {hypotheses.length} hypotheses
         </span>
       </div>
@@ -32,25 +32,25 @@ export function ResearchHypothesesPanel({
                     <ResearchStatusBadge value={hypothesis.priority} />
                     <ResearchStatusBadge value={hypothesis.confidence} />
                   </div>
-                  <p className="mt-2 break-words text-xs leading-5 text-secondary">
+                  <p className="mt-2 break-words text-xs leading-5 text-foreground-secondary">
                     {hypothesis.description ?? "Description not captured."}
                   </p>
                 </div>
               </div>
               <div className="mt-3 grid gap-2 md:grid-cols-2">
                 <div className="rounded border border-border bg-surface p-2.5">
-                  <p className="font-mono text-[10px] uppercase tracking-widest text-muted">
+                  <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
                     Test method
                   </p>
-                  <p className="mt-1 break-words text-xs leading-5 text-secondary">
+                  <p className="mt-1 break-words text-xs leading-5 text-foreground-secondary">
                     {hypothesis.test_method ?? "Not captured"}
                   </p>
                 </div>
                 <div className="rounded border border-border bg-surface p-2.5">
-                  <p className="font-mono text-[10px] uppercase tracking-widest text-muted">
+                  <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
                     Success criteria
                   </p>
-                  <p className="mt-1 break-words text-xs leading-5 text-secondary">
+                  <p className="mt-1 break-words text-xs leading-5 text-foreground-secondary">
                     {hypothesis.success_criteria ?? "Not captured"}
                   </p>
                 </div>
@@ -58,7 +58,7 @@ export function ResearchHypothesesPanel({
             </div>
           ))
         ) : (
-          <p className="rounded border border-border bg-background px-3 py-4 text-sm text-muted">
+          <p className="rounded border border-border bg-background px-3 py-4 text-sm text-muted-foreground">
             No research hypotheses yet.
           </p>
         )}

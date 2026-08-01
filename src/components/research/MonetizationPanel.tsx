@@ -12,7 +12,7 @@ export function MonetizationPanel({ models }: MonetizationPanelProps) {
         <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
           Monetization
         </p>
-        <span className="font-mono text-[10px] uppercase tracking-widest text-muted">
+        <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
           {models.length} models
         </span>
       </div>
@@ -26,7 +26,7 @@ export function MonetizationPanel({ models }: MonetizationPanelProps) {
                   <p className="break-words text-sm font-semibold text-foreground">
                     {model.model}
                   </p>
-                  <p className="mt-0.5 break-words text-xs text-muted">
+                  <p className="mt-0.5 break-words text-xs text-muted-foreground">
                     Buyer: {model.buyer ?? "Not captured"}
                   </p>
                 </div>
@@ -37,29 +37,29 @@ export function MonetizationPanel({ models }: MonetizationPanelProps) {
               </div>
               <div className="mt-3 space-y-2 text-xs leading-5">
                 <p>
-                  <span className="font-mono uppercase tracking-widest text-muted">
+                  <span className="font-mono uppercase tracking-widest text-muted-foreground">
                     Price
                   </span>{" "}
-                  <span className="break-words text-secondary">
+                  <span className="break-words text-foreground-secondary">
                     {model.price_assumption ?? "Not captured"}
                   </span>
                 </p>
                 <p>
-                  <span className="font-mono uppercase tracking-widest text-muted">
+                  <span className="font-mono uppercase tracking-widest text-muted-foreground">
                     Metric
                   </span>{" "}
-                  <span className="break-words text-secondary">
+                  <span className="break-words text-foreground-secondary">
                     {model.value_metric ?? "Not captured"}
                   </span>
                 </p>
-                <p className="break-words text-secondary">
+                <p className="break-words text-foreground-secondary">
                   {model.reasoning ?? "Reasoning not captured."}
                 </p>
               </div>
             </div>
           ))
         ) : (
-          <p className="rounded border border-border bg-background px-3 py-4 text-sm text-muted">
+          <p className="rounded border border-border bg-background px-3 py-4 text-sm text-muted-foreground">
             No monetization models yet.
           </p>
         )}

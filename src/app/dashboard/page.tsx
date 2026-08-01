@@ -38,9 +38,9 @@ export const metadata: Metadata = {
 };
 
 const primaryCta =
-  "inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-accent-contrast shadow-[var(--shadow-soft)] transition-colors hover:bg-accent-hover";
+  "inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg border border-white/10 bg-accent bg-[image:var(--cta-gradient)] px-4 py-2.5 text-sm font-semibold text-accent-contrast shadow-[var(--shadow-cta)] transition-transform duration-200 hover:-translate-y-0.5";
 const secondaryCta =
-  "inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg border border-border bg-surface px-4 py-2.5 text-sm font-medium text-secondary transition-colors hover:border-accent/40 hover:text-foreground";
+  "glass-surface inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg px-4 py-2.5 text-sm font-medium text-foreground-secondary transition-colors hover:border-accent/40 hover:text-foreground";
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("en-US", {
@@ -178,7 +178,7 @@ function SidePanel({
   children: React.ReactNode;
 }) {
   return (
-    <GlassCard as="section" className="p-4 sm:p-5">
+    <GlassCard as="section" variant="solid" className="p-4 sm:p-5">
       <div className="flex items-center justify-between gap-3">
         <SectionLabel tone={tone === "warning" ? "warning" : "accent"}>
           {title}
@@ -202,12 +202,12 @@ function SidePanel({
 
 function SetupPanel() {
   return (
-    <GlassCard as="section" className="p-6 sm:p-10">
+    <GlassCard as="section" variant="elevated" className="p-6 sm:p-10">
       <StatusPill label="Setup required" variant="warning" />
       <h1 className="mt-5 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
         Mission Control is ready. Connect Supabase for real projects.
       </h1>
-      <p className="mt-5 max-w-3xl text-base leading-8 text-secondary">
+      <p className="mt-5 max-w-3xl text-base leading-8 text-foreground-secondary">
         Mission Control builds without secrets, but real saved businesses need{" "}
         <code className="rounded bg-background px-1.5 py-0.5 font-mono text-accent">
           NEXT_PUBLIC_SUPABASE_URL
@@ -224,14 +224,14 @@ function SetupPanel() {
 
 function SignInPanel() {
   return (
-    <GlassCard as="section" className="p-6 sm:p-10">
+    <GlassCard as="section" variant="elevated" className="p-6 sm:p-10">
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-center">
         <div>
           <StatusPill label="Signed out" variant="neutral" />
           <h1 className="mt-5 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
             Mission Control for every startup workspace.
           </h1>
-          <p className="mt-5 max-w-3xl text-base leading-8 text-secondary">
+          <p className="mt-5 max-w-3xl text-base leading-8 text-foreground-secondary">
             Sign in to load saved businesses from Supabase. Until then, this page
             shows a clearly labeled sample preview of the operator console.
           </p>
@@ -244,8 +244,8 @@ function SignInPanel() {
             </Link>
           </div>
         </div>
-        <div className="rounded-xl border border-border bg-background/70 p-4">
-          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted">
+        <div className="elevated-surface rounded-xl p-4">
+          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
             Preview mode
           </p>
           <div className="mt-4 space-y-3">
@@ -253,7 +253,7 @@ function SignInPanel() {
               (item) => (
                 <div
                   key={item}
-                  className="skeleton-shimmer rounded-lg border border-border bg-surface/70 px-3 py-2 text-sm text-secondary"
+                  className="skeleton-shimmer rounded-lg border border-border bg-surface/70 px-3 py-2 text-sm text-foreground-secondary"
                 >
                   {item}
                 </div>
@@ -284,7 +284,7 @@ function DemoPreview() {
             Clearly labeled dashboard preview
           </h2>
         </div>
-        <p className="max-w-md text-sm leading-6 text-secondary">
+        <p className="max-w-md text-sm leading-6 text-foreground-secondary">
           Connect Supabase and sign in to see your real projects here.
         </p>
       </div>
@@ -308,12 +308,12 @@ function DemoPreview() {
 
 function EmptyState() {
   return (
-    <GlassCard className="p-8 text-center sm:p-12">
+    <GlassCard variant="elevated" className="p-8 text-center sm:p-12">
       <SectionLabel className="inline-block">Get started</SectionLabel>
       <h3 className="mt-4 text-2xl font-semibold tracking-tight text-foreground">
         Start your first business
       </h3>
-      <p className="mx-auto mt-3 max-w-md text-sm leading-7 text-secondary">
+      <p className="mx-auto mt-3 max-w-md text-sm leading-7 text-foreground-secondary">
         bucks.ai turns an idea into an execution-ready MVP. It researches the
         market, drafts the blueprint, ships a starter build, validates with
         customers, and runs a team of agents to keep the work moving.
@@ -353,7 +353,7 @@ export default async function DashboardPage() {
   if (businessesResult.error || !businessesResult.data) {
     return (
       <DashboardShell>
-        <GlassCard as="section" className="p-6 sm:p-10">
+        <GlassCard as="section" variant="elevated" className="p-6 sm:p-10">
           <StatusPill label="Load failed" variant="danger" />
           <h1 className="mt-5 text-3xl font-semibold tracking-tight text-foreground">
             Mission Control could not load businesses.
@@ -415,27 +415,29 @@ export default async function DashboardPage() {
   return (
     <DashboardShell>
       <div className="space-y-7">
-        <header className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-2xl">
-            <div className="flex flex-wrap items-center gap-2.5">
-              <SectionLabel>Mission Control</SectionLabel>
-              <StatusPill label="Live data" variant="success" />
+        <header className="solid-surface rounded-card p-5 sm:p-6">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+            <div className="max-w-2xl">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <SectionLabel>Mission Control</SectionLabel>
+                <StatusPill label="Live data" variant="success" />
+              </div>
+              <h1 className="mt-3 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
+                Your businesses
+              </h1>
+              <p className="mt-2.5 max-w-xl text-sm leading-7 text-foreground-secondary">
+                Every saved build, its current stage, and the next action waiting
+                on you.
+              </p>
             </div>
-            <h1 className="mt-3 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
-              Your businesses
-            </h1>
-            <p className="mt-2.5 max-w-xl text-sm leading-7 text-secondary">
-              Every saved build, its current stage, and the next action waiting
-              on you.
-            </p>
-          </div>
-          <div className="flex flex-col gap-2.5 sm:flex-row">
-            <Link href="/intake" className={primaryCta}>
-              New business <span aria-hidden>&#8594;</span>
-            </Link>
-            <Link href="/tools" className={secondaryCta}>
-              Tool registry
-            </Link>
+            <div className="flex flex-col gap-2.5 sm:flex-row">
+              <Link href="/intake" className={primaryCta}>
+                New business <span aria-hidden>&#8594;</span>
+              </Link>
+              <Link href="/tools" className={secondaryCta}>
+                Tool registry
+              </Link>
+            </div>
           </div>
         </header>
 
@@ -449,11 +451,11 @@ export default async function DashboardPage() {
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
           <section className="min-w-0">
             <div className="mb-3 flex items-center justify-between gap-3">
-              <h2 className="font-mono text-xs font-medium uppercase tracking-[0.18em] text-secondary">
+              <h2 className="font-mono text-xs font-medium uppercase tracking-[0.18em] text-foreground-secondary">
                 Workspaces
               </h2>
               {businessCards.length > 0 ? (
-                <span className="font-mono text-xs text-muted">
+                <span className="font-mono text-xs text-muted-foreground">
                   {businessCards.length} saved
                 </span>
               ) : null}
@@ -474,7 +476,7 @@ export default async function DashboardPage() {
               {humanActions.length > 0 ? (
                 <HumanActionQueue actions={humanActions} />
               ) : (
-                <p className="rounded-lg border border-border bg-background p-4 text-sm leading-6 text-muted">
+                <p className="rounded-lg border border-border bg-background p-4 text-sm leading-6 text-muted-foreground">
                   No pending approvals. bucks.ai will surface anything that needs
                   your sign-off here.
                 </p>
@@ -485,7 +487,7 @@ export default async function DashboardPage() {
               {activityItems.length > 0 ? (
                 <ActivityLog items={activityItems} />
               ) : (
-                <p className="rounded-lg border border-border bg-background p-4 text-sm leading-6 text-muted">
+                <p className="rounded-lg border border-border bg-background p-4 text-sm leading-6 text-muted-foreground">
                   Activity will appear here once a blueprint is saved.
                 </p>
               )}

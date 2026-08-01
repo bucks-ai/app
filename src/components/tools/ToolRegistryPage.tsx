@@ -70,7 +70,7 @@ function PermissionSetupSection({
             <h2 className="mt-3 text-3xl font-semibold tracking-tight text-foreground">
               Generate a blueprint to create a setup queue
             </h2>
-            <p className="mt-3 max-w-3xl text-sm leading-7 text-secondary">
+            <p className="mt-3 max-w-3xl text-sm leading-7 text-foreground-secondary">
               Tool permissions attach to saved business projects. Create a
               blueprint first, then bucks.ai can show the approvals needed for
               that specific operating plan.
@@ -95,7 +95,7 @@ function PermissionSetupSection({
             label={authState === "supabase_missing" ? "Supabase setup required" : "Business load failed"}
             variant="warning"
           />
-          <p className="mt-3 text-sm leading-6 text-secondary">
+          <p className="mt-3 text-sm leading-6 text-foreground-secondary">
             {loadError ??
               "Saved businesses are not available in this environment, so the permission layer is shown as a demo preview."}
           </p>
@@ -134,13 +134,13 @@ export function ToolRegistryPage({
               <h1 className="mt-5 text-4xl font-semibold tracking-tight text-foreground sm:text-5xl">
                 Every tool, the right permission.
               </h1>
-              <p className="mt-5 max-w-3xl text-base leading-8 text-secondary sm:text-lg">
+              <p className="mt-5 max-w-3xl text-base leading-8 text-foreground-secondary sm:text-lg">
                 bucks.ai prefers a trusted operating stack, but it can request
                 external tools only when needed, and escalates anything
                 involving legal, identity, payments, contracts, or live-client
                 commitments.
               </p>
-              <p className="mt-3 max-w-3xl text-sm leading-7 text-muted">
+              <p className="mt-3 max-w-3xl text-sm leading-7 text-muted-foreground">
                 Counts below are registry categories for the prototype, not
                 traction claims.
               </p>
@@ -186,7 +186,7 @@ export function ToolRegistryPage({
                 <h2 className="mt-2 text-3xl font-semibold tracking-tight text-foreground">
                   Preferred Tools
                 </h2>
-                <p className="mt-3 max-w-3xl text-sm leading-7 text-secondary sm:text-base">
+                <p className="mt-3 max-w-3xl text-sm leading-7 text-foreground-secondary sm:text-base">
                   The first 15 tools are marked as preferred because they map
                   cleanly to bucks.ai&apos;s default code, deployment, growth,
                   and monitoring workflows.
@@ -209,7 +209,7 @@ export function ToolRegistryPage({
                 <h2 className="mt-2 text-3xl font-semibold tracking-tight text-foreground">
                   Extended Tools
                 </h2>
-                <p className="mt-3 max-w-3xl text-sm leading-7 text-secondary sm:text-base">
+                <p className="mt-3 max-w-3xl text-sm leading-7 text-foreground-secondary sm:text-base">
                   These tools expand the operating surface when the founder
                   needs more options, while still making blocked, approval-only,
                   and human-only paths explicit.
@@ -259,14 +259,14 @@ export function ToolRegistryPage({
                 </div>
                 <div className="mt-5 space-y-3">
                   <div className="flex items-center justify-between gap-3 rounded-md border border-border bg-background px-4 py-3">
-                    <span className="text-sm text-secondary">Staging deploys</span>
+                    <span className="text-sm text-foreground-secondary">Staging deploys</span>
                     <ToolStatusBadge
                       label={autonomyConstitution.canDeployStaging ? "Allowed" : "Blocked"}
                       variant={autonomyConstitution.canDeployStaging ? "success" : "danger"}
                     />
                   </div>
                   <div className="flex items-center justify-between gap-3 rounded-md border border-border bg-background px-4 py-3">
-                    <span className="text-sm text-secondary">
+                    <span className="text-sm text-foreground-secondary">
                       Production deploys when tests pass
                     </span>
                     <ToolStatusBadge

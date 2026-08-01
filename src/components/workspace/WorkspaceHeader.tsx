@@ -16,7 +16,7 @@ function phaseLabel(phase: string): string {
 }
 
 const assetLink =
-  "hidden items-center rounded-lg border border-border bg-elevated px-2.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-secondary transition-colors hover:border-accent/40 hover:text-accent md:inline-flex";
+  "hidden min-h-11 items-center rounded-lg border border-border bg-elevated px-3 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-foreground-secondary transition-colors hover:border-accent/40 hover:text-accent md:inline-flex";
 
 export function WorkspaceHeader({
   business,
@@ -27,14 +27,14 @@ export function WorkspaceHeader({
   const progress = executionStatus?.progressPercent ?? 0;
 
   return (
-    <div className="px-4 py-2.5 sm:px-6">
+    <div className="px-4 py-3 sm:px-6">
       <div className="flex items-center justify-between gap-3">
         {/* Left: identity */}
         <div className="flex min-w-0 items-center gap-2.5">
           <Link
             href="/dashboard"
             aria-label="Back to Mission Control"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border text-secondary transition-colors hover:border-accent/40 hover:text-foreground"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-border bg-elevated text-foreground-secondary transition-colors hover:border-accent/40 hover:text-foreground"
           >
             <span aria-hidden="true">&#8592;</span>
           </Link>
@@ -42,7 +42,7 @@ export function WorkspaceHeader({
             <h1 className="truncate text-sm font-semibold tracking-tight text-foreground sm:text-base">
               {business.name}
             </h1>
-            <p className="mt-0.5 truncate font-mono text-[10px] uppercase tracking-[0.18em] text-muted">
+            <p className="mt-0.5 truncate font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
               {phaseLabel(phase)} &middot; {progress}%
             </p>
           </div>
@@ -75,7 +75,7 @@ export function WorkspaceHeader({
               href={business.vercelProject.deploymentUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="hidden items-center rounded-lg border border-success/30 bg-success/10 px-2.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-success transition-colors hover:border-success/50 sm:inline-flex"
+              className="hidden min-h-11 items-center rounded-lg border border-success/30 bg-success/10 px-3 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-success transition-colors hover:border-success/50 sm:inline-flex"
             >
               Live
             </a>
@@ -84,20 +84,12 @@ export function WorkspaceHeader({
             <button
               type="button"
               onClick={onBlueprintOpen}
-              className="inline-flex items-center rounded-lg border border-border bg-elevated px-2.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-secondary transition-colors hover:border-accent/40 hover:text-accent"
+              className="inline-flex min-h-11 items-center rounded-lg border border-border bg-elevated px-3 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-foreground-secondary transition-colors hover:border-accent/40 hover:text-accent"
             >
               Blueprint
             </button>
           ) : null}
         </div>
-      </div>
-
-      {/* Progress line */}
-      <div className="mt-2.5 h-0.5 w-full overflow-hidden rounded-full bg-border">
-        <div
-          className="h-full rounded-full bg-accent transition-all duration-700"
-          style={{ width: `${progress}%` }}
-        />
       </div>
     </div>
   );

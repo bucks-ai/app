@@ -24,7 +24,7 @@ export function AgentRunTimeline({ runs, agents, limit = 8 }: AgentRunTimelinePr
         <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
           Recent agent runs
         </p>
-        <span className="rounded border border-border bg-background px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-muted">
+        <span className="rounded border border-border bg-background px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
           {runs.length} total
         </span>
       </div>
@@ -43,7 +43,7 @@ export function AgentRunTimeline({ runs, agents, limit = 8 }: AgentRunTimelinePr
                     <p className="break-words text-xs font-semibold text-foreground">
                       {run.title}
                     </p>
-                    <p className="mt-1 break-words font-mono text-[10px] uppercase tracking-widest text-muted">
+                    <p className="mt-1 break-words font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
                       {namesByAgent.get(run.agent_id) ?? humanizeAgentValue(run.agent_id)}
                       {" / "}
                       {humanizeAgentValue(run.source)}
@@ -55,7 +55,7 @@ export function AgentRunTimeline({ runs, agents, limit = 8 }: AgentRunTimelinePr
                   </div>
                 </div>
                 {run.summary ? (
-                  <p className="mt-2 break-words text-xs leading-5 text-secondary">
+                  <p className="mt-2 break-words text-xs leading-5 text-foreground-secondary">
                     {run.summary}
                   </p>
                 ) : null}
@@ -64,7 +64,7 @@ export function AgentRunTimeline({ runs, agents, limit = 8 }: AgentRunTimelinePr
                     {run.error.message}
                   </p>
                 ) : null}
-                <p className="mt-2 font-mono text-[10px] uppercase tracking-widest text-muted">
+                <p className="mt-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
                   {formatAgentTime(timestamp)}
                 </p>
               </article>
@@ -72,7 +72,7 @@ export function AgentRunTimeline({ runs, agents, limit = 8 }: AgentRunTimelinePr
           })}
         </div>
       ) : (
-        <p className="mt-3 text-sm leading-6 text-muted">
+        <p className="mt-3 text-sm leading-6 text-muted-foreground">
           No agent runs are recorded yet. Build run history from existing activity logs when
           the Agent Runs SQL is installed.
         </p>

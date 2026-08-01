@@ -25,7 +25,7 @@ export function VercelProjectResult({
           <StatusPill label={result.repoFullName} variant="neutral" />
         ) : null}
       </div>
-      <p className="mt-3 text-sm leading-6 text-secondary">{description}</p>
+      <p className="mt-3 text-sm leading-6 text-foreground-secondary">{description}</p>
       <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
         <a
           href={result.dashboardUrl}
@@ -40,7 +40,7 @@ export function VercelProjectResult({
             href={result.deploymentUrl}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex max-w-full break-all rounded-md border border-border bg-background px-3 py-2 text-sm font-semibold text-secondary transition-colors hover:border-accent/60 hover:text-foreground"
+            className="inline-flex max-w-full break-all rounded-md border border-border bg-background px-3 py-2 text-sm font-semibold text-foreground-secondary transition-colors hover:border-accent/60 hover:text-foreground"
           >
             Open deployment URL
           </a>

@@ -40,7 +40,7 @@ export function WorkspaceTabs({
 }: WorkspaceTabsProps) {
   return (
     <div className={`min-w-0 flex-1 ${className}`}>
-      <div className="flex overflow-x-auto px-4 sm:px-6" style={{ scrollbarWidth: "none" }}>
+      <div className="flex gap-2 overflow-x-auto px-4 py-2 sm:px-6" style={{ scrollbarWidth: "none" }}>
         {TABS.map((tab) => {
           const count = badgeCounts?.[tab.key];
           const isActive = activeTab === tab.key;
@@ -49,11 +49,12 @@ export function WorkspaceTabs({
               key={tab.key}
               type="button"
               onClick={() => onTabChange(tab.key)}
-              className={`relative flex shrink-0 items-center gap-1.5 border-b-2 px-4 py-3 font-mono text-xs uppercase tracking-[0.18em] transition-colors ${
+              className={`relative flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border px-3 py-2 font-mono text-xs uppercase tracking-[0.16em] transition-colors ${
                 isActive
-                  ? "border-accent text-accent"
-                  : "border-transparent text-muted hover:text-secondary"
+                  ? "border-accent/45 bg-accent/12 text-accent"
+                  : "border-transparent text-muted-foreground hover:border-border hover:bg-elevated hover:text-foreground-secondary"
               }`}
+              aria-current={isActive ? "page" : undefined}
             >
               {tab.label}
               {count && count > 0 ? (

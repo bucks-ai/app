@@ -89,9 +89,13 @@ export function SystemPreview() {
               description="Every risky action surfaces as a checkpoint: the exact permission the agent asked for, the risk label, and the rollback path if you say no. Low-risk workspace writes clear automatically; side effects wait for you."
             />
           </Reveal>
-          <div className="mt-10 grid gap-4 md:grid-cols-3">
+          <div className="mt-10 grid gap-4 md:grid-cols-4">
             {checkpoints.map((checkpoint, index) => (
-              <Reveal key={checkpoint.title} delay={index * 80}>
+              <Reveal
+                key={checkpoint.title}
+                delay={index * 80}
+                className={checkpoint.featured ? "md:col-span-2" : ""}
+              >
                 <ApprovalCheckpoint checkpoint={checkpoint} />
               </Reveal>
             ))}
@@ -106,10 +110,17 @@ export function SystemPreview() {
               description="bucks.ai coordinates the tools a software business actually runs on, with access mode and current signal visible on every tile."
             />
           </Reveal>
-          <div className="mt-10 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="mt-10 grid gap-4 md:grid-cols-2 xl:grid-cols-6">
             {tools.map((tool, index) => (
-              <Reveal key={tool.name} delay={index * 55}>
-                <ToolTile tool={tool} />
+              <Reveal
+                key={tool.name}
+                delay={index * 55}
+                className={index < 2 ? "xl:col-span-3" : "xl:col-span-2"}
+              >
+                <ToolTile
+                  tool={tool}
+                  className={index < 2 ? "min-h-[13.5rem]" : "min-h-[12rem]"}
+                />
               </Reveal>
             ))}
           </div>

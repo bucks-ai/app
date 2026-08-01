@@ -65,12 +65,16 @@ export function KpiStat({
 
   return (
     <motion.div
-      className={`glass-surface glass-highlight relative min-h-[9.5rem] overflow-hidden rounded-card p-5 ${className}`}
+      className={`neumorphic-soft relative min-h-[9.5rem] overflow-hidden rounded-card p-5 ${className}`}
       initial={false}
       whileInView={reducedMotion ? undefined : { opacity: 1, y: 0 }}
       viewport={{ once: true }}
       transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
     >
+      <div
+        aria-hidden
+        className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent"
+      />
       <div className="relative z-10">
         <SectionLabel tone="muted">{label}</SectionLabel>
         <motion.p
@@ -78,7 +82,7 @@ export function KpiStat({
         >
           {rounded}
         </motion.p>
-        {detail ? <p className="mt-2 text-sm leading-6 text-secondary">{detail}</p> : null}
+        {detail ? <p className="mt-2 text-sm leading-6 text-foreground-secondary">{detail}</p> : null}
       </div>
       {sparkline && sparkline.length > 1 ? (
         <svg

@@ -51,7 +51,7 @@ export function HypothesisTracker({
         <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
           Hypotheses
         </p>
-        <span className="font-mono text-[10px] uppercase tracking-widest text-muted">
+        <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
           {hypotheses.length} tracked
         </span>
       </div>
@@ -78,12 +78,12 @@ export function HypothesisTracker({
                     <ValidationStatusBadge value={hypothesis.priority} />
                   </div>
                   {hypothesis.assumption ? (
-                    <p className="mt-1 text-xs leading-5 text-secondary">
+                    <p className="mt-1 text-xs leading-5 text-foreground-secondary">
                       {hypothesis.assumption}
                     </p>
                   ) : null}
                   {hypothesis.success_criteria ? (
-                    <p className="mt-1 text-xs leading-5 text-muted">
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
                       Success: {hypothesis.success_criteria}
                     </p>
                   ) : null}
@@ -99,7 +99,7 @@ export function HypothesisTracker({
                         event.target.value as ValidationHypothesisStatus
                       )
                     }
-                    className="min-h-9 rounded border border-border bg-elevated px-2.5 py-2 text-xs text-secondary outline-none transition-colors focus:border-accent/70 disabled:opacity-60"
+                    className="min-h-9 rounded border border-border bg-elevated px-2.5 py-2 text-xs text-foreground-secondary outline-none transition-colors focus:border-accent/70 disabled:opacity-60"
                   >
                     {STATUSES.map((status) => (
                       <option key={status} value={status}>
@@ -112,7 +112,7 @@ export function HypothesisTracker({
             </div>
           ))
         ) : (
-          <p className="rounded border border-border bg-background px-3 py-4 text-sm text-muted">
+          <p className="rounded border border-border bg-background px-3 py-4 text-sm text-muted-foreground">
             No hypotheses yet.
           </p>
         )}

@@ -49,7 +49,7 @@ export function InferAgentRunsButton({
         type="button"
         onClick={handleInfer}
         disabled={disabled || loading}
-        className="rounded-md border border-accent/40 bg-accent px-3 py-2 text-xs font-semibold text-accent-contrast transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:border-border disabled:bg-border disabled:text-muted"
+        className="rounded-md border border-accent/40 bg-accent px-3 py-2 text-xs font-semibold text-accent-contrast transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:border-border disabled:bg-border disabled:text-muted-foreground"
       >
         {loading ? "Building history..." : "Build run history"}
       </button>

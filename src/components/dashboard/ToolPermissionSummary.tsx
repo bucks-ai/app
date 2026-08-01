@@ -21,7 +21,7 @@ export function ToolPermissionSummary({
             <h3 className="text-sm font-semibold text-foreground">{permission.tool}</h3>
             <StatusPill label={permission.access} variant={permission.tone} />
           </div>
-          <p className="mt-3 text-sm leading-6 text-secondary">{permission.note}</p>
+          <p className="mt-3 text-sm leading-6 text-foreground-secondary">{permission.note}</p>
         </div>
       ))}
     </div>

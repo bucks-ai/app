@@ -53,7 +53,7 @@ export function ResearchOverviewCard({
         <button
           type="button"
           onClick={onOpenResearch}
-          className="font-mono text-[10px] uppercase tracking-widest text-muted transition-colors hover:text-secondary"
+          className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground transition-colors hover:text-foreground-secondary"
         >
           Open
         </button>
@@ -63,16 +63,16 @@ export function ResearchOverviewCard({
         <div className="mt-3 space-y-3">
           <div className="flex flex-wrap items-center gap-2">
             <ResearchStatusBadge value={workspace.summary.status} />
-            <span className="rounded border border-border bg-background px-2.5 py-1 text-xs text-secondary">
+            <span className="rounded border border-border bg-background px-2.5 py-1 text-xs text-foreground-secondary">
               Score {workspace.summary.opportunityScore ?? "--"}
             </span>
           </div>
-          <p className="break-words text-sm leading-6 text-secondary">
+          <p className="break-words text-sm leading-6 text-foreground-secondary">
             {topSegment ?? targetCustomer ?? "Target customer not captured yet."}
           </p>
         </div>
       ) : (
-        <p className="mt-3 text-sm leading-6 text-muted">{message}</p>
+        <p className="mt-3 text-sm leading-6 text-muted-foreground">{message}</p>
       )}
     </div>
   );

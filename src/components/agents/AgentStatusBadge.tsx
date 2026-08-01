@@ -27,7 +27,7 @@ function badgeStyles(kind: BadgeKind, value: string) {
     if (value === "draft" || value === "suggest") {
       return "border-accent/30 bg-accent/10 text-accent";
     }
-    return "border-border bg-background text-secondary";
+    return "border-border bg-background text-foreground-secondary";
   }
 
   switch (value) {
@@ -48,7 +48,7 @@ function badgeStyles(kind: BadgeKind, value: string) {
     case "skipped":
       return "border-warning/30 bg-warning/10 text-warning";
     default:
-      return "border-border bg-background text-secondary";
+      return "border-border bg-background text-foreground-secondary";
   }
 }
 

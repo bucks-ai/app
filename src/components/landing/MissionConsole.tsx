@@ -21,15 +21,15 @@ const railStages: RailStage[] = [
 export function MissionConsole({ compact = false }: { compact?: boolean }) {
   return (
     <GlassPanel
-      className="p-2"
-      innerClassName="rounded-[0.65rem] border border-border-subtle bg-elevated/88"
+      className="p-2 shadow-[var(--shadow-glass)]"
+      innerClassName="rounded-[0.65rem] border border-border-subtle bg-[linear-gradient(180deg,var(--surface-raised),var(--surface-solid))]"
     >
       <div className="flex items-center justify-between gap-3 border-b border-border-subtle px-4 py-3">
         <div className="flex min-w-0 items-center gap-2">
           <span className="h-2.5 w-2.5 rounded-full bg-status-blocked/80" />
           <span className="h-2.5 w-2.5 rounded-full bg-status-pending/90" />
           <span className="h-2.5 w-2.5 rounded-full bg-status-done/90" />
-          <span className="ml-3 truncate font-mono text-xs text-muted">
+          <span className="ml-3 truncate font-mono text-xs text-muted-foreground">
             mission-console · clipforge-ai
           </span>
         </div>
@@ -45,13 +45,13 @@ export function MissionConsole({ compact = false }: { compact?: boolean }) {
           ].map(([label, value, detail]) => (
             <div
               key={label}
-              className="rounded-xl border border-border bg-background/72 p-3"
+              className="elevated-surface rounded-xl p-3"
             >
-              <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted">
+              <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
                 {label}
               </p>
               <p className="mt-2 text-base font-semibold text-foreground">{value}</p>
-              <p className="mt-1 text-xs text-secondary">{detail}</p>
+              <p className="mt-1 text-xs text-foreground-secondary">{detail}</p>
             </div>
           ))}
         </div>

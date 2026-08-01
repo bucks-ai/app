@@ -8,8 +8,8 @@ type CompetitorMapPanelProps = {
 function ListLine({ label, items }: { label: string; items: string[] | null }) {
   return (
     <p className="text-xs leading-5">
-      <span className="font-mono uppercase tracking-widest text-muted">{label}</span>{" "}
-      <span className="break-words text-secondary">
+      <span className="font-mono uppercase tracking-widest text-muted-foreground">{label}</span>{" "}
+      <span className="break-words text-foreground-secondary">
         {items && items.length > 0 ? items.slice(0, 3).join(", ") : "Not captured"}
       </span>
     </p>
@@ -23,7 +23,7 @@ export function CompetitorMapPanel({ competitors }: CompetitorMapPanelProps) {
         <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
           Competitor map
         </p>
-        <span className="font-mono text-[10px] uppercase tracking-widest text-muted">
+        <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
           {competitors.length} mapped
         </span>
       </div>
@@ -37,31 +37,31 @@ export function CompetitorMapPanel({ competitors }: CompetitorMapPanelProps) {
                   <p className="break-words text-sm font-semibold text-foreground">
                     {competitor.name}
                   </p>
-                  <p className="mt-0.5 break-words text-xs text-muted">
+                  <p className="mt-0.5 break-words text-xs text-muted-foreground">
                     {competitor.category ?? "Category not set"}
                   </p>
                 </div>
                 <ResearchStatusBadge value={competitor.priority} />
               </div>
               <div className="mt-3 space-y-2">
-                <p className="break-words text-xs leading-5 text-secondary">
+                <p className="break-words text-xs leading-5 text-foreground-secondary">
                   {competitor.positioning ?? "Positioning not captured."}
                 </p>
                 <p className="text-xs leading-5">
-                  <span className="font-mono uppercase tracking-widest text-muted">
+                  <span className="font-mono uppercase tracking-widest text-muted-foreground">
                     Pricing
                   </span>{" "}
-                  <span className="break-words text-secondary">
+                  <span className="break-words text-foreground-secondary">
                     {competitor.pricing_summary ?? "Not captured"}
                   </span>
                 </p>
                 <ListLine label="Strengths" items={competitor.strengths} />
                 <ListLine label="Weaknesses" items={competitor.weaknesses} />
                 <p className="text-xs leading-5">
-                  <span className="font-mono uppercase tracking-widest text-muted">
+                  <span className="font-mono uppercase tracking-widest text-muted-foreground">
                     Wedge
                   </span>{" "}
-                  <span className="break-words text-secondary">
+                  <span className="break-words text-foreground-secondary">
                     {competitor.wedge_opportunity ?? "Not captured"}
                   </span>
                 </p>
@@ -69,7 +69,7 @@ export function CompetitorMapPanel({ competitors }: CompetitorMapPanelProps) {
             </div>
           ))
         ) : (
-          <p className="rounded border border-border bg-background px-3 py-4 text-sm text-muted">
+          <p className="rounded border border-border bg-background px-3 py-4 text-sm text-muted-foreground">
             No competitors mapped yet.
           </p>
         )}

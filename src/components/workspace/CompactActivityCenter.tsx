@@ -105,7 +105,7 @@ export function CompactActivityCenter({
               className={`shrink-0 rounded border px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-widest transition-colors ${
                 filter === item.key
                   ? "border-accent/40 bg-accent/10 text-accent"
-                  : "border-border bg-background text-muted hover:text-secondary"
+                  : "border-border bg-background text-muted-foreground hover:text-foreground-secondary"
               }`}
             >
               {item.label}
@@ -115,7 +115,7 @@ export function CompactActivityCenter({
       ) : null}
 
       {visible.length === 0 ? (
-        <p className="rounded border border-border bg-background px-3 py-3 text-xs leading-5 text-muted">
+        <p className="rounded border border-border bg-background px-3 py-3 text-xs leading-5 text-muted-foreground">
           No activity has been recorded for this view yet.
         </p>
       ) : (
@@ -134,18 +134,18 @@ export function CompactActivityCenter({
                   <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
-                      <p className="truncate text-xs font-medium text-secondary">
+                      <p className="truncate text-xs font-medium text-foreground-secondary">
                         {event.title}
                       </p>
-                      <p className="shrink-0 font-mono text-[10px] text-muted">
+                      <p className="shrink-0 font-mono text-[10px] text-muted-foreground">
                         {formatDate(event.createdAt)}
                       </p>
                     </div>
-                    <p className="mt-0.5 font-mono text-[10px] uppercase tracking-widest text-muted">
+                    <p className="mt-0.5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
                       {event.category}
                     </p>
                     {expanded ? (
-                      <p className="mt-2 text-xs leading-5 text-secondary">
+                      <p className="mt-2 text-xs leading-5 text-foreground-secondary">
                         {event.message && event.message !== event.title
                           ? event.message
                           : event.actor

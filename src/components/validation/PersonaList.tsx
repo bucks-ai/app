@@ -7,11 +7,11 @@ type PersonaListProps = {
 
 function InlineList({ items }: { items: string[] | null }) {
   if (!items || items.length === 0) {
-    return <span className="text-muted">Not captured</span>;
+    return <span className="text-muted-foreground">Not captured</span>;
   }
 
   return (
-    <span className="text-secondary">
+    <span className="text-foreground-secondary">
       {items.slice(0, 3).join(", ")}
       {items.length > 3 ? ` +${items.length - 3}` : ""}
     </span>
@@ -25,7 +25,7 @@ export function PersonaList({ personas }: PersonaListProps) {
         <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
           Personas
         </p>
-        <span className="font-mono text-[10px] uppercase tracking-widest text-muted">
+        <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
           {personas.length} total
         </span>
       </div>
@@ -42,7 +42,7 @@ export function PersonaList({ personas }: PersonaListProps) {
                   <p className="truncate text-sm font-semibold text-foreground">
                     {persona.name}
                   </p>
-                  <p className="mt-0.5 truncate text-xs text-muted">
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
                     {persona.segment ?? "Segment not set"}
                   </p>
                 </div>
@@ -51,28 +51,28 @@ export function PersonaList({ personas }: PersonaListProps) {
 
               <div className="mt-3 space-y-2 text-xs leading-5">
                 <p>
-                  <span className="font-mono uppercase tracking-widest text-muted">
+                  <span className="font-mono uppercase tracking-widest text-muted-foreground">
                     Pain
                   </span>{" "}
                   <InlineList items={persona.pain_points} />
                 </p>
                 <p>
-                  <span className="font-mono uppercase tracking-widest text-muted">
+                  <span className="font-mono uppercase tracking-widest text-muted-foreground">
                     Outcomes
                   </span>{" "}
                   <InlineList items={persona.desired_outcomes} />
                 </p>
                 <p>
-                  <span className="font-mono uppercase tracking-widest text-muted">
+                  <span className="font-mono uppercase tracking-widest text-muted-foreground">
                     Channels
                   </span>{" "}
                   <InlineList items={persona.channels} />
                 </p>
                 <p>
-                  <span className="font-mono uppercase tracking-widest text-muted">
+                  <span className="font-mono uppercase tracking-widest text-muted-foreground">
                     WTP
                   </span>{" "}
-                  <span className="text-secondary">
+                  <span className="text-foreground-secondary">
                     {persona.willingness_to_pay ?? "Not captured"}
                   </span>
                 </p>
@@ -80,7 +80,7 @@ export function PersonaList({ personas }: PersonaListProps) {
             </div>
           ))
         ) : (
-          <p className="rounded border border-border bg-background px-3 py-4 text-sm text-muted">
+          <p className="rounded border border-border bg-background px-3 py-4 text-sm text-muted-foreground">
             No personas yet.
           </p>
         )}

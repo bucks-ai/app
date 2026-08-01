@@ -25,7 +25,7 @@ export function DataTile({
 }: DataTileProps) {
   return (
     <div
-      className={`rounded-lg border border-border bg-background p-4 ${className}`}
+      className={`elevated-surface rounded-lg p-4 ${className}`}
     >
       <SectionLabel tone="muted">{label}</SectionLabel>
       <p
@@ -34,7 +34,7 @@ export function DataTile({
         {value}
       </p>
       {detail ? (
-        <p className="mt-2 text-sm leading-6 text-secondary">{detail}</p>
+        <p className="mt-2 text-sm leading-6 text-foreground-secondary">{detail}</p>
       ) : null}
     </div>
   );

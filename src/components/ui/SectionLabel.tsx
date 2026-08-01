@@ -8,7 +8,7 @@ type SectionLabelProps = {
 
 const toneClasses = {
   accent: "text-accent",
-  muted: "text-secondary",
+  muted: "text-foreground-secondary",
   warning: "text-warning",
 };
 

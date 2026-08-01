@@ -21,7 +21,7 @@ export function GitHubRepoGate({
         This is the first real external action in the operator flow. bucks.ai
         will not create external assets without founder approval.
       </p>
-      <p className="mt-3 text-sm leading-7 text-secondary">
+      <p className="mt-3 text-sm leading-7 text-foreground-secondary">
         Approve GitHub in the Tool Setup Queue first, then return here to create
         a private repository with the server-side development token.
       </p>

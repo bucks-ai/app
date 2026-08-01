@@ -18,7 +18,7 @@ export function DistributionChannelsPanel({
         <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
           Distribution channels
         </p>
-        <span className="font-mono text-[10px] uppercase tracking-widest text-muted">
+        <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
           {channels.length} channels
         </span>
       </div>
@@ -32,7 +32,7 @@ export function DistributionChannelsPanel({
                   <p className="break-words text-sm font-semibold text-foreground">
                     {channel.channel}
                   </p>
-                  <p className="mt-1 break-words text-xs leading-5 text-secondary">
+                  <p className="mt-1 break-words text-xs leading-5 text-foreground-secondary">
                     {channel.description ?? "Description not captured."}
                   </p>
                 </div>
@@ -45,20 +45,20 @@ export function DistributionChannelsPanel({
                   ["Hard", score(channel.difficulty_score)],
                 ].map(([label, value]) => (
                   <div key={label} className="rounded border border-border bg-surface p-2">
-                    <p className="font-mono text-[10px] uppercase tracking-widest text-muted">
+                    <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
                       {label}
                     </p>
-                    <p className="mt-1 text-xs font-semibold text-secondary">{value}</p>
+                    <p className="mt-1 text-xs font-semibold text-foreground-secondary">{value}</p>
                   </div>
                 ))}
               </div>
-              <p className="mt-3 break-words text-xs leading-5 text-secondary">
+              <p className="mt-3 break-words text-xs leading-5 text-foreground-secondary">
                 {channel.reasoning ?? "Reasoning not captured."}
               </p>
             </div>
           ))
         ) : (
-          <p className="rounded border border-border bg-background px-3 py-4 text-sm text-muted">
+          <p className="rounded border border-border bg-background px-3 py-4 text-sm text-muted-foreground">
             No distribution channels yet.
           </p>
         )}

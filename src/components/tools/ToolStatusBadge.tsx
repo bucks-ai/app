@@ -15,7 +15,7 @@ type ToolStatusBadgeVariant =
 
 const variantClasses: Record<ToolStatusBadgeVariant, string> = {
   preferred: "border-accent/35 bg-accent/10 text-accent-bright",
-  approved: "border-border bg-elevated text-secondary",
+  approved: "border-border bg-elevated text-foreground-secondary",
   external: "border-warning/35 bg-warning/10 text-warning",
   blocked: "border-error/35 bg-error/10 text-error",
   human: "border-warning/35 bg-warning/10 text-warning",
@@ -25,7 +25,7 @@ const variantClasses: Record<ToolStatusBadgeVariant, string> = {
   critical: "border-risk-critical/35 bg-risk-critical/10 text-risk-critical",
   success: "border-success/25 bg-success/10 text-success",
   warning: "border-warning/35 bg-warning/10 text-warning",
-  neutral: "border-border bg-elevated text-secondary",
+  neutral: "border-border bg-elevated text-foreground-secondary",
   danger: "border-error/35 bg-error/10 text-error",
 };
 

@@ -35,7 +35,7 @@ export function SectionHeader({
         {title}
       </h2>
       {description ? (
-        <p className="mt-4 text-base leading-relaxed text-secondary">
+        <p className="mt-4 text-base leading-relaxed text-foreground-secondary">
           {description}
         </p>
       ) : null}

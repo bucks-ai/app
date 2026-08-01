@@ -10,10 +10,10 @@ function score(value: number | null) {
 }
 
 function InlineList({ items }: { items: string[] | null }) {
-  if (!items || items.length === 0) return <span className="text-muted">Not captured</span>;
+  if (!items || items.length === 0) return <span className="text-muted-foreground">Not captured</span>;
 
   return (
-    <span className="break-words text-secondary">
+    <span className="break-words text-foreground-secondary">
       {items.slice(0, 3).join(", ")}
       {items.length > 3 ? ` +${items.length - 3}` : ""}
     </span>
@@ -27,7 +27,7 @@ export function CustomerSegmentsPanel({ segments }: CustomerSegmentsPanelProps) 
         <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
           Customer segments
         </p>
-        <span className="font-mono text-[10px] uppercase tracking-widest text-muted">
+        <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
           {segments.length} total
         </span>
       </div>
@@ -44,7 +44,7 @@ export function CustomerSegmentsPanel({ segments }: CustomerSegmentsPanelProps) 
                   <p className="break-words text-sm font-semibold text-foreground">
                     {segment.name}
                   </p>
-                  <p className="mt-1 break-words text-xs leading-5 text-secondary">
+                  <p className="mt-1 break-words text-xs leading-5 text-foreground-secondary">
                     {segment.description ?? "No description captured."}
                   </p>
                 </div>
@@ -61,25 +61,25 @@ export function CustomerSegmentsPanel({ segments }: CustomerSegmentsPanelProps) 
                   ["Reach", score(segment.reachability)],
                 ].map(([label, value]) => (
                   <div key={label} className="rounded border border-border bg-surface p-2">
-                    <p className="font-mono text-[10px] uppercase tracking-widest text-muted">
+                    <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
                       {label}
                     </p>
-                    <p className="mt-1 text-xs font-semibold text-secondary">{value}</p>
+                    <p className="mt-1 text-xs font-semibold text-foreground-secondary">{value}</p>
                   </div>
                 ))}
               </div>
 
               <div className="mt-3 space-y-2 text-xs leading-5">
                 <p>
-                  <span className="font-mono uppercase tracking-widest text-muted">
+                  <span className="font-mono uppercase tracking-widest text-muted-foreground">
                     Market
                   </span>{" "}
-                  <span className="break-words text-secondary">
+                  <span className="break-words text-foreground-secondary">
                     {segment.market_size_guess ?? "Not captured"}
                   </span>
                 </p>
                 <p>
-                  <span className="font-mono uppercase tracking-widest text-muted">
+                  <span className="font-mono uppercase tracking-widest text-muted-foreground">
                     Channels
                   </span>{" "}
                   <InlineList items={segment.channels} />
@@ -88,7 +88,7 @@ export function CustomerSegmentsPanel({ segments }: CustomerSegmentsPanelProps) 
             </div>
           ))
         ) : (
-          <p className="rounded border border-border bg-background px-3 py-4 text-sm text-muted">
+          <p className="rounded border border-border bg-background px-3 py-4 text-sm text-muted-foreground">
             No customer segments yet.
           </p>
         )}

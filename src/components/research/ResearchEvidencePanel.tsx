@@ -12,7 +12,7 @@ export function ResearchEvidencePanel({ evidence }: ResearchEvidencePanelProps) 
         <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
           Evidence
         </p>
-        <span className="font-mono text-[10px] uppercase tracking-widest text-muted">
+        <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
           {evidence.length} records
         </span>
       </div>
@@ -29,18 +29,18 @@ export function ResearchEvidencePanel({ evidence }: ResearchEvidencePanelProps) 
               </div>
               <div className="mt-3 space-y-2 text-xs leading-5">
                 <p>
-                  <span className="font-mono uppercase tracking-widest text-muted">
+                  <span className="font-mono uppercase tracking-widest text-muted-foreground">
                     Source
                   </span>{" "}
-                  <span className="break-words text-secondary">
+                  <span className="break-words text-foreground-secondary">
                     {record.source ?? "Not captured"}
                   </span>
                 </p>
                 <p>
-                  <span className="font-mono uppercase tracking-widest text-muted">
+                  <span className="font-mono uppercase tracking-widest text-muted-foreground">
                     Type
                   </span>{" "}
-                  <span className="break-words text-secondary">
+                  <span className="break-words text-foreground-secondary">
                     {record.evidence_type ?? "Not captured"}
                   </span>
                 </p>
@@ -54,14 +54,14 @@ export function ResearchEvidencePanel({ evidence }: ResearchEvidencePanelProps) 
                     {record.source_url}
                   </a>
                 ) : null}
-                <p className="break-words text-secondary">
+                <p className="break-words text-foreground-secondary">
                   {record.notes ?? "No notes captured."}
                 </p>
               </div>
             </div>
           ))
         ) : (
-          <p className="rounded border border-border bg-background px-3 py-4 text-sm text-muted">
+          <p className="rounded border border-border bg-background px-3 py-4 text-sm text-muted-foreground">
             No evidence records yet.
           </p>
         )}

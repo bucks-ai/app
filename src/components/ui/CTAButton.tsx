@@ -11,13 +11,13 @@ type CTAButtonProps = {
 };
 
 const base =
-  "inline-flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-lg px-6 py-3 text-sm font-semibold transition-[background-color,border-color,color,transform] duration-200 active:scale-[0.98]";
+  "inline-flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-lg px-6 py-3 text-sm font-semibold transition-[background-color,border-color,color,box-shadow,transform] duration-200 ease-[var(--ease-out-expo)] active:scale-[0.98]";
 
 const variants = {
   primary:
-    "bg-accent text-accent-contrast shadow-soft hover:bg-accent-hover",
+    "border border-white/10 bg-accent bg-[image:var(--cta-gradient)] text-accent-contrast shadow-[var(--shadow-cta)] hover:-translate-y-0.5 hover:shadow-[0_1px_0_rgba(255,255,255,0.2)_inset,0_18px_42px_rgba(12,133,121,0.3)]",
   secondary:
-    "border border-border bg-surface/70 font-medium text-secondary hover:border-accent/45 hover:text-foreground",
+    "glass-surface font-medium text-foreground-secondary hover:-translate-y-0.5 hover:border-accent/45 hover:text-foreground",
 };
 
 /**

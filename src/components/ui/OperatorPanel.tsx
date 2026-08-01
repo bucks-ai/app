@@ -16,8 +16,8 @@ export function OperatorPanel({
   return (
     <section
       id={id}
-      className={`rounded-card border border-border shadow-[var(--shadow-soft)] ${
-        elevated ? "bg-elevated" : "bg-surface"
+      className={`rounded-card ${
+        elevated ? "elevated-surface" : "solid-surface"
       } ${className}`}
     >
       {children}

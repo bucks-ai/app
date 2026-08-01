@@ -33,7 +33,7 @@ function StepRow({
 }) {
   return (
     <div
-      className={`rounded-lg border bg-surface ${
+      className={`solid-surface rounded-lg ${
         status === "active"
           ? "border-accent/30"
           : status === "complete"
@@ -48,14 +48,29 @@ function StepRow({
               ? "bg-success text-background"
               : status === "active"
                 ? "bg-accent text-accent-contrast"
-                : "bg-border text-muted"
+                : "bg-border text-muted-foreground"
           }`}
         >
-          {status === "complete" ? "✓" : index}
+          {status === "complete" ? (
+            <svg
+              aria-hidden
+              viewBox="0 0 12 12"
+              className="h-3 w-3"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M2 6.4 4.7 9 10 3" />
+            </svg>
+          ) : (
+            index
+          )}
         </span>
         <p
           className={`text-sm font-medium ${
-            status === "pending" ? "text-muted" : "text-foreground"
+            status === "pending" ? "text-muted-foreground" : "text-foreground"
           }`}
         >
           {label}
@@ -103,8 +118,8 @@ export function BuildTab({ business }: BuildTabProps) {
 
       <StepRow index={3} label="Scaffold prepared" status={step3Status}>
         {hasRepo ? (
-          <div className="rounded border border-border bg-background p-4">
-            <p className="text-sm text-secondary">
+          <div className="rounded-lg border border-border bg-background/72 p-4">
+            <p className="text-sm text-foreground-secondary">
               Repository is ready. Scaffold preparation follows repository creation.
             </p>
             {business.githubRepo ? (

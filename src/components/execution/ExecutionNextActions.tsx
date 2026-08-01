@@ -21,7 +21,7 @@ export function ExecutionNextActions({ actions }: ExecutionNextActionsProps) {
             <div key={action.id} className="rounded-md border border-border bg-surface p-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted">
+                  <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
                     {actorLabel(action.actor)}
                   </p>
                   <h3 className="mt-2 text-sm font-semibold text-foreground">
@@ -34,7 +34,7 @@ export function ExecutionNextActions({ actions }: ExecutionNextActionsProps) {
                 />
               </div>
               {action.description ? (
-                <p className="mt-3 text-sm leading-6 text-secondary">
+                <p className="mt-3 text-sm leading-6 text-foreground-secondary">
                   {action.description}
                 </p>
               ) : null}
@@ -49,7 +49,7 @@ export function ExecutionNextActions({ actions }: ExecutionNextActionsProps) {
             </div>
           ))
         ) : (
-          <p className="rounded-md border border-border bg-surface p-4 text-sm leading-6 text-secondary">
+          <p className="rounded-md border border-border bg-surface p-4 text-sm leading-6 text-foreground-secondary">
             No recommended actions are queued yet.
           </p>
         )}

@@ -22,7 +22,7 @@ export function WorkspaceSectionHeader({
         <h2 className="mt-2 break-words text-2xl font-semibold tracking-tight text-foreground">
           {title}
         </h2>
-        <p className="mt-2 max-w-3xl break-words text-sm leading-6 text-secondary">
+        <p className="mt-2 max-w-3xl break-words text-sm leading-6 text-foreground-secondary">
           {description}
         </p>
       </div>

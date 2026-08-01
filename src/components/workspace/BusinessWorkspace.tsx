@@ -8,7 +8,6 @@ import {
   fetchBusinessExecutionStatus,
   fetchExecutionTimeline,
 } from "@/lib/execution-client";
-import { WorkspaceHeader } from "@/components/workspace/WorkspaceHeader";
 import { WorkspaceTabs } from "@/components/workspace/WorkspaceTabs";
 import type { TabKey } from "@/components/workspace/WorkspaceTabs";
 import { WorkspaceSidebar } from "@/components/workspace/WorkspaceSidebar";
@@ -130,7 +129,7 @@ export function BusinessWorkspace({
     ) : null;
 
   return (
-    <div className="flex min-h-screen flex-col overflow-x-hidden bg-background pt-[69px]">
+    <div className="light-field flex min-h-screen flex-col overflow-x-hidden bg-background pt-[69px]">
       <div className="flex min-w-0 flex-1">
         {/* Desktop left navigation */}
         <WorkspaceSidebar
@@ -141,26 +140,14 @@ export function BusinessWorkspace({
           onTabChange={handleTabChange}
         />
 
-        {/* Main column: sticky command bar + scrolling content */}
+        {/* Main column: mobile tabs + scrolling content */}
         <div className="flex min-w-0 flex-1 flex-col">
-          <div
-            className="sticky top-[69px] z-30 border-b border-border backdrop-blur"
-            style={{ background: "var(--surface-glass)" }}
-          >
-            <WorkspaceHeader
-              business={business}
-              executionStatus={executionStatus}
-              onBlueprintOpen={() => setBlueprintOpen(true)}
+          <div className="border-b border-border/70 bg-background/50 lg:hidden">
+            <WorkspaceTabs
+              activeTab={activeTab}
+              onTabChange={handleTabChange}
+              badgeCounts={badgeCounts}
             />
-
-            {/* Tabs — mobile / tablet */}
-            <div className="border-t border-border-subtle lg:hidden">
-              <WorkspaceTabs
-                activeTab={activeTab}
-                onTabChange={handleTabChange}
-                badgeCounts={badgeCounts}
-              />
-            </div>
           </div>
 
           <main className="min-w-0 flex-1 px-4 py-5 pb-24 sm:px-6 lg:px-8 lg:pb-8">
@@ -169,7 +156,7 @@ export function BusinessWorkspace({
         </div>
 
         {/* Status rail — wide desktop only */}
-        <aside className="hidden w-80 shrink-0 border-l border-border 2xl:block">
+        <aside className="hidden w-80 shrink-0 border-l border-border/80 bg-background/35 backdrop-blur 2xl:block">
           <div className="sticky top-[69px] max-h-[calc(100vh-69px)] overflow-y-auto p-4">
             <WorkspaceRightRail
               business={business}
@@ -187,7 +174,7 @@ export function BusinessWorkspace({
         title="Blueprint"
       >
         <div className="space-y-4">
-          <p className="text-sm leading-7 text-secondary">
+          <p className="text-sm leading-7 text-foreground-secondary">
             {business.blueprintSummary ??
               "No blueprint summary is available for this project."}
           </p>
@@ -201,7 +188,7 @@ export function BusinessWorkspace({
                 {business.nextActions.map((action, i) => (
                   <li
                     key={i}
-                    className="rounded-lg border border-border bg-elevated px-3 py-2 text-xs text-secondary"
+                    className="rounded-lg border border-border bg-elevated px-3 py-2 text-xs text-foreground-secondary"
                   >
                     {action}
                   </li>

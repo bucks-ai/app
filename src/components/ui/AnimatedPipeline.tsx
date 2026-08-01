@@ -72,7 +72,7 @@ export function AnimatedPipeline({ stages, className = "" }: AnimatedPipelinePro
           {stages.map((stage) => (
             <div key={stage.label} className="min-w-0 pr-2">
               <p className="text-sm font-semibold text-foreground">{stage.label}</p>
-              <p className="mt-1 truncate text-xs text-muted">{stage.detail}</p>
+              <p className="mt-1 truncate text-xs text-muted-foreground">{stage.detail}</p>
               <StatusChip status={stage.status} className="mt-2.5" />
             </div>
           ))}
@@ -106,7 +106,7 @@ export function AnimatedPipeline({ stages, className = "" }: AnimatedPipelinePro
                 <p className="text-sm font-semibold text-foreground">{stage.label}</p>
                 <StatusChip status={stage.status} />
               </div>
-              <p className="mt-1 text-xs text-muted">{stage.detail}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{stage.detail}</p>
             </div>
           </div>
         ))}

@@ -75,12 +75,12 @@ export function AssetQuickLinks({
 
         const content = (
           <>
-            <span className="font-mono text-[10px] uppercase tracking-widest text-muted">
+            <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
               {asset.label}
             </span>
             <span
               className={`min-w-0 truncate text-xs ${
-                available ? "text-secondary" : "text-muted"
+                available ? "text-foreground-secondary" : "text-muted-foreground"
               }`}
             >
               {asset.value}

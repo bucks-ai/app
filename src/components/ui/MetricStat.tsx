@@ -49,7 +49,7 @@ export function MetricStat({
         {value}
       </p>
       {detail ? (
-        <p className="mt-2 text-sm leading-6 text-secondary">{detail}</p>
+        <p className="mt-2 text-sm leading-6 text-foreground-secondary">{detail}</p>
       ) : null}
     </div>
   );

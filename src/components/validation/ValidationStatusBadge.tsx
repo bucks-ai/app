@@ -28,7 +28,7 @@ const toneClasses: Record<BadgeTone, string> = {
   success: "border-success/25 bg-success/10 text-success",
   warning: "border-warning/35 bg-warning/10 text-warning",
   danger: "border-error/35 bg-error/10 text-error",
-  neutral: "border-border bg-elevated text-secondary",
+  neutral: "border-border bg-elevated text-foreground-secondary",
 };
 
 const statusTone: Record<string, BadgeTone> = {

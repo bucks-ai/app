@@ -102,7 +102,7 @@ export function ExecutionCommandCenter({
               <StatusPill label="Backend pending" variant="warning" />
             ) : null}
           </div>
-          <p className="mt-3 max-w-3xl text-sm leading-7 text-secondary">
+          <p className="mt-3 max-w-3xl text-sm leading-7 text-foreground-secondary">
             Command view for where this business stands, what is complete, what
             is blocked, and what should happen next.
           </p>
@@ -111,7 +111,7 @@ export function ExecutionCommandCenter({
           type="button"
           onClick={handleRefresh}
           disabled={loadState === "loading"}
-          className="w-full rounded-md border border-border bg-background px-4 py-3 text-sm font-semibold text-secondary transition-colors hover:border-accent/60 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+          className="w-full rounded-md border border-border bg-background px-4 py-3 text-sm font-semibold text-foreground-secondary transition-colors hover:border-accent/60 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
         >
           {isRefreshing ? "Refreshing..." : "Refresh status"}
         </button>
@@ -120,7 +120,7 @@ export function ExecutionCommandCenter({
       {loadState === "loading" && !status ? (
         <div className="rounded-lg border border-border bg-background p-5">
           <StatusPill label="Loading" variant="accent" />
-          <p className="mt-4 text-sm leading-6 text-secondary">
+          <p className="mt-4 text-sm leading-6 text-foreground-secondary">
             Loading execution status and timeline.
           </p>
         </div>

@@ -8,8 +8,8 @@ type BuyerBudgetPanelProps = {
 function Detail({ label, value }: { label: string; value: string | null }) {
   return (
     <p className="text-xs leading-5">
-      <span className="font-mono uppercase tracking-widest text-muted">{label}</span>{" "}
-      <span className="break-words text-secondary">{value ?? "Not captured"}</span>
+      <span className="font-mono uppercase tracking-widest text-muted-foreground">{label}</span>{" "}
+      <span className="break-words text-foreground-secondary">{value ?? "Not captured"}</span>
     </p>
   );
 }
@@ -21,7 +21,7 @@ export function BuyerBudgetPanel({ buyerBudgets }: BuyerBudgetPanelProps) {
         <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
           Buyer and budget
         </p>
-        <span className="font-mono text-[10px] uppercase tracking-widest text-muted">
+        <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
           {buyerBudgets.length} records
         </span>
       </div>
@@ -35,7 +35,7 @@ export function BuyerBudgetPanel({ buyerBudgets }: BuyerBudgetPanelProps) {
                   <p className="break-words text-sm font-semibold text-foreground">
                     {budget.buyer}
                   </p>
-                  <p className="mt-0.5 break-words text-xs text-muted">
+                  <p className="mt-0.5 break-words text-xs text-muted-foreground">
                     Budget owner: {budget.budget_owner ?? "Not captured"}
                   </p>
                 </div>
@@ -53,7 +53,7 @@ export function BuyerBudgetPanel({ buyerBudgets }: BuyerBudgetPanelProps) {
             </div>
           ))
         ) : (
-          <p className="rounded border border-border bg-background px-3 py-4 text-sm text-muted">
+          <p className="rounded border border-border bg-background px-3 py-4 text-sm text-muted-foreground">
             No buyer budget records yet.
           </p>
         )}

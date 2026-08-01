@@ -12,9 +12,15 @@ const proofLog: ExecutionLogItem[] = [
   { time: "14:19", actor: "founder", event: "Awaiting approval for public preview and outbound script.", tone: "warning" },
 ];
 
+const ctaMetrics = [
+  ["Strategy", "operating plan"],
+  ["Build", "scoped GitHub task"],
+  ["Deploy", "gated Vercel preview"],
+];
+
 export function ClosingCTA() {
   return (
-    <section className="px-6 py-20 sm:py-28">
+    <section className="light-field px-6 py-20 sm:py-28">
       <div className="mx-auto max-w-6xl">
         <div className="grid gap-8 lg:grid-cols-[minmax(0,0.9fr)_minmax(24rem,1.1fr)] lg:items-end">
           <Reveal>
@@ -31,6 +37,7 @@ export function ClosingCTA() {
 
         <Reveal>
           <GlassPanel
+            variant="elevated"
             className="mt-16 px-6 py-14 text-center sm:px-12"
             innerClassName="relative"
           >
@@ -40,11 +47,26 @@ export function ClosingCTA() {
             <h2 className="text-balance mx-auto mt-4 max-w-3xl text-3xl font-semibold tracking-tight text-foreground sm:text-5xl">
               Put execution, tools, agents, and approvals in one loop.
             </h2>
-            <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-secondary">
+            <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-foreground-secondary">
               Start with a software-business idea. bucks.ai turns it into a
               controlled operating system for strategy, build, deployment, and
               learning.
             </p>
+            <div className="mx-auto mt-8 grid max-w-3xl gap-2 sm:grid-cols-3">
+              {ctaMetrics.map(([label, value]) => (
+                <div
+                  key={label}
+                  className="rounded-lg border border-border bg-background/55 px-4 py-3"
+                >
+                  <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                    {label}
+                  </p>
+                  <p className="mt-1 text-sm font-semibold text-foreground">
+                    {value}
+                  </p>
+                </div>
+              ))}
+            </div>
             <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <CTAButton href="/dashboard" arrow className="w-full sm:w-auto">
                 Enter the console

@@ -24,7 +24,7 @@ export function VercelDeployGate({
         {title}
       </h3>
       <p className="mt-3 text-sm leading-7 text-warning">{description}</p>
-      <p className="mt-3 text-sm leading-7 text-secondary">
+      <p className="mt-3 text-sm leading-7 text-foreground-secondary">
         Vercel deployment is approval-gated because it creates a real external
         project using a server-side Vercel token.
       </p>

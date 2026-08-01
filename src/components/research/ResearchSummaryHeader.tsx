@@ -23,7 +23,7 @@ export function ResearchSummaryHeader({ workspace }: ResearchSummaryHeaderProps)
           <h2 className="mt-3 text-xl font-semibold text-foreground">
             Map the opportunity before building
           </h2>
-          <p className="mt-1 max-w-2xl break-words text-sm leading-6 text-secondary">
+          <p className="mt-1 max-w-2xl break-words text-sm leading-6 text-foreground-secondary">
             {nextAction.title}: {nextAction.description}
           </p>
         </div>
@@ -33,7 +33,7 @@ export function ResearchSummaryHeader({ workspace }: ResearchSummaryHeaderProps)
           </p>
           <p className="mt-1 text-xl font-semibold text-foreground">
             {summary.opportunityScore ?? "--"}
-            <span className="ml-1 text-xs text-muted">/100</span>
+            <span className="ml-1 text-xs text-muted-foreground">/100</span>
           </p>
         </div>
       </div>
@@ -50,7 +50,7 @@ export function ResearchSummaryHeader({ workspace }: ResearchSummaryHeaderProps)
             key={label}
             className="min-w-0 rounded border border-border bg-background px-3 py-2.5"
           >
-            <p className="truncate font-mono text-[10px] uppercase tracking-widest text-muted">
+            <p className="truncate font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
               {label}
             </p>
             <p className="mt-1 text-lg font-semibold text-foreground">{value}</p>

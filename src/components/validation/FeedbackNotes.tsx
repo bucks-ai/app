@@ -90,7 +90,7 @@ export function FeedbackNotes({
           <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
             Feedback notes
           </p>
-          <p className="mt-1 text-xs text-muted">Capture the evidence from discovery calls.</p>
+          <p className="mt-1 text-xs text-muted-foreground">Capture the evidence from discovery calls.</p>
         </div>
         <button
           type="button"
@@ -187,12 +187,12 @@ export function FeedbackNotes({
           feedbackNotes.map((note) => (
             <div key={note.id} className="rounded border border-border bg-background p-3">
               <div className="flex flex-wrap items-start justify-between gap-2">
-                <p className="min-w-0 text-sm leading-6 text-secondary">{note.summary}</p>
+                <p className="min-w-0 text-sm leading-6 text-foreground-secondary">{note.summary}</p>
                 {note.signal_strength ? (
                   <ValidationStatusBadge value={note.signal_strength} />
                 ) : null}
               </div>
-              <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted">
+              <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
                 {leadName(note.lead_id) ? <span>Lead: {leadName(note.lead_id)}</span> : null}
                 {hypothesisTitle(note.hypothesis_id) ? (
                   <span>Hypothesis: {hypothesisTitle(note.hypothesis_id)}</span>
@@ -206,7 +206,7 @@ export function FeedbackNotes({
             </div>
           ))
         ) : (
-          <p className="rounded border border-border bg-background px-3 py-4 text-sm text-muted">
+          <p className="rounded border border-border bg-background px-3 py-4 text-sm text-muted-foreground">
             No feedback yet.
           </p>
         )}

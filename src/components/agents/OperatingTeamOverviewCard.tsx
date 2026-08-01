@@ -71,7 +71,7 @@ export function OperatingTeamOverviewCard({
         <button
           type="button"
           onClick={onOpenTeam}
-          className="font-mono text-[10px] uppercase tracking-widest text-muted transition-colors hover:text-secondary"
+          className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground transition-colors hover:text-foreground-secondary"
         >
           Open
         </button>
@@ -81,7 +81,7 @@ export function OperatingTeamOverviewCard({
         <div className="mt-3 space-y-3">
           <div className="grid grid-cols-3 gap-2">
             <span className="rounded border border-border bg-background px-2.5 py-2">
-              <span className="block font-mono text-[10px] uppercase tracking-widest text-muted">
+              <span className="block font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
                 Agents
               </span>
               <span className="text-sm font-semibold text-foreground">
@@ -106,13 +106,13 @@ export function OperatingTeamOverviewCard({
             </span>
           </div>
           {action ? (
-            <p className="break-words text-sm leading-6 text-secondary">
-              {action.title}: <span className="text-secondary">{action.description}</span>
+            <p className="break-words text-sm leading-6 text-foreground-secondary">
+              {action.title}: <span className="text-foreground-secondary">{action.description}</span>
             </p>
           ) : null}
         </div>
       ) : (
-        <p className="mt-3 break-words text-sm leading-6 text-muted">{message}</p>
+        <p className="mt-3 break-words text-sm leading-6 text-muted-foreground">{message}</p>
       )}
     </div>
   );

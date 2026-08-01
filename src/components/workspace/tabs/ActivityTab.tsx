@@ -19,7 +19,7 @@ export function ActivityTab({ business, executionStatus }: ActivityTabProps) {
             Run history and operating log
           </h2>
         </div>
-        <p className="max-w-md text-xs leading-5 text-muted">
+        <p className="max-w-md text-xs leading-5 text-muted-foreground">
           Logs stay here so the overview remains focused on the next decision.
         </p>
       </div>

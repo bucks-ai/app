@@ -28,12 +28,19 @@ function variantForState(state: CheckpointData["state"]) {
  * path. Informational by design — the real approve control lives in the
  * dashboard, not on a marketing page.
  */
-export function ApprovalCheckpoint({ checkpoint }: { checkpoint: CheckpointData }) {
+export function ApprovalCheckpoint({
+  checkpoint,
+  className = "",
+}: {
+  checkpoint: CheckpointData;
+  className?: string;
+}) {
   return (
     <GlassPanel
+      variant={checkpoint.featured ? "elevated" : "glass"}
       className={`h-full ${
         checkpoint.featured ? "border-status-pending/40" : ""
-      }`}
+      } ${className}`}
       innerClassName="flex h-full flex-col p-5"
     >
       <div className="flex flex-wrap items-center justify-between gap-2.5">
@@ -47,22 +54,22 @@ export function ApprovalCheckpoint({ checkpoint }: { checkpoint: CheckpointData 
       <h3 className="mt-4 text-lg font-semibold tracking-tight text-foreground">
         {checkpoint.title}
       </h3>
-      <p className="mt-2.5 text-sm leading-6 text-secondary">{checkpoint.body}</p>
+      <p className="mt-2.5 text-sm leading-6 text-foreground-secondary">{checkpoint.body}</p>
 
       <div className="mt-auto grid gap-2.5 pt-5">
         <div className="rounded-lg border border-border bg-background/72 px-3 py-2.5">
-          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted">
+          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
             Permission prompt
           </p>
-          <p className="mt-1.5 font-mono text-xs leading-5 text-secondary">
+          <p className="mt-1.5 font-mono text-xs leading-5 text-foreground-secondary">
             {checkpoint.permissionPrompt}
           </p>
         </div>
         <div className="rounded-lg border border-border bg-background/72 px-3 py-2.5">
-          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted">
+          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
             Rollback path
           </p>
-          <p className="mt-1.5 text-xs leading-5 text-secondary">
+          <p className="mt-1.5 text-xs leading-5 text-foreground-secondary">
             {checkpoint.rollback}
           </p>
         </div>

@@ -27,7 +27,7 @@ export function CommandMenuHint({ onTabChange }: CommandMenuHintProps) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="rounded border border-border bg-surface px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-muted transition-colors hover:border-accent/45 hover:text-accent"
+        className="rounded border border-border bg-surface px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground transition-colors hover:border-accent/45 hover:text-accent"
       >
         Search actions / Cmd K coming soon
       </button>
@@ -42,7 +42,7 @@ export function CommandMenuHint({ onTabChange }: CommandMenuHintProps) {
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="rounded border border-border px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-muted hover:text-foreground"
+                className="rounded border border-border px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-muted-foreground hover:text-foreground"
               >
                 Close
               </button>
@@ -56,10 +56,10 @@ export function CommandMenuHint({ onTabChange }: CommandMenuHintProps) {
                     onTabChange(shortcut.tab);
                     setOpen(false);
                   }}
-                  className="flex w-full items-center justify-between rounded px-3 py-2.5 text-left text-sm text-secondary transition-colors hover:bg-elevated"
+                  className="flex w-full items-center justify-between rounded px-3 py-2.5 text-left text-sm text-foreground-secondary transition-colors hover:bg-elevated"
                 >
                   {shortcut.label}
-                  <span className="font-mono text-[10px] uppercase tracking-widest text-muted">
+                  <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
                     Open
                   </span>
                 </button>

@@ -74,8 +74,8 @@ function OverviewMetric({
           : "text-foreground";
 
   return (
-    <div className="rounded-lg border border-border bg-background px-3 py-2.5">
-      <p className="font-mono text-[10px] uppercase tracking-widest text-muted">
+    <div className="elevated-surface rounded-lg px-3 py-2.5">
+      <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
         {label}
       </p>
       <p className={`mt-1 truncate text-lg font-semibold ${toneClass}`}>{value}</p>
@@ -98,7 +98,7 @@ function DeploymentOverviewCard({
     deploymentStatusLabel(deploymentStatus);
 
   return (
-    <div className="rounded-lg border border-border bg-surface p-4">
+    <div className="solid-surface rounded-lg p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
           Deployment
@@ -106,7 +106,7 @@ function DeploymentOverviewCard({
         <button
           type="button"
           onClick={onOpenDeploy}
-          className="font-mono text-[10px] uppercase tracking-widest text-muted transition-colors hover:text-accent"
+          className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground transition-colors hover:text-accent"
         >
           Open
         </button>
@@ -114,10 +114,10 @@ function DeploymentOverviewCard({
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <DeploymentStatusBadge status={deploymentStatus} />
       </div>
-      <p className="mt-3 truncate text-sm font-semibold text-secondary">
+      <p className="mt-3 truncate text-sm font-semibold text-foreground-secondary">
         {projectLabel}
       </p>
-      <p className="mt-1 text-sm leading-6 text-muted">
+      <p className="mt-1 text-sm leading-6 text-muted-foreground">
         Build and deployment controls live in the Deploy section.
       </p>
     </div>
@@ -146,7 +146,7 @@ export function OverviewTab({
   return (
     <div className="space-y-4">
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.65fr)]">
-        <div className="rounded-card border border-border bg-surface p-4 shadow-[var(--shadow-soft)] sm:p-5">
+        <div className="solid-surface rounded-card p-4 sm:p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0">
               <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
@@ -155,7 +155,7 @@ export function OverviewTab({
               <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">
                 {business.name}
               </h2>
-              <p className="mt-2 max-w-3xl break-words text-sm leading-6 text-secondary">
+              <p className="mt-2 max-w-3xl break-words text-sm leading-6 text-foreground-secondary">
                 {business.oneLineIdea ?? business.overview}
               </p>
             </div>
@@ -163,7 +163,7 @@ export function OverviewTab({
               <button
                 type="button"
                 onClick={onBlueprintOpen}
-                className="shrink-0 rounded-md border border-border bg-background px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-secondary transition-colors hover:border-accent/45 hover:text-accent"
+                className="shrink-0 rounded-md border border-border bg-background px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-foreground-secondary transition-colors hover:border-accent/45 hover:text-accent"
               >
                 Blueprint
               </button>
@@ -188,12 +188,12 @@ export function OverviewTab({
             />
           </div>
 
-          <div className="mt-4 rounded-lg border border-border bg-background p-3">
+          <div className="mt-4 rounded-lg border border-border bg-background/70 p-3">
             <div className="flex items-center justify-between gap-3">
-              <p className="font-mono text-[10px] uppercase tracking-widest text-muted">
+              <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
                 Current phase
               </p>
-              <p className="truncate text-xs font-semibold text-secondary">
+              <p className="truncate text-xs font-semibold text-foreground-secondary">
                 {currentPhase}
               </p>
             </div>
@@ -215,7 +215,7 @@ export function OverviewTab({
                           ? "border-accent/25 bg-accent/10 text-accent"
                           : milestone.status === "blocked"
                             ? "border-error/25 bg-error/10 text-error"
-                            : "border-border bg-surface text-muted"
+                            : "border-border bg-surface text-muted-foreground"
                     }`}
                   >
                     {milestone.label}
@@ -229,7 +229,7 @@ export function OverviewTab({
         <button
           type="button"
           onClick={() => onTabChange(primaryAction.target)}
-          className="rounded-card border border-warning/30 bg-warning/10 p-4 text-left shadow-[var(--shadow-soft)] transition-colors hover:border-warning/55 sm:p-5"
+          className="interactive-surface rounded-card border border-warning/30 bg-[linear-gradient(135deg,var(--warning-soft),rgba(255,255,255,0.02))] p-4 text-left shadow-[var(--shadow-soft)] transition-colors hover:border-warning/55 sm:p-5"
         >
           <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-warning">
             Primary next action
@@ -240,7 +240,7 @@ export function OverviewTab({
           <p className="mt-2 text-sm leading-6 text-warning">
             {primaryAction.description}
           </p>
-          <span className="mt-4 inline-flex rounded-md bg-warning px-3 py-2 text-sm font-semibold text-background">
+          <span className="mt-4 inline-flex min-h-11 items-center rounded-md bg-warning px-3 py-2 text-sm font-semibold text-background">
             Continue
           </span>
         </button>
@@ -267,7 +267,7 @@ export function OverviewTab({
       </section>
 
       <section className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-        <div className="rounded-card border border-border bg-surface p-4 shadow-[var(--shadow-soft)] sm:p-5">
+        <div className="solid-surface rounded-card p-4 sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
               Business summary
@@ -276,16 +276,16 @@ export function OverviewTab({
               <button
                 type="button"
                 onClick={onBlueprintOpen}
-                className="font-mono text-[10px] uppercase tracking-widest text-muted transition-colors hover:text-accent"
+                className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground transition-colors hover:text-accent"
               >
                 Full blueprint
               </button>
             ) : null}
           </div>
-          <p className="mt-3 break-words text-sm leading-7 text-secondary">{summary}</p>
+          <p className="mt-3 break-words text-sm leading-7 text-foreground-secondary">{summary}</p>
         </div>
 
-        <div className="rounded-card border border-border bg-surface p-4 shadow-[var(--shadow-soft)] sm:p-5">
+        <div className="solid-surface rounded-card p-4 sm:p-5">
           <div className="flex items-center justify-between gap-3">
             <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
               Latest activity
@@ -293,7 +293,7 @@ export function OverviewTab({
             <button
               type="button"
               onClick={() => onTabChange("activity")}
-              className="font-mono text-[10px] uppercase tracking-widest text-muted transition-colors hover:text-accent"
+              className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground transition-colors hover:text-accent"
             >
               All
             </button>

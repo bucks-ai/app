@@ -27,7 +27,7 @@ export function StatusChip({
   const config = statusConfig[status];
   return (
     <span
-      className={`inline-flex flex-shrink-0 items-center gap-1.5 rounded-full border border-border bg-surface px-2.5 py-1 font-mono text-[11px] font-medium uppercase tracking-wider text-secondary ${className}`}
+      className={`inline-flex flex-shrink-0 items-center gap-1.5 rounded-full border border-border bg-surface px-2.5 py-1 font-mono text-[11px] font-medium uppercase tracking-wider text-foreground-secondary ${className}`}
     >
       <span
         aria-hidden

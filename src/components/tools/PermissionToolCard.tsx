@@ -59,11 +59,11 @@ export function PermissionToolCard({
         </div>
       </div>
 
-      <p className="mt-4 text-sm leading-6 text-secondary">
+      <p className="mt-4 text-sm leading-6 text-foreground-secondary">
         {permission.purpose}
       </p>
       {permission.typicalUse ? (
-        <p className="mt-3 text-sm leading-6 text-secondary">
+        <p className="mt-3 text-sm leading-6 text-foreground-secondary">
           {permission.typicalUse}
         </p>
       ) : null}
@@ -89,13 +89,13 @@ export function PermissionToolCard({
               permission.permissions.map((item) => (
                 <li
                   key={item}
-                  className="rounded-md border border-border bg-background px-3 py-2 text-sm leading-6 text-secondary"
+                  className="rounded-md border border-border bg-background px-3 py-2 text-sm leading-6 text-foreground-secondary"
                 >
                   {item}
                 </li>
               ))
             ) : (
-              <li className="rounded-md border border-border bg-background px-3 py-2 text-sm leading-6 text-secondary">
+              <li className="rounded-md border border-border bg-background px-3 py-2 text-sm leading-6 text-foreground-secondary">
                 No permission scopes have been requested yet.
               </li>
             )}
@@ -115,7 +115,7 @@ export function PermissionToolCard({
                 </li>
               ))
             ) : (
-              <li className="rounded-md border border-border bg-background px-3 py-2 text-sm leading-6 text-secondary">
+              <li className="rounded-md border border-border bg-background px-3 py-2 text-sm leading-6 text-foreground-secondary">
                 No default human-only gate beyond founder review.
               </li>
             )}
@@ -125,7 +125,7 @@ export function PermissionToolCard({
 
       <div className="mt-5">
         {readOnly ? (
-          <p className="rounded-md border border-border bg-background px-3 py-2 text-sm leading-6 text-secondary">
+          <p className="rounded-md border border-border bg-background px-3 py-2 text-sm leading-6 text-foreground-secondary">
             Preview only. Select a saved business with the permission API
             available to update this tool.
           </p>

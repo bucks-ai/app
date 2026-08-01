@@ -31,7 +31,7 @@ const actions: { action: ToolPermissionAction; label: string; tone: string }[] =
   {
     action: "mark_demo_connected",
     label: "Mark demo connected",
-    tone: "border-border text-secondary hover:border-accent/60 hover:text-foreground",
+    tone: "border-border text-foreground-secondary hover:border-accent/60 hover:text-foreground",
   },
   {
     action: "reject",
@@ -41,7 +41,7 @@ const actions: { action: ToolPermissionAction; label: string; tone: string }[] =
   {
     action: "reset",
     label: "Reset",
-    tone: "border-border text-secondary hover:border-secondary/60 hover:text-foreground",
+    tone: "border-border text-foreground-secondary hover:border-secondary/60 hover:text-foreground",
   },
 ];
 

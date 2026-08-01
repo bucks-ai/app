@@ -89,8 +89,8 @@ export function ToolCard({ tool }: { tool: ToolRegistryItem }) {
         />
       </div>
 
-      <p className="mt-4 text-sm leading-6 text-secondary">{tool.purpose}</p>
-      <p className="mt-2 text-sm leading-6 text-secondary">{tool.typicalUse}</p>
+      <p className="mt-4 text-sm leading-6 text-foreground-secondary">{tool.purpose}</p>
+      <p className="mt-2 text-sm leading-6 text-foreground-secondary">{tool.typicalUse}</p>
 
       {tool.requiresPaymentSetup || tool.category === "Payments" ? (
         <div className="mt-4 rounded-md border border-warning/25 bg-warning/10 px-3 py-2 text-sm leading-6 text-warning">
@@ -107,7 +107,7 @@ export function ToolCard({ tool }: { tool: ToolRegistryItem }) {
             {tool.defaultPermissions.map((permission) => (
               <li
                 key={permission}
-                className="flex items-baseline gap-2.5 px-3 py-2 font-mono text-xs leading-5 text-secondary"
+                className="flex items-baseline gap-2.5 px-3 py-2 font-mono text-xs leading-5 text-foreground-secondary"
               >
                 <span aria-hidden className="text-accent">
                   ▸

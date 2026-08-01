@@ -29,7 +29,7 @@ export function ExecutionLog({
   return (
     <div className="rounded-xl border border-border bg-background/70 p-3">
       <div className="mb-3 flex items-center justify-between gap-3">
-        <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted">
+        <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
           Execution log
         </p>
         <span className="inline-flex items-center gap-2 rounded-full border border-status-running/30 bg-status-running/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-status-running">
@@ -47,8 +47,8 @@ export function ExecutionLog({
             viewport={{ once: true }}
             transition={{ duration: 0.32, delay: index * 0.055 }}
           >
-            <span className="font-mono text-[10px] text-muted">{item.time}</span>
-            <p className="min-w-0 text-sm leading-5 text-secondary">
+            <span className="font-mono text-[10px] text-muted-foreground">{item.time}</span>
+            <p className="min-w-0 text-sm leading-5 text-foreground-secondary">
               <span
                 className="font-mono text-[10px] uppercase tracking-[0.14em]"
                 style={{ color: toneColor[item.tone ?? "neutral"] }}

@@ -12,7 +12,7 @@ export function ResearchRisksPanel({ risks }: ResearchRisksPanelProps) {
         <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
           Risks
         </p>
-        <span className="font-mono text-[10px] uppercase tracking-widest text-muted">
+        <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
           {risks.length} tracked
         </span>
       </div>
@@ -30,21 +30,21 @@ export function ResearchRisksPanel({ risks }: ResearchRisksPanelProps) {
                   <ResearchStatusBadge value={risk.priority} />
                 </div>
               </div>
-              <p className="mt-3 break-words text-xs leading-5 text-secondary">
+              <p className="mt-3 break-words text-xs leading-5 text-foreground-secondary">
                 {risk.description ?? "Description not captured."}
               </p>
               <p className="mt-2 text-xs leading-5">
-                <span className="font-mono uppercase tracking-widest text-muted">
+                <span className="font-mono uppercase tracking-widest text-muted-foreground">
                   Mitigation
                 </span>{" "}
-                <span className="break-words text-secondary">
+                <span className="break-words text-foreground-secondary">
                   {risk.mitigation ?? "Not captured"}
                 </span>
               </p>
             </div>
           ))
         ) : (
-          <p className="rounded border border-border bg-background px-3 py-4 text-sm text-muted">
+          <p className="rounded border border-border bg-background px-3 py-4 text-sm text-muted-foreground">
             No risks tracked yet.
           </p>
         )}

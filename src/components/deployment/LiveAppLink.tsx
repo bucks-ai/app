@@ -12,7 +12,7 @@ export function LiveAppLink({
   if (!href) {
     return (
       <span
-        className={`inline-flex items-center justify-center rounded-md border border-border bg-background px-4 py-2.5 text-sm font-semibold text-muted ${className}`}
+        className={`inline-flex items-center justify-center rounded-md border border-border bg-background px-4 py-2.5 text-sm font-semibold text-muted-foreground ${className}`}
       >
         Live URL pending
       </span>

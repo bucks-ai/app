@@ -41,6 +41,12 @@ const executionEvents: ExecutionLogItem[] = [
   { time: "12:21", actor: "deploy", event: "Preview deployment ready; awaiting founder approval.", tone: "warning" },
 ];
 
+const proofMetrics = [
+  ["1 brief", "becomes operating constraints"],
+  ["5 lanes", "advance under permissions"],
+  ["0 side effects", "without founder approval"],
+];
+
 export function WorkflowSteps() {
   return (
     <section id="execution-flow" className="px-6 py-20 sm:py-28">
@@ -57,7 +63,7 @@ export function WorkflowSteps() {
           <GlassPanel as="section" className="p-5 sm:p-6">
             <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted">
+                <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
                   Current run
                 </p>
                 <h3 className="mt-2 text-xl font-semibold tracking-tight text-foreground">
@@ -77,13 +83,28 @@ export function WorkflowSteps() {
               <p className="mt-2 text-sm font-semibold text-foreground">
                 Founder approval required before preview goes public.
               </p>
-              <p className="mt-2 text-sm leading-6 text-secondary">
+              <p className="mt-2 text-sm leading-6 text-foreground-secondary">
                 Vercel is prepared. Deployment remains gated until permissions
                 and customer-facing copy are approved.
               </p>
             </div>
             <ExecutionLog items={executionEvents} />
           </GlassPanel>
+        </div>
+
+        <div className="mt-5 grid gap-4 md:grid-cols-3">
+          {proofMetrics.map(([value, label], index) => (
+            <Reveal key={label} delay={index * 70}>
+              <div className="neumorphic-soft rounded-card p-5">
+                <p className="font-mono text-2xl font-semibold text-foreground">
+                  {value}
+                </p>
+                <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                  {label}
+                </p>
+              </div>
+            </Reveal>
+          ))}
         </div>
       </div>
     </section>

@@ -25,7 +25,7 @@ export function ExecutionAssetsPanel({ assets }: ExecutionAssetsPanelProps) {
             <div key={asset.id} className="rounded-md border border-border bg-surface p-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
-                  <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted">
+                  <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
                     {assetTypeLabel(asset.type)}
                   </p>
                   <h3 className="mt-2 break-words text-sm font-semibold text-foreground">
@@ -35,7 +35,7 @@ export function ExecutionAssetsPanel({ assets }: ExecutionAssetsPanelProps) {
                 {asset.status ? <ExecutionStatusPill label={asset.status} /> : null}
               </div>
               {asset.description ? (
-                <p className="mt-3 text-sm leading-6 text-secondary">{asset.description}</p>
+                <p className="mt-3 text-sm leading-6 text-foreground-secondary">{asset.description}</p>
               ) : null}
               {asset.url ? (
                 <Link
@@ -50,7 +50,7 @@ export function ExecutionAssetsPanel({ assets }: ExecutionAssetsPanelProps) {
             </div>
           ))
         ) : (
-          <p className="rounded-md border border-border bg-surface p-4 text-sm leading-6 text-secondary">
+          <p className="rounded-md border border-border bg-surface p-4 text-sm leading-6 text-foreground-secondary">
             No external assets are recorded yet.
           </p>
         )}

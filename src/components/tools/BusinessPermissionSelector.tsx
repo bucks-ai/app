@@ -33,14 +33,14 @@ export function BusinessPermissionSelector({
             <h3 className="mt-2 text-xl font-semibold text-foreground">
               Choose a setup queue
             </h3>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-secondary">
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-foreground-secondary">
               Permission state is scoped to a saved business. Pick the project
               bucks.ai should prepare tools for.
             </p>
           </div>
 
-          <label className="grid gap-2 text-sm text-secondary">
-            <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-secondary">
+          <label className="grid gap-2 text-sm text-foreground-secondary">
+            <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-foreground-secondary">
               Business
             </span>
             <select

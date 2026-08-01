@@ -341,7 +341,7 @@ function StatePanel({
           <h1 className="mt-4 text-3xl font-semibold tracking-tight text-foreground">
             {title}
           </h1>
-          <p className="mt-4 text-sm leading-7 text-secondary">{description}</p>
+          <p className="mt-4 text-sm leading-7 text-foreground-secondary">{description}</p>
           {cta ? <div className="mt-6">{cta}</div> : null}
         </OperatorPanel>
       </div>

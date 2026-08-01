@@ -21,7 +21,7 @@ export function ToolsTab({ business, businessId, businessName }: ToolsTabProps) 
               Tools waiting on setup decisions
             </h2>
           </div>
-          <p className="max-w-sm text-xs leading-5 text-muted">
+          <p className="max-w-sm text-xs leading-5 text-muted-foreground">
             Detail controls remain below; overview and rail stay compact.
           </p>
         </div>

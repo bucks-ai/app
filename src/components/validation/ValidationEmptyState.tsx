@@ -17,7 +17,7 @@ export function ValidationEmptyState({
       <h2 className="mt-3 text-xl font-semibold text-foreground">
         Create the validation workspace
       </h2>
-      <p className="mt-2 max-w-2xl text-sm leading-6 text-secondary">
+      <p className="mt-2 max-w-2xl text-sm leading-6 text-foreground-secondary">
         Seed founder-ready personas, testable hypotheses, and starter lead targets from the saved blueprint.
       </p>
       <button

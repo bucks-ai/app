@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { DM_Sans, JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import "./globals.css";
+import { cn } from "@/lib/utils";
 
 const spaceGrotesk = Space_Grotesk({
   variable: "--font-space-grotesk",
@@ -47,7 +48,12 @@ export default function RootLayout({
     <html
       lang="en"
       data-theme="dark"
-      className={`${spaceGrotesk.variable} ${dmSans.variable} ${jetbrainsMono.variable} h-full antialiased`}
+      className={cn(
+        spaceGrotesk.variable,
+        dmSans.variable,
+        jetbrainsMono.variable,
+        "h-full font-sans antialiased",
+      )}
       data-scroll-behavior="smooth"
       suppressHydrationWarning
     >

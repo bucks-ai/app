@@ -374,7 +374,7 @@ export function PermissionControlRoom({
             <h2 className="mt-4 text-3xl font-semibold tracking-tight text-foreground">
               Tool Setup Queue
             </h2>
-            <p className="mt-3 text-sm leading-7 text-secondary sm:text-base">
+            <p className="mt-3 text-sm leading-7 text-foreground-secondary sm:text-base">
               {businessId
                 ? `Approve the external tools bucks.ai needs for ${
                     businessName ?? "this business"
@@ -397,7 +397,7 @@ export function PermissionControlRoom({
             {signedOutCta ? (
               <Link
                 href="/login"
-                className="rounded-md border border-border bg-background px-4 py-3 text-center text-sm font-semibold text-secondary transition-colors hover:border-accent/60 hover:text-foreground"
+                className="rounded-md border border-border bg-background px-4 py-3 text-center text-sm font-semibold text-foreground-secondary transition-colors hover:border-accent/60 hover:text-foreground"
               >
                 Sign in -&gt;
               </Link>
@@ -468,7 +468,7 @@ export function PermissionControlRoom({
           <h3 className="mt-4 text-2xl font-semibold text-foreground">
             No setup queue exists yet.
           </h3>
-          <p className="mx-auto mt-3 max-w-2xl text-sm leading-7 text-secondary">
+          <p className="mx-auto mt-3 max-w-2xl text-sm leading-7 text-foreground-secondary">
             Create a setup queue to seed GitHub, Vercel, Supabase, Stripe,
             PostHog, Gmail/Workspace, Resend, Cloudflare, and OpenAI permission
             records for this business.

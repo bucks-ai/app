@@ -69,7 +69,7 @@ export function OperatingTeamRailCard({
           Team
         </p>
         {summary ? (
-          <span className="rounded border border-border bg-background px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-secondary">
+          <span className="rounded border border-border bg-background px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-foreground-secondary">
             {summary.totalAgents} agents
           </span>
         ) : null}
@@ -79,11 +79,11 @@ export function OperatingTeamRailCard({
         onClick={onOpenTeam}
         className="mt-3 w-full rounded border border-border bg-background px-3 py-2 text-left transition-colors hover:border-accent/45"
       >
-        <p className="break-words text-xs font-semibold text-secondary">
+        <p className="break-words text-xs font-semibold text-foreground-secondary">
           {action?.title ?? message}
         </p>
         {action ? (
-          <p className="mt-1 break-words text-xs leading-5 text-muted">
+          <p className="mt-1 break-words text-xs leading-5 text-muted-foreground">
             {summary?.blockedCount || summary?.waitingCount
               ? `${(summary?.blockedCount ?? 0) + (summary?.waitingCount ?? 0)} held, ${summary?.monitoringCount ?? 0} monitoring`
               : action.description}

@@ -42,7 +42,7 @@ export function ScaffoldPrepCard({ businessId }: ScaffoldPrepCardProps) {
       <h3 className="mt-4 text-xl font-semibold tracking-tight text-foreground">
         Prepare a deployable Next.js starter.
       </h3>
-      <p className="mt-3 text-sm leading-7 text-secondary">
+      <p className="mt-3 text-sm leading-7 text-foreground-secondary">
         This writes a minimal deployable app to the recorded GitHub repo. It does
         not copy the current app&apos;s secrets or production customer data.
       </p>
@@ -51,7 +51,7 @@ export function ScaffoldPrepCard({ businessId }: ScaffoldPrepCardProps) {
         {scaffoldFiles.map((file) => (
           <div
             key={file}
-            className="rounded-md border border-border bg-surface px-3 py-2 font-mono text-xs text-secondary"
+            className="rounded-md border border-border bg-surface px-3 py-2 font-mono text-xs text-foreground-secondary"
           >
             {file}
           </div>
@@ -61,7 +61,7 @@ export function ScaffoldPrepCard({ businessId }: ScaffoldPrepCardProps) {
       {state?.ok ? (
         <div className="mt-5 rounded-md border border-success/25 bg-success/10 p-4">
           <StatusPill label="Scaffold prepared" variant="success" />
-          <p className="mt-3 text-sm leading-6 text-secondary">
+          <p className="mt-3 text-sm leading-6 text-foreground-secondary">
             Starter files were written to GitHub
             {state.data.repoFullName ? ` for ${state.data.repoFullName}` : ""}.
           </p>

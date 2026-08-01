@@ -58,7 +58,7 @@ export function ExecutionBlockersPanel({ blockers }: ExecutionBlockersPanelProps
             </div>
           ))
         ) : (
-          <p className="rounded-md border border-border bg-surface p-4 text-sm leading-6 text-secondary">
+          <p className="rounded-md border border-border bg-surface p-4 text-sm leading-6 text-foreground-secondary">
             No active blockers are recorded.
           </p>
         )}

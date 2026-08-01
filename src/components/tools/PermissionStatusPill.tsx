@@ -10,7 +10,7 @@ type PermissionStatusPillProps = {
 };
 
 const statusClasses: Record<ToolPermissionStatus | ToolSetupStatus, string> = {
-  not_connected: "border-border bg-elevated text-secondary",
+  not_connected: "border-border bg-elevated text-foreground-secondary",
   approval_requested: "border-accent/35 bg-accent/10 text-accent",
   approved: "border-success/25 bg-success/10 text-success",
   human_required: "border-warning/35 bg-warning/10 text-warning",

@@ -9,6 +9,14 @@ type GlassPanelProps = {
   innerClassName?: string;
   interactive?: boolean;
   as?: "div" | "section" | "article";
+  variant?: "glass" | "solid" | "elevated" | "neumorphic";
+};
+
+const variantClasses = {
+  glass: "glass-surface glass-highlight",
+  solid: "solid-surface",
+  elevated: "elevated-surface glass-highlight",
+  neumorphic: "neumorphic-soft",
 };
 
 export function GlassPanel({
@@ -17,6 +25,7 @@ export function GlassPanel({
   innerClassName = "",
   interactive = false,
   as = "div",
+  variant = "glass",
 }: GlassPanelProps) {
   const reducedMotion = useReducedMotion();
   const MotionTag =
@@ -24,8 +33,8 @@ export function GlassPanel({
 
   return (
     <MotionTag
-      className={`glass-surface glass-highlight relative overflow-hidden rounded-card ${
-        interactive ? "group" : ""
+      className={`${variantClasses[variant]} relative overflow-hidden rounded-card ${
+        interactive ? "interactive-surface group" : ""
       } ${className}`}
       initial={false}
       whileInView={reducedMotion ? undefined : { opacity: 1, y: 0, rotateX: 0 }}
@@ -34,7 +43,7 @@ export function GlassPanel({
         interactive && !reducedMotion
           ? {
               y: -4,
-              borderColor: "rgba(166, 180, 255, 0.38)",
+              borderColor: "var(--accent-ring)",
               transition: { duration: 0.2, ease: [0.16, 1, 0.3, 1] },
             }
           : undefined

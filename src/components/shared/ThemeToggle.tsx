@@ -42,7 +42,7 @@ export function ThemeToggle() {
       onClick={toggle}
       aria-label="Toggle color theme"
       title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
-      className="inline-flex h-11 w-11 cursor-pointer items-center justify-center rounded-lg border border-border bg-surface text-secondary transition-colors hover:text-foreground"
+      className="inline-flex h-11 w-11 cursor-pointer items-center justify-center rounded-lg border border-border bg-surface text-foreground-secondary transition-colors hover:text-foreground"
     >
       <span aria-hidden className="leading-none">
         {theme === "dark" ? (

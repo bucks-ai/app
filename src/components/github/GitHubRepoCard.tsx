@@ -133,7 +133,7 @@ export function GitHubRepoCard({
         <button
           type="button"
           onClick={() => setShowCreateAnother(true)}
-          className="rounded-md border border-border bg-background px-4 py-3 text-sm font-semibold text-secondary transition-colors hover:border-accent/60 hover:text-foreground"
+          className="rounded-md border border-border bg-background px-4 py-3 text-sm font-semibold text-foreground-secondary transition-colors hover:border-accent/60 hover:text-foreground"
         >
           Create another repo
         </button>
@@ -153,13 +153,13 @@ export function GitHubRepoCard({
               <h3 className="mt-4 text-2xl font-semibold tracking-tight text-foreground">
                 Create the first GitHub repository.
               </h3>
-              <p className="mt-3 text-sm leading-7 text-secondary">
+              <p className="mt-3 text-sm leading-7 text-foreground-secondary">
                 This creates a real GitHub repo using the server-side dev token.
                 No production app code is generated, no deployment is triggered,
                 and no billing or payment action happens.
               </p>
               {oneLineIdea ? (
-                <p className="mt-3 rounded-md border border-border bg-surface p-3 text-sm leading-6 text-secondary">
+                <p className="mt-3 rounded-md border border-border bg-surface p-3 text-sm leading-6 text-foreground-secondary">
                   {oneLineIdea}
                 </p>
               ) : null}
@@ -168,20 +168,20 @@ export function GitHubRepoCard({
 
           <div className="mt-6 grid gap-5 lg:grid-cols-[1fr_0.7fr]">
             <label className="block">
-              <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-secondary">
+              <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-foreground-secondary">
                 Repository name
               </span>
               <input
                 value={repoName}
                 onChange={(event) => setRepoName(event.target.value)}
-                className="mt-2 w-full rounded-md border border-border bg-surface px-4 py-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted focus:border-accent/70"
+                className="mt-2 w-full rounded-md border border-border bg-surface px-4 py-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-accent/70"
                 placeholder={defaultRepoName}
                 aria-invalid={!repoNameIsValid}
               />
             </label>
 
             <fieldset>
-              <legend className="font-mono text-[11px] uppercase tracking-[0.18em] text-secondary">
+              <legend className="font-mono text-[11px] uppercase tracking-[0.18em] text-foreground-secondary">
                 Visibility
               </legend>
               <div className="mt-2 grid grid-cols-2 rounded-md border border-border bg-surface p-1">
@@ -193,7 +193,7 @@ export function GitHubRepoCard({
                     className={`rounded px-3 py-2 text-sm font-semibold transition-colors ${
                       visibility === option
                         ? "bg-accent text-accent-contrast"
-                        : "text-secondary hover:text-foreground"
+                        : "text-foreground-secondary hover:text-foreground"
                     }`}
                   >
                     {option === "private" ? "Private" : "Public"}
@@ -203,7 +203,7 @@ export function GitHubRepoCard({
             </fieldset>
           </div>
 
-          <label className="mt-5 flex gap-3 rounded-md border border-border bg-surface p-4 text-sm leading-6 text-secondary">
+          <label className="mt-5 flex gap-3 rounded-md border border-border bg-surface p-4 text-sm leading-6 text-foreground-secondary">
             <input
               type="checkbox"
               checked={includeStarterFiles}
@@ -224,7 +224,7 @@ export function GitHubRepoCard({
           ) : null}
 
           <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm leading-6 text-secondary">
+            <p className="text-sm leading-6 text-foreground-secondary">
               Founder approval is required before bucks.ai creates external
               assets.
             </p>

@@ -49,13 +49,13 @@ export function BusinessCard({ business, label }: BusinessCardProps) {
   const progress = progressForBusiness(business);
 
   return (
-    <GlassCard interactive className="group h-full p-5 sm:p-6">
+    <GlassCard interactive variant="solid" className="group h-full p-5 sm:p-6">
       <article className="grid h-full gap-5">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <StatusPill label={business.status} variant={business.statusVariant} />
             <DeploymentStatusBadge status={deployStatus} />
-            <span className="rounded-md border border-border bg-background/70 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-muted">
+            <span className="rounded-md border border-border bg-background/70 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
               {label ?? business.businessType}
             </span>
           </div>
@@ -65,7 +65,7 @@ export function BusinessCard({ business, label }: BusinessCardProps) {
               <h3 className="text-2xl font-semibold tracking-tight text-foreground">
                 {business.name}
               </h3>
-              <p className="mt-2 line-clamp-2 text-sm leading-6 text-secondary">
+              <p className="mt-2 line-clamp-2 text-sm leading-6 text-foreground-secondary">
                 {business.oneLineIdea ?? business.overview}
               </p>
             </div>
@@ -101,18 +101,18 @@ export function BusinessCard({ business, label }: BusinessCardProps) {
             </span>
           </div>
 
-          <p className="mt-4 min-w-0 truncate border-t border-border/70 pt-4 text-sm text-secondary">
-            <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted">
+          <p className="mt-4 min-w-0 truncate border-t border-border/70 pt-4 text-sm text-foreground-secondary">
+            <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
               Last:
             </span>{" "}
             {lastActivity}
           </p>
 
-          <div className="mt-4 grid max-h-0 gap-2 overflow-hidden text-sm leading-6 text-secondary opacity-0 transition-all duration-300 group-hover:max-h-36 group-hover:opacity-100 group-focus-within:max-h-36 group-focus-within:opacity-100">
-            <p>{business.blueprintSummary}</p>
+          <div className="mt-4 grid gap-3 rounded-xl border border-border bg-background/58 p-4 text-sm leading-6 text-foreground-secondary">
+            <p className="line-clamp-3">{business.blueprintSummary}</p>
             <Link
               href={href}
-              className="inline-flex min-h-11 w-fit items-center rounded-lg border border-border bg-background/70 px-4 py-2 text-sm font-medium text-foreground transition-colors hover:border-accent/40 hover:text-accent-bright"
+              className="inline-flex min-h-11 w-fit items-center rounded-lg border border-border bg-elevated px-4 py-2 text-sm font-medium text-foreground transition-colors hover:border-accent/40 hover:text-accent-bright"
             >
               View full workspace
             </Link>

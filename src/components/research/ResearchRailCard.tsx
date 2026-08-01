@@ -57,13 +57,13 @@ export function ResearchRailCard({
         onClick={onOpenResearch}
         className="mt-3 w-full rounded border border-border bg-background px-3 py-2 text-left transition-colors hover:border-accent/45"
       >
-        <p className="truncate text-xs font-semibold text-secondary">
+        <p className="truncate text-xs font-semibold text-foreground-secondary">
           {workspace
             ? `Opportunity ${workspace.summary.opportunityScore ?? "--"}`
             : message}
         </p>
         {workspace ? (
-          <p className="mt-1 break-words text-xs leading-5 text-muted">
+          <p className="mt-1 break-words text-xs leading-5 text-muted-foreground">
             {action.title}
           </p>
         ) : null}

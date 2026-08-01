@@ -151,7 +151,7 @@ export function DeploymentStatusCard({
               ? view.projectName ?? "Vercel project"
               : "No Vercel project yet"}
           </h2>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-secondary">
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-foreground-secondary">
             {loadState === "loading"
               ? "Checking the latest deployment state."
               : statusCopy(view)}
@@ -173,7 +173,7 @@ export function DeploymentStatusCard({
           ) : view.status === "no_project" ? (
             <a
               href="#deployment-execution"
-              className="inline-flex w-full items-center justify-center rounded-md border border-border bg-background px-4 py-2.5 text-sm font-semibold text-secondary transition-colors hover:border-accent/50 hover:text-foreground sm:w-auto"
+              className="inline-flex w-full items-center justify-center rounded-md border border-border bg-background px-4 py-2.5 text-sm font-semibold text-foreground-secondary transition-colors hover:border-accent/50 hover:text-foreground sm:w-auto"
             >
               Create project
             </a>
@@ -188,15 +188,15 @@ export function DeploymentStatusCard({
 
       <div className="mt-5 grid gap-2 md:grid-cols-3">
         <div className="min-w-0 rounded border border-border bg-background px-3 py-2.5">
-          <p className="font-mono text-[10px] uppercase tracking-widest text-muted">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
             Status
           </p>
-          <p className="mt-1 truncate text-sm font-semibold text-secondary">
+          <p className="mt-1 truncate text-sm font-semibold text-foreground-secondary">
             {deploymentStatusLabel(view.status)}
           </p>
         </div>
         <div className="min-w-0 rounded border border-border bg-background px-3 py-2.5">
-          <p className="font-mono text-[10px] uppercase tracking-widest text-muted">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
             Live URL
           </p>
           {view.liveUrl ? (
@@ -209,16 +209,16 @@ export function DeploymentStatusCard({
               {view.liveUrl}
             </a>
           ) : (
-            <p className="mt-1 truncate text-sm font-semibold text-muted">
+            <p className="mt-1 truncate text-sm font-semibold text-muted-foreground">
               {hasProject ? "Deployment pending" : "Not available"}
             </p>
           )}
         </div>
         <div className="min-w-0 rounded border border-border bg-background px-3 py-2.5">
-          <p className="font-mono text-[10px] uppercase tracking-widest text-muted">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
             Latest checked
           </p>
-          <p className="mt-1 truncate text-sm font-semibold text-secondary">
+          <p className="mt-1 truncate text-sm font-semibold text-foreground-secondary">
             {formatTimestamp(view.latestCheckedAt)}
           </p>
         </div>
@@ -229,7 +229,7 @@ export function DeploymentStatusCard({
           href={view.dashboardUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="mt-3 inline-flex max-w-full truncate font-mono text-[11px] uppercase tracking-widest text-secondary transition-colors hover:text-accent"
+          className="mt-3 inline-flex max-w-full truncate font-mono text-[11px] uppercase tracking-widest text-foreground-secondary transition-colors hover:text-accent"
         >
           Vercel dashboard
         </a>

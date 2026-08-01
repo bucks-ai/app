@@ -22,7 +22,7 @@ export function AgentNodeGroup({ node, latestRuns }: AgentNodeGroupProps) {
           <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
             {node.nodeLabel}
           </p>
-          <p className="mt-2 max-w-3xl break-words text-sm leading-6 text-secondary">
+          <p className="mt-2 max-w-3xl break-words text-sm leading-6 text-foreground-secondary">
             {node.nodeDescription}
           </p>
         </div>

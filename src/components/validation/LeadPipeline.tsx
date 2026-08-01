@@ -99,7 +99,7 @@ export function LeadPipeline({ businessId, leads, onChange }: LeadPipelineProps)
           <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
             Lead pipeline
           </p>
-          <p className="mt-1 text-xs text-muted">Move real discovery contacts through interview stages.</p>
+          <p className="mt-1 text-xs text-muted-foreground">Move real discovery contacts through interview stages.</p>
         </div>
         <button
           type="button"
@@ -168,7 +168,7 @@ export function LeadPipeline({ businessId, leads, onChange }: LeadPipelineProps)
           <div key={group.status} className="min-w-0 rounded border border-border bg-background p-3">
             <div className="flex items-center justify-between gap-2">
               <ValidationStatusBadge value={group.status} />
-              <span className="font-mono text-[10px] uppercase tracking-widest text-muted">
+              <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
                 {group.leads.length}
               </span>
             </div>
@@ -177,7 +177,7 @@ export function LeadPipeline({ businessId, leads, onChange }: LeadPipelineProps)
                 group.leads.map((lead) => (
                   <div key={lead.id} className="rounded border border-border bg-surface p-2.5">
                     <p className="truncate text-xs font-semibold text-foreground">{lead.name}</p>
-                    <p className="mt-0.5 truncate text-xs text-muted">
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground">
                       {[lead.role, lead.company].filter(Boolean).join(", ") || "No company details"}
                     </p>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -188,7 +188,7 @@ export function LeadPipeline({ businessId, leads, onChange }: LeadPipelineProps)
                         onChange={(event) =>
                           handleStatusChange(lead.id, event.target.value as ValidationLeadStatus)
                         }
-                        className="min-h-8 min-w-0 flex-1 rounded border border-border bg-elevated px-2 py-1.5 text-xs text-secondary outline-none focus:border-accent/70 disabled:opacity-60"
+                        className="min-h-8 min-w-0 flex-1 rounded border border-border bg-elevated px-2 py-1.5 text-xs text-foreground-secondary outline-none focus:border-accent/70 disabled:opacity-60"
                       >
                         {STATUSES.map((status) => (
                           <option key={status} value={status}>
@@ -200,7 +200,7 @@ export function LeadPipeline({ businessId, leads, onChange }: LeadPipelineProps)
                   </div>
                 ))
               ) : (
-                <p className="py-4 text-xs text-muted">No leads here.</p>
+                <p className="py-4 text-xs text-muted-foreground">No leads here.</p>
               )}
             </div>
           </div>

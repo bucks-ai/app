@@ -23,7 +23,7 @@ export function ValidationSummaryHeader({ workspace }: ValidationSummaryHeaderPr
           <h2 className="mt-3 text-xl font-semibold text-foreground">
             Validate demand before overbuilding
           </h2>
-          <p className="mt-1 max-w-2xl text-sm leading-6 text-secondary">
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-foreground-secondary">
             {nextAction.title}: {nextAction.description}
           </p>
         </div>
@@ -41,7 +41,7 @@ export function ValidationSummaryHeader({ workspace }: ValidationSummaryHeaderPr
             key={label}
             className="min-w-0 rounded border border-border bg-background px-3 py-2.5"
           >
-            <p className="truncate font-mono text-[10px] uppercase tracking-widest text-muted">
+            <p className="truncate font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
               {label}
             </p>
             <p className="mt-1 text-lg font-semibold text-foreground">{value}</p>

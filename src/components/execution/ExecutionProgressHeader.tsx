@@ -55,7 +55,7 @@ export function ExecutionProgressHeader({
           <h2 className="mt-4 text-3xl font-semibold tracking-tight text-foreground">
             {phaseLabels[status.currentPhase]}
           </h2>
-          <p className="mt-3 text-sm leading-7 text-secondary sm:text-base">
+          <p className="mt-3 text-sm leading-7 text-foreground-secondary sm:text-base">
             Live execution posture for this business: phase, milestones, blockers,
             recommended actions, external assets, and latest run history.
           </p>
@@ -64,7 +64,7 @@ export function ExecutionProgressHeader({
         <div className="w-full max-w-sm rounded-lg border border-border bg-surface p-4">
           <div className="flex items-end justify-between gap-4">
             <div>
-              <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted">
+              <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
                 Overall progress
               </p>
               <p className={`mt-2 text-4xl font-semibold tracking-tight ${
@@ -81,7 +81,7 @@ export function ExecutionProgressHeader({
               </p>
             </div>
             {status.updatedAt ? (
-              <p className="pb-1 text-right text-xs leading-5 text-muted">
+              <p className="pb-1 text-right text-xs leading-5 text-muted-foreground">
                 Updated {new Date(status.updatedAt).toLocaleString()}
               </p>
             ) : null}

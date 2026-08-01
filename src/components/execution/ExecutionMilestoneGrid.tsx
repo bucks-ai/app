@@ -52,11 +52,11 @@ export function ExecutionMilestoneGrid({ milestones }: ExecutionMilestoneGridPro
                   status={milestone.status}
                 />
               </div>
-              <p className="mt-3 min-h-12 text-sm leading-6 text-secondary">
+              <p className="mt-3 min-h-12 text-sm leading-6 text-foreground-secondary">
                 {milestone.description ?? "Awaiting execution signal from the backend."}
               </p>
               {milestone.completedAt ? (
-                <p className="mt-3 font-mono text-[11px] uppercase tracking-[0.18em] text-muted">
+                <p className="mt-3 font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
                   {new Date(milestone.completedAt).toLocaleString()}
                 </p>
               ) : null}

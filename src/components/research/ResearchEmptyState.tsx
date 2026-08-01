@@ -17,7 +17,7 @@ export function ResearchEmptyState({
       <h2 className="mt-3 text-xl font-semibold text-foreground">
         Find where the money is
       </h2>
-      <p className="mt-2 max-w-2xl text-sm leading-6 text-secondary">
+      <p className="mt-2 max-w-2xl text-sm leading-6 text-foreground-secondary">
         Generate a founder-ready research workspace from the saved blueprint: segments,
         buyers, competitors, monetization, channels, risks, hypotheses, and evidence.
       </p>

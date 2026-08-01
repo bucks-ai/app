@@ -134,13 +134,13 @@ export function VercelProjectCard({
           <h3 className="mt-4 text-2xl font-semibold tracking-tight text-foreground">
             Create the Vercel deployment project.
           </h3>
-          <p className="mt-3 text-sm leading-7 text-secondary">
+          <p className="mt-3 text-sm leading-7 text-foreground-secondary">
             This creates a real Vercel project using a server-side Vercel token.
             The generated app contains no secrets, no custom domain, no payments,
             no emails, and no production customer data.
           </p>
           {oneLineIdea ? (
-            <p className="mt-3 rounded-md border border-border bg-surface p-3 text-sm leading-6 text-secondary">
+            <p className="mt-3 rounded-md border border-border bg-surface p-3 text-sm leading-6 text-foreground-secondary">
               {oneLineIdea}
             </p>
           ) : null}
@@ -148,20 +148,20 @@ export function VercelProjectCard({
       </div>
 
       <label className="mt-6 block">
-        <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-secondary">
+        <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-foreground-secondary">
           Vercel project name
         </span>
         <input
           value={projectName}
           onChange={(event) => setProjectName(event.target.value)}
-          className="mt-2 w-full rounded-md border border-border bg-surface px-4 py-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted focus:border-accent/70"
+          className="mt-2 w-full rounded-md border border-border bg-surface px-4 py-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-accent/70"
           placeholder={defaultProjectName}
           aria-invalid={!projectNameIsValid}
         />
       </label>
 
       <div className="mt-5 grid gap-3">
-        <label className="flex gap-3 rounded-md border border-border bg-surface p-4 text-sm leading-6 text-secondary">
+        <label className="flex gap-3 rounded-md border border-border bg-surface p-4 text-sm leading-6 text-foreground-secondary">
           <input
             type="checkbox"
             checked={prepareScaffold}
@@ -170,7 +170,7 @@ export function VercelProjectCard({
           />
           <span>Prepare deployable Next.js starter before creating project</span>
         </label>
-        <label className="flex gap-3 rounded-md border border-border bg-surface p-4 text-sm leading-6 text-secondary">
+        <label className="flex gap-3 rounded-md border border-border bg-surface p-4 text-sm leading-6 text-foreground-secondary">
           <input
             type="checkbox"
             checked={attemptInitialDeployment}
@@ -204,7 +204,7 @@ export function VercelProjectCard({
       ) : null}
 
       <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm leading-6 text-secondary">
+        <p className="text-sm leading-6 text-foreground-secondary">
           bucks.ai will not create the project unless Vercel is approved in the
           setup queue.
         </p>

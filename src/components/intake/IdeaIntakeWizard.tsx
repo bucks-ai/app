@@ -218,14 +218,14 @@ function ProgressRail({
                 }`}
               >
                 <div className="flex items-center gap-2">
-                  <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
+                  <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                     0{index + 1}
                   </span>
                   <p className="text-sm font-medium text-foreground">
                     {step.title}
                   </p>
                 </div>
-                <p className="mt-1 text-xs leading-5 text-secondary">
+                <p className="mt-1 text-xs leading-5 text-foreground-secondary">
                   {step.description}
                 </p>
               </div>
@@ -273,7 +273,7 @@ function FieldWrapper({
       </div>
       {children}
       {helper ? (
-        <p className="mt-2 text-xs leading-5 text-muted">{helper}</p>
+        <p className="mt-2 text-xs leading-5 text-muted-foreground">{helper}</p>
       ) : null}
       {error ? (
         <p role="alert" className="mt-2 text-xs font-medium text-error">
@@ -298,7 +298,7 @@ function TextInput(props: BaseFieldProps) {
         onChange={(event) => props.onChange(props.name, event.target.value)}
         placeholder={props.placeholder}
         aria-invalid={props.error ? true : undefined}
-        className={`w-full rounded-md border bg-background px-4 py-3 text-sm text-foreground outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-muted ${
+        className={`w-full rounded-md border bg-background px-4 py-3 text-sm text-foreground outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-muted-foreground ${
           props.error
             ? "border-error/60"
             : "border-border hover:border-border-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--accent-soft)]"
@@ -322,7 +322,7 @@ function TextArea(props: BaseFieldProps) {
         placeholder={props.placeholder}
         rows={5}
         aria-invalid={props.error ? true : undefined}
-        className={`w-full rounded-md border bg-background px-4 py-3 text-sm text-foreground outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-muted ${
+        className={`w-full rounded-md border bg-background px-4 py-3 text-sm text-foreground outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-muted-foreground ${
           props.error
             ? "border-error/60"
             : "border-border hover:border-border-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--accent-soft)]"
@@ -567,7 +567,7 @@ export function IdeaIntakeWizard() {
               <h1 className="mt-4 text-3xl font-semibold tracking-tight text-foreground sm:text-5xl">
                 Turn an idea into a launch blueprint.
               </h1>
-              <p className="mt-4 text-sm leading-7 text-secondary sm:text-base">
+              <p className="mt-4 text-sm leading-7 text-foreground-secondary sm:text-base">
                 bucks.ai will generate an execution-ready startup plan: stack,
                 GTM, analytics, permissions, and next autonomous actions.
               </p>
@@ -581,7 +581,7 @@ export function IdeaIntakeWizard() {
               ].map((item) => (
                 <div
                   key={item}
-                  className="rounded-lg border border-border bg-background px-4 py-4 font-mono text-xs uppercase tracking-[0.16em] text-secondary"
+                  className="rounded-lg border border-border bg-background px-4 py-4 font-mono text-xs uppercase tracking-[0.16em] text-foreground-secondary"
                 >
                   {item}
                 </div>
@@ -600,7 +600,7 @@ export function IdeaIntakeWizard() {
                 OPENAI_API_KEY not configured
               </h3>
             </div>
-            <p className="mb-4 text-sm leading-6 text-secondary">
+            <p className="mb-4 text-sm leading-6 text-foreground-secondary">
               To enable real AI blueprint generation, add your OpenAI API key to{" "}
               <code className="rounded bg-background px-1.5 py-0.5 font-mono text-warning">
                 .env.local
@@ -610,7 +610,7 @@ export function IdeaIntakeWizard() {
             <pre className="mb-4 overflow-x-auto rounded-md border border-border bg-background px-4 py-3 font-mono text-sm text-accent-bright">
               {`OPENAI_API_KEY=sk-...`}
             </pre>
-            <p className="mb-5 text-sm leading-6 text-secondary">
+            <p className="mb-5 text-sm leading-6 text-foreground-secondary">
               Restart the dev server after adding the key. In the meantime you
               can explore the demo blueprint below.
             </p>
@@ -625,7 +625,7 @@ export function IdeaIntakeWizard() {
               <button
                 type="button"
                 onClick={() => setGenerateState({ status: "idle" })}
-                className="cursor-pointer rounded-md border border-border bg-surface px-5 py-2.5 text-sm font-medium text-secondary transition-colors duration-200 hover:text-foreground"
+                className="cursor-pointer rounded-md border border-border bg-surface px-5 py-2.5 text-sm font-medium text-foreground-secondary transition-colors duration-200 hover:text-foreground"
               >
                 Dismiss
               </button>
@@ -643,7 +643,7 @@ export function IdeaIntakeWizard() {
                 Blueprint generation failed
               </h3>
             </div>
-            <p className="mb-5 text-sm leading-6 text-secondary">
+            <p className="mb-5 text-sm leading-6 text-foreground-secondary">
               {generateState.message}
             </p>
             <div className="flex flex-col gap-3 sm:flex-row">
@@ -889,7 +889,7 @@ export function IdeaIntakeWizard() {
                   bucks.ai is building your launch blueprint...
                 </p>
               </div>
-              <div className="mt-4 grid gap-2 font-mono text-xs text-secondary sm:grid-cols-2">
+              <div className="mt-4 grid gap-2 font-mono text-xs text-foreground-secondary sm:grid-cols-2">
                 {[
                   "Classifying business model",
                   "Selecting startup stack",

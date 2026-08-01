@@ -57,11 +57,11 @@ export function ValidationRailCard({
         onClick={onOpenValidation}
         className="mt-3 w-full rounded border border-border bg-background px-3 py-2 text-left transition-colors hover:border-accent/45"
       >
-        <p className="truncate text-xs font-semibold text-secondary">
+        <p className="truncate text-xs font-semibold text-foreground-secondary">
           {workspace ? action.title : message}
         </p>
         {workspace ? (
-          <p className="mt-1 text-xs leading-5 text-muted">{action.description}</p>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">{action.description}</p>
         ) : null}
       </button>
     </div>

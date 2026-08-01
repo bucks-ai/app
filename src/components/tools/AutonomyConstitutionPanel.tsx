@@ -57,7 +57,7 @@ export function AutonomyConstitutionPanel({
           <h2 className="text-3xl font-semibold tracking-tight text-foreground">
             Autonomy Constitution
           </h2>
-          <p className="mt-3 max-w-3xl text-sm leading-7 text-secondary sm:text-base">
+          <p className="mt-3 max-w-3xl text-sm leading-7 text-foreground-secondary sm:text-base">
             bucks.ai can execute aggressively inside clearly defined limits. The
             constitution below keeps spend, outreach, deployments, sales, and
             legal actions inside a founder-approved operating envelope.
@@ -100,7 +100,7 @@ export function AutonomyConstitutionPanel({
                   {getCategoryLabel(category)}
                 </h3>
               </div>
-              <span className="font-mono text-xs text-muted">
+              <span className="font-mono text-xs text-muted-foreground">
                 {rules.length} rules
               </span>
             </div>
@@ -121,7 +121,7 @@ export function AutonomyConstitutionPanel({
                       <p className="text-sm font-semibold text-foreground">
                         {rule.title}
                       </p>
-                      <p className="mt-1.5 text-sm leading-6 text-secondary">
+                      <p className="mt-1.5 text-sm leading-6 text-foreground-secondary">
                         {rule.description}
                       </p>
                     </div>
