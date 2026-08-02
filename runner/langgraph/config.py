@@ -394,6 +394,13 @@ class RunnerConfig:
     runner_dry_run: bool = field(
         default_factory=lambda: os.getenv("RUNNER_DRY_RUN", "false").lower() == "true"
     )
+    # M4c: refuse `run-loop` from a non-main branch or a dirty tree. Workers
+    # inherit the runner's working tree, and a half-finished branch is
+    # indistinguishable to them from intended state. Off only for deliberate
+    # local experiments — never in an unattended run.
+    loop_start_preflight_enabled: bool = field(
+        default_factory=lambda: os.getenv("LOOP_START_PREFLIGHT", "true").lower() == "true"
+    )
     worker_health_probe_enabled: bool = field(
         default_factory=lambda: os.getenv("WORKER_HEALTH_PROBE", "true").lower() == "true"
     )
@@ -605,6 +612,7 @@ class RunnerConfig:
             "launch_readiness_scorecard_pass_threshold": self.launch_readiness_scorecard_pass_threshold,
             "fast_engineering_mode_enabled": self.fast_engineering_mode_enabled,
             "runner_dry_run": self.runner_dry_run,
+            "loop_start_preflight_enabled": self.loop_start_preflight_enabled,
             "worker_health_probe_enabled": self.worker_health_probe_enabled,
             "worker_health_live_ping_enabled": self.worker_health_live_ping_enabled,
             "worker_health_live_ping_timeout_s": self.worker_health_live_ping_timeout_s,

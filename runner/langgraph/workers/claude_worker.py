@@ -123,11 +123,12 @@ class ClaudeWorker(BaseWorker):
                         "path": v["path"],
                     })
 
+        # The outbox copy is an audit artefact for humans only — it is NOT how
+        # the worker receives its instructions.
         path = self._write_outbox(task_id, prompt)
         cmd = ["claude", "--print", "--dangerously-skip-permissions", "--output-format", "json"]
         if model:
             cmd += ["--model", model]
-        cmd.append(f"@{path}")
 
         # In subscription mode strip ANTHROPIC_API_KEY so the CLI falls back to
         # the OAuth/keychain token set up via `claude auth login` or `claude
@@ -139,7 +140,23 @@ class ClaudeWorker(BaseWorker):
         # Configurable wall-clock cap for one CLI invocation.  600s proved too
         # small for heavy multi-file tasks (M0.9: m1-11/m1-12 zod rollouts
         # timed out at exactly 600s while smaller tasks completed fine).
-        r = run_command(cmd, timeout=cfg.claude_cli_timeout_s, env=env)
+        #
+        # M4c: the prompt goes in on stdin as the actual instruction, and cwd is
+        # the task's repo_path. Previously this passed `@<outbox path>` as the
+        # prompt with cwd left at the runner's own tree, so the worker received
+        # "here is a file describing some work in someone else's repo" while
+        # standing in bucks-ai. Three M4b deploy attempts died that way: each
+        # worker correctly judged the described action irreversible and
+        # unverifiable from where it stood, and asked for clarification instead
+        # of acting. stdin (not argv) also keeps large prompts clear of ARG_MAX,
+        # matching how CodexWorker has always dispatched.
+        r = run_command(
+            cmd,
+            cwd=repo_path,
+            timeout=cfg.claude_cli_timeout_s,
+            env=env,
+            stdin_data=prompt,
+        )
 
         output_text = r.output
         api_cost = None
