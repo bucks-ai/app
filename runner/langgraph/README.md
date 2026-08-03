@@ -363,7 +363,8 @@ Copy `.env.example` to `.env` and fill in:
 | `SEEDED_MISSION_QUEUE_STRICT` | Hard-stop the loop when the seeded mission queue is exhausted instead of falling through to the ChatGPT planner; also suppresses the post-task ChatGPT call (default: false) |
 | `BUSINESS_EXECUTION_ENABLED` | Allow `fetch_next_queued_mission` to claim `runner_target: "business"` missions — still gated per-mission on the business having a fully configured sandbox (repo, Vercel project, both secret names) and those secrets actually resolving in the runner env; any failing condition logs `business_mission_blocked` and leaves the mission queued (default: false) |
 | `FAST_ENGINEERING_MODE` | Pre-inject a runner workspace snapshot (LangGraph nodes, tools, tests, architecture invariants) into worker prompts for reliable runner development; skips exploratory reads and orients Claude immediately (default: false) |
-| `RESOURCE_GATE` | Pause the loop when a worker reports it needs a missing credential/resource (default: true) |
+| `RESOURCE_GATE` | Set a task aside when a worker reports it needs a missing credential/resource (default: true). Credential names already present in the runner's config/env are filtered out first — config/env is the authority on whether a credential exists |
+| `GATE_BLOCK_SCOPE` | How wide a gate's block reaches: `proportionate` (default) honours each gate's declared scope in `tools/gate_authority.py`, so a gate judging one task skips that task and the loop continues; `loop` restores the pre-M4c.0 behaviour where every gate block stops the whole run. See `docs/M4C0-GATE-AUDIT.md` |
 | `FAILURE_GUARD` | Retry failed tasks and stop the loop on repeated failures (default: true) |
 | `MAX_TASK_RETRIES` | Times a failed task is requeued before giving up (default: 1) |
 | `MAX_CONSECUTIVE_FAILURES` | Consecutive failures that trip the circuit breaker and halt the loop (default: 3) |

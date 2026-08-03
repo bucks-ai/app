@@ -135,7 +135,9 @@ def test_node_blocks_and_writes_request_when_needs_unfulfilled():
         graph.cfg.resource_gate_enabled = True
         out = graph.request_resources_if_needed(_state({"credentials_needed": ["STRIPE_API_KEY"]}))
         assert out.resource_request_status == "pending", out.resource_request_status
-        assert out.stop_reason == "awaiting_resources", out.stop_reason
+        # M4c.0: the block is task-scoped — the task is set aside but the loop
+        # continues with the next queued task.
+        assert out.stop_reason is None, out.stop_reason
         req_file = outbox / "t1_resource_request.txt"
         assert req_file.exists(), "request should be written to outbox"
         assert "STRIPE_API_KEY" in req_file.read_text()
