@@ -1,5 +1,7 @@
+import { FieldReadout } from "@/components/landing/FieldReadout";
 import { MissionConsole } from "@/components/landing/MissionConsole";
 import { CTAButton } from "@/components/ui/CTAButton";
+import { SoftObject } from "@/components/ui/SoftObject";
 
 const capabilities = ["Strategy", "Research", "Validation", "Build", "Deploy", "Learn"];
 const proofPoints = [
@@ -19,6 +21,17 @@ export function HomeHero() {
     // whole route, so the hero dissolves into the page instead of sitting in
     // its own lit box.
     <section className="relative px-6 pb-24 pt-36 sm:pb-32 sm:pt-44">
+      {/* The one soft, organic form in an otherwise structured page. It
+          bleeds off the right edge so it reads as an object in the field
+          rather than an illustration in a slot.
+
+          z-0, not -z-10: .page-field sits at z-index -1, so anything below
+          that renders behind the whole atmosphere and is never seen. The
+          grid below is a later sibling, so content still paints over this. */}
+      <SoftObject
+        size={17}
+        className="absolute right-[-5rem] top-4 z-0 opacity-70 md:right-[-3rem] md:opacity-85 lg:right-[1rem]"
+      />
       <div className="relative mx-auto grid max-w-6xl items-center gap-14 lg:grid-cols-[minmax(0,0.92fr)_minmax(26rem,1.08fr)] lg:gap-16">
         <div className="min-w-0 max-w-2xl">
           <div className="inline-flex max-w-full items-center gap-2 rounded-full border border-accent/20 bg-accent/[0.07] px-3.5 py-1.5 font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-accent-bright">
@@ -113,6 +126,8 @@ export function HomeHero() {
           <MissionConsole compact />
         </div>
       </div>
+
+      <FieldReadout />
     </section>
   );
 }

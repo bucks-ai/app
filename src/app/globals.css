@@ -154,6 +154,14 @@
   --focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent-ring) 72%, transparent);
   --edge: rgba(255, 255, 255, 0.06);
   --edge-strong: rgba(255, 255, 255, 0.1);
+
+  /* Soft object — body gradient stops and the specular light colour.
+     Tokenized so the ornament follows the accent family and the theme
+     rather than hard-coding a blue the way the reference does. */
+  --soft-object-hi: #63e0cb;
+  --soft-object-mid: #0e7a6d;
+  --soft-object-lo: #04211f;
+  --soft-object-light: #bffaee;
   /* Form controls are the one place a border is load-bearing rather than
      decorative: 1.4.11 wants 3:1 against the surface behind, and --edge sits
      at ~1.25:1. Text fields must use this, never --edge. */
@@ -324,6 +332,13 @@
   --edge-strong: rgba(16, 42, 38, 0.12);
   /* 0.54 measures 3.4:1 over the white card; 0.34 was 2.1:1. */
   --input-border: rgba(16, 42, 38, 0.54);
+
+  /* Deeper stops on paper: the same gradient that reads as luminous over a
+     near-black field washes out to pastel on white. */
+  --soft-object-hi: #5fd8c2;
+  --soft-object-mid: #12897b;
+  --soft-object-lo: #06302c;
+  --soft-object-light: #d6fdf4;
 }
 
 /* Expose tokens as Tailwind utilities (bg-surface, text-muted-foreground, border-border, ...) */
@@ -847,6 +862,159 @@ h6 {
   }
   to {
     opacity: 1;
+    transform: none;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Scroll-driven motion (compositor-resident)                          */
+/* ------------------------------------------------------------------ */
+/*
+  Everything below runs on a native scroll/view timeline, which the
+  compositor drives directly — no rAF loop, no scroll listener, no
+  main-thread work per frame, and it stays smooth while React is busy.
+
+  The critical inversion vs. the `.reveal` system above: content here is
+  VISIBLE by default and the animation is layered on only where the browser
+  supports it. Firefox stable does not ship view timelines yet (~83% global),
+  so those users get a correct, static page rather than a broken one — and
+  there is no JS failsafe to forget.
+
+  Only ever animate transform and opacity in these blocks. A `filter` here
+  would be composited *off* the fast path, which is what got 25 elements
+  flagged previously.
+*/
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    /* Rise into place as the element enters the viewport. */
+    .scroll-rise {
+      animation: scroll-rise-kf linear both;
+      animation-timeline: view();
+      animation-range: entry 5% cover 32%;
+    }
+
+    /* Same, but the element also settles from a slight scale — used for
+       larger surfaces where pure translation reads as sliding. */
+    .scroll-settle {
+      animation: scroll-settle-kf linear both;
+      animation-timeline: view();
+      animation-range: entry 5% cover 34%;
+    }
+
+    /* Slow drift for atmosphere and media. Kept under ~15% of element
+       height: bigger parallax ranges force oversized composited layers and
+       read as seasick rather than deep. */
+    .scroll-parallax {
+      animation: scroll-parallax-kf linear both;
+      animation-timeline: view();
+      animation-range: cover;
+    }
+
+    /* Fades a pinned section out as the next one arrives over it. */
+    .scroll-handoff {
+      animation: scroll-handoff-kf linear both;
+      animation-timeline: view();
+      animation-range: exit 0% exit 100%;
+    }
+  }
+}
+
+@keyframes scroll-rise-kf {
+  from {
+    opacity: 0;
+    transform: translateY(34px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes scroll-settle-kf {
+  from {
+    opacity: 0;
+    transform: translateY(42px) scale(0.972);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes scroll-parallax-kf {
+  from {
+    transform: translateY(calc(var(--parallax, 7%) * -1));
+  }
+  to {
+    transform: translateY(var(--parallax, 7%));
+  }
+}
+
+@keyframes scroll-handoff-kf {
+  to {
+    opacity: 0.25;
+    transform: scale(0.955) translateY(-1.5rem);
+  }
+}
+
+/*
+  Sticky stacking.
+
+  The pin itself costs nothing — `position: sticky` is handled by the
+  browser's own scroll machinery, not by JS. Each card sticks under the
+  navbar and the next one rides up over it, so the section reads as a deck
+  being dealt rather than a list being scrolled. Degrades to a plain
+  stacked list wherever sticky or view timelines are unavailable.
+*/
+.stack-viewport {
+  position: relative;
+}
+
+.stack-card {
+  position: sticky;
+  top: var(--stack-top, 7.5rem);
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stack-card {
+    position: static;
+  }
+}
+
+/*
+  Per-line text reveal. The wrapper clips, the inner line translates — only
+  a transform moves, so layout never changes and this contributes nothing to
+  CLS. Split is applied by JS as a progressive enhancement after fonts load;
+  before that the text is plain and correct.
+*/
+.line-mask {
+  display: block;
+  overflow: hidden;
+  padding-bottom: 0.08em;
+  margin-bottom: -0.08em;
+}
+
+.line-mask > span {
+  display: block;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .line-mask > span {
+      animation: line-rise-kf linear both;
+      animation-timeline: view();
+      animation-range: entry 0% cover 26%;
+    }
+  }
+}
+
+@keyframes line-rise-kf {
+  from {
+    transform: translateY(105%);
+  }
+  to {
     transform: none;
   }
 }

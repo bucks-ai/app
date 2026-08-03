@@ -59,7 +59,7 @@ export function WorkflowSteps() {
           />
         </Reveal>
 
-        <div className="mt-16 grid gap-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(22rem,0.95fr)]">
+        <div className="scroll-settle mt-16 grid gap-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(22rem,0.95fr)]">
           <GlassPanel as="section" className="p-6 sm:p-8">
             <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
