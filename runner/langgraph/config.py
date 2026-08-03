@@ -55,6 +55,7 @@ _DEFAULT_SLACK_EVENTS = frozenset({
     "migrations_pending",
     "migration_applied",
     "gate_blocked",
+    "config_invariant_violated",
 })
 
 
@@ -134,6 +135,10 @@ class RunnerConfig:
     max_loop_tasks: int = field(
         default_factory=lambda: int(os.getenv("MAX_LOOP_TASKS", "10"))
     )
+    # M4c.0: measured and retained. Observed loop sessions (n=59) spanned at
+    # most 203.2 min with p95 145.3 — 480 has never been the binding stop, and
+    # it must stay well above MAX_STALE_TASK_MINUTES so a stuck loop reports
+    # `stale_run` rather than `max_runtime` (invariant 5).
     max_runtime_minutes: int = field(
         default_factory=lambda: int(os.getenv("MAX_RUNTIME_MINUTES", "480"))
     )
@@ -146,14 +151,20 @@ class RunnerConfig:
     merge_via_pr: bool = field(
         default_factory=lambda: os.getenv("MERGE_VIA_PR", "true").lower() == "true"
     )
+    # M4c.0 calibration (docs/M4C0-THRESHOLD-CALIBRATION.md): observed check
+    # completion over 61 samples was p95 681.6s / max 695.5s, so the old 900s
+    # left only 1.3x headroom and produced 8 pr_checks_timeout events.
     pr_checks_timeout_s: int = field(
-        default_factory=lambda: int(os.getenv("PR_CHECKS_TIMEOUT_S", "900"))
+        default_factory=lambda: int(os.getenv("PR_CHECKS_TIMEOUT_S", "1200"))
     )
     pr_checks_poll_interval_s: int = field(
         default_factory=lambda: int(os.getenv("PR_CHECKS_POLL_INTERVAL_S", "20"))
     )
+    # M4c.0: check runs register within one poll interval — 67 samples, max
+    # 22.6s. 120s is 5x that ceiling and fast-fails a check-less PR at 240s
+    # instead of 360s.
     pr_checks_empty_grace_s: int = field(
-        default_factory=lambda: int(os.getenv("PR_CHECKS_EMPTY_GRACE_S", "180"))
+        default_factory=lambda: int(os.getenv("PR_CHECKS_EMPTY_GRACE_S", "120"))
     )
     # Check runs whose NAME contains any of these (case-insensitive) substrings
     # are advisory: their conclusion is reported but never blocks a merge.
@@ -233,11 +244,19 @@ class RunnerConfig:
     max_worker_timeouts: int = field(
         default_factory=lambda: int(os.getenv("MAX_WORKER_TIMEOUTS", "3"))
     )
+    # M4c.0 calibration: 570s sat below the observed p90 of healthy worker runs
+    # (606.4s), so 22/181 successful runs — 12.2% — were classified as timeouts
+    # the CLI never caused. The threshold now sits *above* the CLI ceiling, so
+    # only a genuine hard kill can be labelled a timeout. Invariant 1 in
+    # tools/config_invariants.py enforces that ordering.
     worker_timeout_threshold: int = field(
-        default_factory=lambda: int(os.getenv("WORKER_TIMEOUT_THRESHOLD", "570"))
+        default_factory=lambda: int(os.getenv("WORKER_TIMEOUT_THRESHOLD", "2700"))
     )
+    # M4c.0: worker p95 was 755.1s overall and 1653.4s for `test` tasks, and the
+    # old 1800s ceiling right-censored the distribution (a run finished at
+    # exactly 1800.3s). 2400s clears the `test` p95 with ~45% headroom.
     claude_cli_timeout_s: int = field(
-        default_factory=lambda: int(os.getenv("CLAUDE_CLI_TIMEOUT_S", "1800"))
+        default_factory=lambda: int(os.getenv("CLAUDE_CLI_TIMEOUT_S", "2400"))
     )
     cost_budget_guard_enabled: bool = field(
         default_factory=lambda: os.getenv("COST_BUDGET_GUARD", "true").lower() == "true"
@@ -441,12 +460,23 @@ class RunnerConfig:
     stale_run_watchdog_enabled: bool = field(
         default_factory=lambda: os.getenv("STALE_RUN_WATCHDOG", "true").lower() == "true"
     )
+    # M4c.0: 60 min killed sessions that were working correctly — observed
+    # end-to-end task duration reached 41.1 min, and the worst legitimate
+    # single attempt (45 min worker ceiling + 11.6 min PR checks + deploy +
+    # backoff) is ~70 min. 120 min clears that and still bounds a dead loop.
     max_stale_task_minutes: int = field(
-        default_factory=lambda: int(os.getenv("MAX_STALE_TASK_MINUTES", "60"))
+        default_factory=lambda: int(os.getenv("MAX_STALE_TASK_MINUTES", "120"))
     )
+    # M4c.0: the old 30 min warning fired on legitimate 30.0 and 34.0 min gaps.
     stale_run_warn_minutes: int = field(
-        default_factory=lambda: int(os.getenv("STALE_RUN_WARN_MINUTES", "30"))
+        default_factory=lambda: int(os.getenv("STALE_RUN_WARN_MINUTES", "75"))
     )
+    # M4c.0: measured and retained. Retries are rare (30 task_retry_scheduled
+    # events across the whole log), so there is no duration distribution to fit
+    # — these bounds are governed by a budget instead: at MAX_TASK_ATTEMPTS=3
+    # the waits are 30s then 60s and the 300s cap is never reached, and the
+    # worst case (2700 + 300*2 = 3300s) fits inside the 7200s stale window.
+    # Invariant 6 in tools/config_invariants.py enforces that budget.
     failure_retry_backoff_enabled: bool = field(
         default_factory=lambda: os.getenv("FAILURE_RETRY_BACKOFF", "true").lower() == "true"
     )
@@ -658,6 +688,16 @@ class RunnerConfig:
             "claude_subscription_cooldown_wait_s": self.claude_subscription_cooldown_wait_s,
             "claude_subscription_cooldown_max_waits": self.claude_subscription_cooldown_max_waits,
         }
+
+    def threshold_violations(self) -> list:
+        """Ordering invariants between the nested timeout windows.
+
+        Imported lazily: ``tools/`` modules import ``config``, so a top-level
+        import here would close the cycle.
+        """
+        from tools.config_invariants import check_threshold_invariants
+
+        return check_threshold_invariants(self.report())
 
 
 _config: Optional[RunnerConfig] = None

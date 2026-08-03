@@ -305,13 +305,13 @@ Copy `.env.example` to `.env` and fill in:
 | `BUCKS_AI_REPO_PATH` | Path to repo (default: `/home/arnavt/bucks-ai`) |
 | `RUNNER_MODE` | `browser_or_cli` (default) |
 | `MAX_LOOP_TASKS` | Max tasks per run (default: 10) |
-| `MAX_RUNTIME_MINUTES` | Max runtime (default: 480) |
+| `MAX_RUNTIME_MINUTES` | Max session runtime in minutes; must stay above `MAX_STALE_TASK_MINUTES` so a stuck loop reports `stale_run` rather than `max_runtime` (default: 480 — calibrated: observed sessions spanned at most 203 min, see `docs/M4C0-THRESHOLD-CALIBRATION.md`) |
 | `AUTO_MERGE` | Auto-merge on check pass (default: true) |
 | `AUTO_CLEANUP_BRANCHES` | Delete local and remote feature branches after successful auto-merge (default: true) |
 | `MERGE_VIA_PR` | Merge through a GitHub pull request + the checks/merge API instead of a local `git merge` + direct push to `main` (default: true — required when `main` has branch protection with required status checks). Set `false` only for lab repos without branch protection, to fall back to the old direct-merge path unchanged. |
-| `PR_CHECKS_TIMEOUT_S` | Max seconds to poll a PR's check runs before giving up (default: 900) |
+| `PR_CHECKS_TIMEOUT_S` | Max seconds to poll a PR's check runs before giving up (default: 1200 — calibrated from observed check completion p95 681.6s / max 695.5s) |
 | `PR_CHECKS_POLL_INTERVAL_S` | Seconds between check-run polls (default: 20) |
-| `PR_CHECKS_EMPTY_GRACE_S` | Seconds to wait with zero check runs scheduled before attempting recovery (querying mergeable state and refreshing the branch); a further wait of the same length with still-zero runs fails fast with `pr_checks_no_runs` (default: 180) |
+| `PR_CHECKS_EMPTY_GRACE_S` | Seconds to wait with zero check runs scheduled before attempting recovery (querying mergeable state and refreshing the branch); a further wait of the same length with still-zero runs fails fast with `pr_checks_no_runs`; must satisfy `PR_CHECKS_EMPTY_GRACE_S * 2 < PR_CHECKS_TIMEOUT_S` (default: 120 — calibrated from observed check-registration latency, max 22.6s over 67 samples) |
 | `PR_CHECKS_NON_BLOCKING` | Comma-separated, case-insensitive substrings; any check run whose **name** contains one is advisory — its conclusion is logged (`pr_checks_advisory_failed`) but never blocks a merge (default: `[informational]`). Branch protection remains the authority on what actually gates merges |
 | `AUTO_DEPLOY` | Auto-trigger Vercel (default: true) |
 | `AUTO_DEPLOY_POLL` | Poll the triggered deployment until it finishes (default: true) |
@@ -369,25 +369,51 @@ Copy `.env.example` to `.env` and fill in:
 | `MAX_TASK_RETRIES` | Times a failed task is requeued before giving up (default: 1) |
 | `MAX_CONSECUTIVE_FAILURES` | Consecutive failures that trip the circuit breaker and halt the loop (default: 3) |
 | `MAX_TASK_ATTEMPTS` | Times a single task ID can be run within one run-loop session before the repeated-task guard halts the loop; counts reset at the start of every run-loop session, so a task never carries attempts over from a previous session; 0 disables the guard (default: 3) |
+| `WORKER_TIMEOUT_GUARD` | Classify an over-long worker run as a timeout and halt after `MAX_WORKER_TIMEOUTS` of them (default: true) |
+| `MAX_WORKER_TIMEOUTS` | Worker timeouts in one session before the guard halts the loop (default: 3) |
+| `WORKER_TIMEOUT_THRESHOLD` | Elapsed seconds at or above which a finished worker run is *classified* as a timeout. Must exceed `CLAUDE_CLI_TIMEOUT_S` — otherwise it labels healthy long runs the CLI never killed (default: 2700 — the old 570 did exactly that to 12.2% of successful runs) |
+| `CLAUDE_CLI_TIMEOUT_S` | Seconds before the Claude CLI subprocess is hard-killed — the real ceiling on a worker run (default: 2400 — calibrated from worker p95 755.1s overall, 1653.4s for `test` tasks) |
 | `MAX_REPEATED_ERRORS` | Occurrences of the same (or near-identical) error message within one session before the repeated-error guard halts the loop; 0 disables the guard (default: 3) |
 | `REPEATED_ERROR_WINDOW` | How many recent failures the repeated-error guard looks back across when counting matches; 0 means unbounded (default: 10) |
 | `FAILURE_RETRY_BACKOFF` | Apply exponential backoff before retrying under degraded worker conditions (timeout, health-probe failure, or sustained consecutive failures) (default: true) |
 | `FAILURE_RETRY_BACKOFF_BASE_S` | Base backoff delay in seconds for the first degraded retry (default: 30.0) |
 | `FAILURE_RETRY_BACKOFF_MULTIPLIER` | Exponential multiplier applied per retry attempt (default: 2.0) |
-| `FAILURE_RETRY_BACKOFF_MAX_S` | Maximum backoff delay cap in seconds (default: 300.0) |
+| `FAILURE_RETRY_BACKOFF_MAX_S` | Maximum backoff delay cap in seconds; the worst case `WORKER_TIMEOUT_THRESHOLD + this * (MAX_TASK_ATTEMPTS - 1)` must fit inside the stale-run window (default: 300.0) |
 | `LOOP_START_PREFLIGHT` | Refuse `run-loop` when the runner repo is on a non-main branch or has a dirty working tree; workers inherit that tree and cannot tell intended state from in-flight edits. Set false only for deliberate local experiments (default: true) |
 | `WORKER_HEALTH_PROBE` | Check that the chosen worker's CLI binary and credentials are available before each dispatch; halts the loop immediately if the worker cannot start (default: true) |
 | `WORKER_HEALTH_LIVE_PING` | After the static binary/credential check passes, run the worker CLI with `--version` in a subprocess to confirm it actually starts; adds ~100–500 ms per dispatch; default off — enable when diagnosing flaky worker startups (default: false) |
 | `WORKER_HEALTH_LIVE_PING_TIMEOUT_S` | Seconds before the live-ping subprocess is forcibly killed; applies only when `WORKER_HEALTH_LIVE_PING=true` (default: 10.0) |
 | `STALE_RUN_WATCHDOG` | Halt the loop when no task has completed within `MAX_STALE_TASK_MINUTES` of the previous completion, preventing infinite spin during overnight runs (default: true) |
-| `MAX_STALE_TASK_MINUTES` | Minutes of task-completion inactivity before the stale run watchdog trips; 0 disables the watchdog (default: 60) |
-| `STALE_RUN_WARN_MINUTES` | Minutes of inactivity before a Slack warning fires ahead of the hard stop; 0 disables the warning (default: 30) |
+| `MAX_STALE_TASK_MINUTES` | Minutes of task-completion inactivity before the stale run watchdog trips; 0 disables the watchdog (default: 120 — calibrated: observed end-to-end task duration reaches 41.1 min, and the old 60 killed sessions that were working correctly) |
+| `STALE_RUN_WARN_MINUTES` | Minutes of inactivity before a Slack warning fires ahead of the hard stop; must be below `MAX_STALE_TASK_MINUTES` or it never fires; 0 disables the warning (default: 75 — the old 30 fired on legitimate 30.0 and 34.0 min gaps) |
+
 | `LIVE_BATCH_VALIDATION_REPORT` | Emit a final structured report (task outcomes, session metrics, per-task digest) to outbox/ when the loop stops; logged as `live_batch_validation_complete` and forwarded to Slack when enabled (default: true) |
 | `CONTEXT_COMPRESSION_MAX_TOKENS` | Soft token ceiling for persisted runner messages before older context is compressed (default: 12000) |
 | `CONTEXT_COMPRESSION_KEEP_RECENT` | Number of newest messages to preserve verbatim during compression (default: 4) |
 | `CLAUDE_SUBSCRIPTION_COOLDOWN` | When Claude in subscription mode returns a rate-limit/cooldown response, automatically wait until the cooldown expires and resume rather than failing the task (default: true) |
 | `CLAUDE_SUBSCRIPTION_COOLDOWN_WAIT_S` | Default cooldown wait in seconds when the reset time cannot be parsed from the Claude response (default: 3600) |
 | `CLAUDE_SUBSCRIPTION_COOLDOWN_MAX_WAITS` | Maximum number of auto-resume cooldown waits per session before halting the loop; 0 disables the limit (default: 3) |
+
+#### Threshold ordering invariants
+
+These timeouts are nested windows, not independent knobs, so `setup`,
+`run-once` and `run-loop` validate their ordering at startup and **refuse to
+start** — printing the exact fix — when one is violated
+(`tools/config_invariants.py`):
+
+1. `CLAUDE_CLI_TIMEOUT_S < WORKER_TIMEOUT_THRESHOLD`
+2. `WORKER_TIMEOUT_THRESHOLD < MAX_STALE_TASK_MINUTES * 60`
+3. `PR_CHECKS_EMPTY_GRACE_S * 2 < PR_CHECKS_TIMEOUT_S`
+4. `STALE_RUN_WARN_MINUTES < MAX_STALE_TASK_MINUTES`
+5. `MAX_STALE_TASK_MINUTES < MAX_RUNTIME_MINUTES`
+6. `WORKER_TIMEOUT_THRESHOLD + FAILURE_RETRY_BACKOFF_MAX_S * (MAX_TASK_ATTEMPTS - 1) < MAX_STALE_TASK_MINUTES * 60`
+
+A violation does not raise anything at the time — it mis-behaves hours later
+somewhere that points nowhere near the cause, which is why it is a startup
+error rather than a warning. The defaults are derived from observed run
+history; regenerate the analysis with `python -m tools.threshold_calibration`
+and see `docs/M4C0-THRESHOLD-CALIBRATION.md` for the data behind each value.
+
 
 ---
 
@@ -407,9 +433,11 @@ Key differences from the standard defaults:
 | `MAX_CONSECUTIVE_FAILURES` | 2 | 3 | Fail fast to avoid wasting the night |
 | `MAX_TASK_RETRIES` | 2 | 1 | Extra retry for transient failures |
 | `FAILURE_RETRY_BACKOFF_MAX_S` | 600 | 300 | Up to 10 min between retries |
+| `CLAUDE_CLI_TIMEOUT_S` | 2400 | 2400 | Pinned explicitly so the profile's worker-timeout ordering is self-evident |
+| `WORKER_TIMEOUT_THRESHOLD` | 2700 | 2700 | Same as default since M4c.0 calibration |
 | `WORKER_HEALTH_LIVE_PING` | true | false | Catch broken environments immediately |
-| `STALE_RUN_WARN_MINUTES` | 45 | 30 | Earlier Slack warning |
-| `MAX_STALE_TASK_MINUTES` | 90 | 60 | Allow longer individual tasks |
+| `STALE_RUN_WARN_MINUTES` | 75 | 75 | Same as default since M4c.0 calibration |
+| `MAX_STALE_TASK_MINUTES` | 120 | 120 | Same as default since M4c.0 calibration |
 | `MAX_SESSION_COST_DOLLARS` | 25.0 | 0 | Overnight cost ceiling |
 | `STRATEGIC_PAUSE_INTERVAL` | 5 | 0 | Re-evaluate direction every 5 tasks |
 | `HTTP_RETRY_ATTEMPTS` | 5 | 3 | Ride out overnight network blips |
@@ -620,10 +648,10 @@ merges through a pull request instead:
    retried task), that PR is reused instead of creating a duplicate.
 3. `poll_pr_checks` — poll `GET /repos/{repo}/commits/{sha}/check-runs` every
    `PR_CHECKS_POLL_INTERVAL_S` seconds (default 20) until every check run is
-   `completed`, or `PR_CHECKS_TIMEOUT_S` seconds (default 900) elapse.
+   `completed`, or `PR_CHECKS_TIMEOUT_S` seconds (default 1200) elapse.
    Success requires every run's conclusion to be `success` or `skipped`. If
    check runs are still empty (never scheduled — e.g. a dropped GitHub Actions
-   webhook) after `PR_CHECKS_EMPTY_GRACE_S` seconds (default 180), the PR's
+   webhook) after `PR_CHECKS_EMPTY_GRACE_S` seconds (default 120), the PR's
    mergeable state is queried; if it is `dirty` (conflicting) or `behind`, the
    branch is refreshed once via `PUT /pulls/{number}/update-branch` (logged as
    `pr_branch_updated`) to re-trigger workflows, and polling continues. If
