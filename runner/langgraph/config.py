@@ -145,6 +145,17 @@ class RunnerConfig:
     pr_checks_empty_grace_s: int = field(
         default_factory=lambda: int(os.getenv("PR_CHECKS_EMPTY_GRACE_S", "180"))
     )
+    # Check runs whose NAME contains any of these (case-insensitive) substrings
+    # are advisory: their conclusion is reported but never blocks a merge.
+    # Branch protection is the authority on what actually blocks; a job that is
+    # informational by design (M2's Vercel-preview E2E) must not gate the runner.
+    pr_checks_non_blocking: list = field(
+        default_factory=lambda: [
+            s.strip().lower()
+            for s in os.getenv("PR_CHECKS_NON_BLOCKING", "[informational]").split(",")
+            if s.strip()
+        ]
+    )
     auto_deploy: bool = field(
         default_factory=lambda: os.getenv("AUTO_DEPLOY", "true").lower() == "true"
     )
@@ -530,6 +541,7 @@ class RunnerConfig:
             "pr_checks_timeout_s": self.pr_checks_timeout_s,
             "pr_checks_poll_interval_s": self.pr_checks_poll_interval_s,
             "pr_checks_empty_grace_s": self.pr_checks_empty_grace_s,
+            "pr_checks_non_blocking": self.pr_checks_non_blocking,
             "auto_deploy": self.auto_deploy,
             "auto_deploy_poll": self.auto_deploy_poll,
             "block_on_deploy_failure": self.block_on_deploy_failure,

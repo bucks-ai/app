@@ -67,11 +67,15 @@ class _FakeConfig:
     """Minimal stand-in for RunnerConfig, used to isolate github_tools tests
     from the real process-wide config singleton."""
 
-    def __init__(self, github_token="test-token", timeout=900, interval=20, empty_grace=180):
+    def __init__(self, github_token="test-token", timeout=900, interval=20, empty_grace=180,
+                 non_blocking=None):
         self.github_token = github_token
         self.pr_checks_timeout_s = timeout
         self.pr_checks_poll_interval_s = interval
         self.pr_checks_empty_grace_s = empty_grace
+        self.pr_checks_non_blocking = (
+            ["[informational]"] if non_blocking is None else non_blocking
+        )
 
     @property
     def has_github(self):
