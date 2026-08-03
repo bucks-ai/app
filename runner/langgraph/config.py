@@ -54,7 +54,17 @@ _DEFAULT_SLACK_EVENTS = frozenset({
     "analytics_report_ready",
     "migrations_pending",
     "migration_applied",
+    "gate_blocked",
 })
+
+
+def _normalize_gate_block_scope(raw: Optional[str]) -> str:
+    # tools/gate_authority owns the vocabulary; imported lazily so config.py
+    # stays importable on its own (tools/__init__.py is empty, so there is no
+    # cycle — this just keeps the module's import surface honest).
+    from tools.gate_authority import normalize_policy
+
+    return normalize_policy(raw)
 
 
 def _load_slack_events() -> frozenset:
@@ -191,6 +201,13 @@ class RunnerConfig:
     )
     resource_gate_enabled: bool = field(
         default_factory=lambda: os.getenv("RESOURCE_GATE", "true").lower() == "true"
+    )
+    # How wide a gate's block reaches. "proportionate" (default) honours each
+    # gate's declared scope in tools/gate_authority.py, so a gate judging one
+    # task skips that task and lets the loop continue; "loop" restores the
+    # pre-M4c.0 behaviour where every gate block stops the whole run.
+    gate_block_scope: str = field(
+        default_factory=lambda: _normalize_gate_block_scope(os.getenv("GATE_BLOCK_SCOPE"))
     )
     failure_guard_enabled: bool = field(
         default_factory=lambda: os.getenv("FAILURE_GUARD", "true").lower() == "true"
@@ -554,6 +571,7 @@ class RunnerConfig:
             "sql_approval_policy": self.sql_approval_policy,
             "auto_apply_migrations": self.auto_apply_migrations,
             "resource_gate_enabled": self.resource_gate_enabled,
+            "gate_block_scope": self.gate_block_scope,
             "failure_guard_enabled": self.failure_guard_enabled,
             "max_task_retries": self.max_task_retries,
             "max_consecutive_failures": self.max_consecutive_failures,

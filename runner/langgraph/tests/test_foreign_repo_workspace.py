@@ -424,7 +424,9 @@ def test_node_missing_secret_blocks_and_writes_resource_request():
         finally:
             graph.fetch_business_by_id = original_fetch
             graph.prepare_business_repo = original_prepare
-        assert out.stop_reason == "awaiting_resources"
+        # M4c.0: task-scoped — the task is set aside, the run continues.
+        assert out.stop_reason is None, out.stop_reason
+        assert out.resource_request_status == "pending", out.resource_request_status
         req_file = outbox / "t1_resource_request.txt"
         assert req_file.exists()
         text = req_file.read_text()
@@ -472,7 +474,8 @@ def test_node_no_sandbox_config_blocks_as_resource_request():
         finally:
             graph.fetch_business_by_id = original_fetch
             graph.prepare_business_repo = original_prepare
-        assert out.stop_reason == "awaiting_resources"
+        assert out.stop_reason is None, out.stop_reason
+        assert out.resource_request_status == "pending", out.resource_request_status
         req_file = outbox / "t1_resource_request.txt"
         assert req_file.exists()
         assert "business_sandbox" in req_file.read_text()

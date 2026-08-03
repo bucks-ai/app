@@ -80,6 +80,7 @@ class RunnerState(BaseModel):
     sql_scan: Optional[dict] = None
     sql_approval_status: Optional[str] = None  # pending | approved | rejected | None
     resource_request_status: Optional[str] = None  # pending | fulfilled | None
+    gate_skipped_task_count: int = 0  # tasks set aside by a task-scoped gate block this session (M4c.0)
     retry_pending: Optional[bool] = None  # a failed task was requeued for retry this loop
     error_history: list[dict] = Field(default_factory=list)  # recent {error, task_id} records
     task_attempt_counts: dict = Field(default_factory=dict)   # task_id → run count this session

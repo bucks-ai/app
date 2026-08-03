@@ -35,7 +35,13 @@ from tools.claude_subscription_cooldown import evaluate_subscription_cooldown
 from tools.cost_budget_guard import evaluate_cost_budget
 from tools.summary_tools import build_run_summary_digest, parse_worker_summary
 from tools.context_compression import compress_messages
-from tools.resource_gate import collect_requests, evaluate_gate, format_request_file
+from tools.resource_gate import (
+    available_credential_names,
+    collect_requests,
+    evaluate_gate,
+    format_request_file,
+)
+from tools.gate_authority import authority_payload, evaluate_gate_block
 from tools.rollback_revert_policy import (
     evaluate_rollback_revert_policy,
     format_recovery_plan,
@@ -202,6 +208,64 @@ def _persist(state: RunnerState, step: str) -> RunnerState:
     state.updated_at = datetime.utcnow().isoformat()
     update_state(_state_dict(state))
     return state
+
+
+def _record_gate_block(
+    state: RunnerState,
+    gate: str,
+    *,
+    event: str,
+    payload: dict,
+    stop_reason: str,
+    task_id: Optional[str] = None,
+    systemic: bool = False,
+    pre_completion: bool = True,
+) -> dict:
+    """Apply a gate's block with the proportionality policy from gate_authority (M4c.0).
+
+    Loop-scoped gates set ``stop_reason`` as before. Task-scoped gates leave
+    ``stop_reason`` clear so ``decide_continue_or_stop`` routes back to
+    ``load_next_task``: the offending task has already been marked
+    failed/blocked by its gate, so the loop picks up the next one instead of
+    letting one blocked task strand nine healthy ones.
+
+    Every block — whichever scope — logs which authority the gate consulted.
+
+    ``systemic`` escalates a normally task-scoped gate when the evidence is
+    run-level (e.g. the session spend cap rather than one task's).
+
+    ``pre_completion`` says the gate fired *before* the task finished, so a
+    task-scoped block genuinely sets the task aside and short-circuits to
+    ``decide_continue_or_stop`` without passing through
+    ``update_logs_and_state``. Pass False for gates evaluated inside that node:
+    the task has already run and been counted, so there is nothing to skip.
+    """
+    decision = evaluate_gate_block(gate, systemic=systemic, policy=cfg.gate_block_scope)
+    log_event(event, {**payload, **decision["payload"]}, task_id=task_id)
+
+    if decision["halt_loop"]:
+        if not state.stop_reason:
+            state.stop_reason = stop_reason
+        return decision
+
+    log_event("gate_block_task_scoped", {
+        **decision["payload"],
+        "task_id": task_id,
+        "would_have_stopped_with": stop_reason,
+        "message": (
+            f"{gate} blocked this task only; the loop continues with the next "
+            "queued task."
+        ),
+    }, task_id=task_id)
+    if pre_completion:
+        # This block short-circuits to decide_continue_or_stop and never reaches
+        # update_logs_and_state, so count the loop here — otherwise a run of
+        # skipped tasks would neither respect MAX_LOOP_TASKS nor look alive to
+        # the stale-run watchdog.
+        state.gate_skipped_task_count += 1
+        state.loop_count += 1
+        state.last_task_completed_at = datetime.utcnow().isoformat()
+    return decision
 
 
 def _effective_repo_path(state: RunnerState) -> str:
@@ -428,6 +492,40 @@ def check_pending_migrations_if_needed(state: RunnerState) -> RunnerState:
     return _persist(state, "check_pending_migrations_if_needed")
 
 
+# Per-task verdict fields. Every one of these drives a `_route_after_*` decision
+# or is read by a downstream node, and every one describes the task that just
+# ran. Before M4c.0 a pending/failed verdict always ended the run, so a stale
+# value could never reach the next task; now that a task-scoped gate block lets
+# the loop continue, they must be cleared when a new task is loaded — otherwise
+# one task blocked on, say, a credential would route every subsequent task
+# straight back to decide_continue_or_stop without ever dispatching a worker.
+# Session-level counters (loop_count, session_cost, strategic_*, error_history,
+# …) are deliberately NOT in this list.
+_TASK_SCOPED_STATE_DEFAULTS = {
+    "acceptance_criteria_status": None,
+    "definition_of_done_status": None,
+    "code_review_status": None,
+    "high_risk_review_status": None,
+    "codex_escalation_status": None,
+    "resource_request_status": None,
+    "merge_approval_status": None,
+    "merge_risk_level": None,
+    "sql_approval_status": None,
+    "sql_scan": None,
+    "check_passed": None,
+    "check_output": None,
+    "auto_repair_attempt": 0,
+    "auto_repair_status": None,
+    "retry_pending": None,
+}
+
+
+def _reset_task_scoped_state(state: RunnerState) -> None:
+    """Clear the previous task's verdicts before a new task starts."""
+    for field_name, default in _TASK_SCOPED_STATE_DEFAULTS.items():
+        setattr(state, field_name, default)
+
+
 def load_next_task(state: RunnerState) -> RunnerState:
     # Auto-requeue any blocked task whose resource fulfillment file has
     # landed in inbox/ (written by the approvals daemon or by hand).
@@ -475,6 +573,7 @@ def load_next_task(state: RunnerState) -> RunnerState:
                 "task_id": task["id"],
                 "branch": safe_branch,
             }, task_id=task["id"])
+        _reset_task_scoped_state(state)
         state.current_task = task
         state.current_task_id = task["id"]
         log_event("task_loaded", {"task": task}, task_id=task["id"])
@@ -815,14 +914,20 @@ def resolve_business_repo_if_needed(state: RunnerState) -> RunnerState:
         gate = evaluate_gate({"credentials_needed": [secret_name], "resources_needed": []}, provided=provided_path.exists())
         if gate["blocked"]:
             state.resource_request_status = "pending"
-            state.stop_reason = "awaiting_resources"
             mark_task_blocked(task_id, f"awaiting GitHub token secret: {secret_name}")
-            log_event("resource_request_waiting", {
-                "task_id": task_id,
-                "message": f"Waiting for fulfillment file: {provided_path}",
-                "credentials_needed": [secret_name],
-                "resources_needed": [],
-            }, task_id=task_id)
+            _record_gate_block(
+                state,
+                "resource_credential",
+                event="resource_request_waiting",
+                payload={
+                    "task_id": task_id,
+                    "message": f"Waiting for fulfillment file: {provided_path}",
+                    "credentials_needed": [secret_name],
+                    "resources_needed": [],
+                },
+                stop_reason="awaiting_resources",
+                task_id=task_id,
+            )
         else:
             state.resource_request_status = "fulfilled"
             log_event("resource_request_fulfilled", {"task_id": task_id, "count": 1}, task_id=task_id)
@@ -839,8 +944,21 @@ def resolve_business_repo_if_needed(state: RunnerState) -> RunnerState:
                 task["business_github_token_secret_name"] = retry["github_token_secret_name"]
                 state.current_task = task
             else:
-                state.stop_reason = "awaiting_resources"
+                state.resource_request_status = "pending"
                 mark_task_blocked(task_id, f"still awaiting GitHub token secret: {secret_name}")
+                _record_gate_block(
+                    state,
+                    "resource_credential",
+                    event="resource_request_waiting",
+                    payload={
+                        "task_id": task_id,
+                        "message": f"Fulfillment signalled but {secret_name} is still not resolvable",
+                        "credentials_needed": [secret_name],
+                        "resources_needed": [],
+                    },
+                    stop_reason="awaiting_resources",
+                    task_id=task_id,
+                )
         return _persist(state, "resolve_business_repo_if_needed")
 
     # no_sandbox_config / workspace_error — actionable, but not a security
@@ -866,8 +984,20 @@ def resolve_business_repo_if_needed(state: RunnerState) -> RunnerState:
             "fulfill_by": str(provided_path),
         }, task_id=task_id)
     state.resource_request_status = "pending"
-    state.stop_reason = "awaiting_resources"
     mark_task_blocked(task_id, f"business repo unavailable: {reason}")
+    _record_gate_block(
+        state,
+        "resource_credential",
+        event="resource_request_waiting",
+        payload={
+            "task_id": task_id,
+            "message": f"Waiting for fulfillment file: {provided_path}",
+            "credentials_needed": [],
+            "resources_needed": [resource_label],
+        },
+        stop_reason="awaiting_resources",
+        task_id=task_id,
+    )
     return _persist(state, "resolve_business_repo_if_needed")
 
 
@@ -879,7 +1009,9 @@ def check_acceptance_criteria(state: RunnerState) -> RunnerState:
     - Non-strict mode (default): logs a warning when criteria are missing but
       allows the task to proceed.
     - Strict mode (ACCEPTANCE_CRITERIA_STRICT_MODE=true): marks the task failed
-      and sets stop_reason so the loop stops cleanly.
+      and skips it. The authority here is the task record itself, and one
+      under-specified task says nothing about the next one — so the block is
+      task-scoped and the loop moves on (M4c.0).
     """
     if not cfg.acceptance_criteria_gate_enabled:
         return state
@@ -896,10 +1028,17 @@ def check_acceptance_criteria(state: RunnerState) -> RunnerState:
     elif cfg.acceptance_criteria_strict_mode:
         state.acceptance_criteria_status = "failed"
         task_id = state.current_task_id or "unknown"
-        state.stop_reason = "missing_acceptance_criteria"
         mark_task_failed(
             task_id,
             "missing acceptance criteria: " + "; ".join(result["issues"]),
+        )
+        _record_gate_block(
+            state,
+            "acceptance_criteria",
+            event="gate_blocked",
+            payload={"task_id": task_id, "issues": result["issues"]},
+            stop_reason="missing_acceptance_criteria",
+            task_id=task_id,
         )
     else:
         state.acceptance_criteria_status = "warned"
@@ -1046,11 +1185,12 @@ def dispatch_worker(state: RunnerState) -> RunnerState:
             }, task_id=state.current_task_id)
             if not state.stop_reason:
                 state.stop_reason = hp["stop_reason"]
-                log_event("loop_blocked_on_worker_health", {
-                    "worker": worker_type,
-                    "reason": hp["reason"],
-                    "task_id": state.current_task_id,
-                }, task_id=state.current_task_id)
+                log_event("loop_blocked_on_worker_health", authority_payload(
+                    "worker_health",
+                    worker=worker_type,
+                    reason=hp["reason"],
+                    task_id=state.current_task_id,
+                ), task_id=state.current_task_id)
             state.worker_elapsed_seconds = 0.0
             state.worker_result = {
                 "worker": worker_type,
@@ -1211,7 +1351,9 @@ def check_definition_of_done(state: RunnerState) -> RunnerState:
     - Non-strict mode (default): logs a warning on DoD failure but lets the
       loop continue to commit/deploy.
     - Strict mode (DEFINITION_OF_DONE_STRICT_MODE=true): marks the task failed
-      and sets stop_reason so the loop stops cleanly.
+      and skips it. check.sh/CI is the authority on whether the work is sound;
+      this heuristic is a second opinion about one task's output, so the block
+      is task-scoped and the loop moves on (M4c.0).
     """
     if not cfg.definition_of_done_gate_enabled:
         return state
@@ -1241,10 +1383,17 @@ def check_definition_of_done(state: RunnerState) -> RunnerState:
     elif cfg.definition_of_done_strict_mode:
         state.definition_of_done_status = "failed"
         task_id = state.current_task_id or "unknown"
-        state.stop_reason = "definition_of_done_not_met"
         mark_task_failed(
             task_id,
             "definition of done not met: " + "; ".join(decision["issues"]),
+        )
+        _record_gate_block(
+            state,
+            "definition_of_done",
+            event="gate_blocked",
+            payload={"task_id": task_id, "issues": decision["issues"]},
+            stop_reason="definition_of_done_not_met",
+            task_id=task_id,
         )
     else:
         state.definition_of_done_status = "warned"
@@ -1258,7 +1407,9 @@ def check_independent_code_review(state: RunnerState) -> RunnerState:
     After check.sh passes, re-examines the actual git diff and worker summary
     for scope creep, .env modifications, and secret leaks — independent of the
     worker's own self-report. When INDEPENDENT_CODE_REVIEW_STRICT_MODE=true, a
-    failed review marks the task failed and halts the loop before any commit.
+    failed review marks the task failed and skips it before any commit — CI and
+    branch protection remain the authority on what merges, and a rejected diff
+    blocks only its own task, not the loop (M4c.0).
     """
     if not cfg.independent_code_review_enabled:
         return state
@@ -1284,10 +1435,17 @@ def check_independent_code_review(state: RunnerState) -> RunnerState:
     elif cfg.independent_code_review_strict_mode:
         state.code_review_status = "failed"
         task_id = state.current_task_id or "unknown"
-        state.stop_reason = "code_review_rejected"
         mark_task_failed(
             task_id,
             "independent code review rejected: " + "; ".join(decision["issues"]),
+        )
+        _record_gate_block(
+            state,
+            "independent_code_review",
+            event="gate_blocked",
+            payload={"task_id": task_id, "issues": decision["issues"]},
+            stop_reason="code_review_rejected",
+            task_id=task_id,
         )
     else:
         state.code_review_status = "warned"
@@ -1305,8 +1463,9 @@ def check_high_risk_claude_review(state: RunnerState) -> RunnerState:
 
     The gate calls the Anthropic API to get a verdict (APPROVED / NEEDS_REVIEW /
     REJECTED). When ``HIGH_RISK_CLAUDE_REVIEW_STRICT_MODE=true`` (default: false),
-    a non-APPROVED verdict marks the task failed and halts the loop before any
-    commit. Otherwise the verdict is logged as a warning and the loop continues.
+    a non-APPROVED verdict marks the task failed and skips it before any commit.
+    The verdict is about one diff and the model can be wrong, so the block is
+    task-scoped (M4c.0). Otherwise the verdict is logged as a warning.
 
     The gate is silently skipped when:
     - ``HIGH_RISK_CLAUDE_REVIEW_ENABLED=false``
@@ -1341,10 +1500,17 @@ def check_high_risk_claude_review(state: RunnerState) -> RunnerState:
     elif cfg.high_risk_claude_review_strict_mode:
         state.high_risk_review_status = "failed"
         task_id = state.current_task_id or "unknown"
-        state.stop_reason = "high_risk_review_rejected"
         mark_task_failed(
             task_id,
             "high-risk review rejected: " + "; ".join(decision["issues"]),
+        )
+        _record_gate_block(
+            state,
+            "high_risk_review",
+            event="gate_blocked",
+            payload={"task_id": task_id, "issues": decision["issues"]},
+            stop_reason="high_risk_review_rejected",
+            task_id=task_id,
         )
     else:
         state.high_risk_review_status = "warned"
@@ -1356,27 +1522,47 @@ def request_resources_if_needed(state: RunnerState) -> RunnerState:
     """Resource & credential request gate.
 
     When the worker reports it needs a credential (API key / token / secret) or
-    an external resource it doesn't have, pause the loop and surface a
+    an external resource it doesn't have, set the task aside and surface a
     human-actionable request — instead of committing/deploying incomplete work or
     looping past the gap. Mirrors the SQL approval gate: the request is written to
-    ``outbox/`` and the loop only proceeds once a fulfillment file lands in
-    ``inbox/``. Runs regardless of worker success, so a worker that failed *for
-    lack of a credential* surfaces a request rather than a bare failure.
+    ``outbox/`` and the task resumes once a fulfillment file lands in ``inbox/``.
+    Runs regardless of worker success, so a worker that failed *for lack of a
+    credential* surfaces a request rather than a bare failure.
+
+    Two M4c.0 corrections. First, the runner's own config/env is the authority on
+    whether a credential exists, so names already provisioned there are filtered
+    out before anything is written — during M2 and M4b this gate repeatedly
+    halted the whole run asking for VERCEL_TOKEN and VERCEL_PROJECT_ID that were
+    in ``.env`` the entire time. Second, the block is task-scoped: the task is
+    marked ``blocked`` and the loop continues with the next queued task.
 
     Only credential/resource *names* are ever written or logged — never values
-    (see tools/resource_gate.py). When blocked, the task is marked ``blocked`` and
-    ``stop_reason`` halts the loop at ``decide_continue_or_stop``.
+    (see tools/resource_gate.py).
     """
     if not cfg.resource_gate_enabled:
         return state
 
     summary = state.worker_summary or {}
-    requests = collect_requests(summary)
+    task_id = state.current_task_id or "unknown"
+    available = available_credential_names(config=cfg)
+    requests = collect_requests(summary, available=available)
+
+    if requests["satisfied"]:
+        # Names only — never the values behind them.
+        log_event("resource_request_already_satisfied", authority_payload(
+            "resource_credential",
+            task_id=task_id,
+            credentials_already_present=requests["satisfied"],
+            message=(
+                "Worker asked for credentials the runner already has; not "
+                "requesting them from a human."
+            ),
+        ), task_id=task_id)
+
     if not requests["all"]:
-        return state  # nothing requested → proceed normally
+        return state  # nothing outstanding → proceed normally
 
     task = state.current_task or {}
-    task_id = state.current_task_id or "unknown"
     request_path = _RUNNER_DIR / "outbox" / f"{task_id}_resource_request.txt"
     provided_path = _RUNNER_DIR / "inbox" / f"{task_id}_resources_provided.txt"
 
@@ -1394,17 +1580,23 @@ def request_resources_if_needed(state: RunnerState) -> RunnerState:
             "message": f"Worker needs resources/credentials. See {request_path.name}; create {provided_path.name} to unblock.",
         }, task_id=task_id)
 
-    gate = evaluate_gate(summary, provided=provided_path.exists())
+    gate = evaluate_gate(summary, provided=provided_path.exists(), available=available)
     if gate["blocked"]:
         state.resource_request_status = "pending"
-        state.stop_reason = "awaiting_resources"
         mark_task_blocked(task_id, "awaiting resources/credentials")
-        log_event("resource_request_waiting", {
-            "task_id": task_id,
-            "message": f"Waiting for fulfillment file: {provided_path}",
-            "credentials_needed": requests["credentials"],
-            "resources_needed": requests["resources"],
-        }, task_id=task_id)
+        _record_gate_block(
+            state,
+            "resource_credential",
+            event="resource_request_waiting",
+            payload={
+                "task_id": task_id,
+                "message": f"Waiting for fulfillment file: {provided_path}",
+                "credentials_needed": requests["credentials"],
+                "resources_needed": requests["resources"],
+            },
+            stop_reason="awaiting_resources",
+            task_id=task_id,
+        )
     else:
         # Human signalled fulfillment (file present); never read its contents.
         state.resource_request_status = "fulfilled"
@@ -1540,9 +1732,10 @@ def check_merge_approval_if_needed(state: RunnerState) -> RunnerState:
 
     Classifies the risk level of the proposed merge and, when the configured
     policy requires human approval for that risk level, writes an approval
-    request to outbox/ and pauses the loop until a fulfillment file lands in
+    request to outbox/ and sets the task aside until a fulfillment file lands in
     inbox/. Runs after auto-repair (checks have passed) and before any
-    commit/push/merge step.
+    commit/push/merge step. A human approves one merge, not the run, so the
+    block is task-scoped and the loop continues with the next task (M4c.0).
 
     Skipped when RISK_BASED_MERGE_APPROVAL_ENABLED=false or when the policy
     does not require approval for the assessed risk level ('auto' policy, or
@@ -1591,19 +1784,26 @@ def check_merge_approval_if_needed(state: RunnerState) -> RunnerState:
                 provided_path.name,
             ))
 
-        state.stop_reason = "awaiting_merge_approval"
-        log_event("merge_approval_required", {
-            "task_id": task_id,
-            "risk_level": decision["risk_level"],
-            "policy": cfg.merge_approval_policy,
-            "reasons": decision["classification"]["reasons"],
-            "review_path": str(approval_path),
-            "approve_by": str(provided_path),
-            "message": (
-                f"Merge requires human approval (risk={decision['risk_level']}). "
-                f"See {approval_path.name}; create {provided_path.name} to unblock."
-            ),
-        }, task_id=task_id)
+        mark_task_blocked(task_id, f"awaiting merge approval (risk={decision['risk_level']})")
+        _record_gate_block(
+            state,
+            "merge_approval",
+            event="merge_approval_required",
+            payload={
+                "task_id": task_id,
+                "risk_level": decision["risk_level"],
+                "policy": cfg.merge_approval_policy,
+                "reasons": decision["classification"]["reasons"],
+                "review_path": str(approval_path),
+                "approve_by": str(provided_path),
+                "message": (
+                    f"Merge requires human approval (risk={decision['risk_level']}). "
+                    f"See {approval_path.name}; create {provided_path.name} to unblock."
+                ),
+            },
+            stop_reason="awaiting_merge_approval",
+            task_id=task_id,
+        )
 
     return _persist(state, "check_merge_approval_if_needed")
 
@@ -1824,10 +2024,14 @@ def apply_sql_if_needed(state: RunnerState) -> RunnerState:
         # Check for human approval.
         if not inbox_approved.exists():
             state.sql_approval_status = "pending"
-            log_event("sql_approval_waiting", {
-                "task_id": task_id,
-                "message": f"Waiting for approval file: {inbox_approved}",
-            }, task_id=task_id)
+            # Task-scoped by construction: the SQL simply isn't applied. The
+            # loop is never halted here, and the SQL guard remains the authority
+            # on whether a statement is destructive (M4c.0).
+            log_event("sql_approval_waiting", authority_payload(
+                "sql_approval",
+                task_id=task_id,
+                message=f"Waiting for approval file: {inbox_approved}",
+            ), task_id=task_id)
             return _persist(state, "apply_sql_if_needed")
 
         approval_text = inbox_approved.read_text().strip().lower()
@@ -1942,13 +2146,14 @@ def deploy_if_needed(state: RunnerState) -> RunnerState:
         if timed_out or failed:
             reason = "deploy_timed_out" if timed_out else "deploy_failed"
             state.stop_reason = reason
-            log_event("loop_blocked_on_deploy", {
-                "task_id": state.current_task_id,
-                "reason": reason,
-                "state": poll.get("state"),
-                "polls": poll.get("polls"),
-                "elapsed": poll.get("elapsed"),
-            }, task_id=state.current_task_id)
+            log_event("loop_blocked_on_deploy", authority_payload(
+                "deploy",
+                task_id=state.current_task_id,
+                reason=reason,
+                state=poll.get("state"),
+                polls=poll.get("polls"),
+                elapsed=poll.get("elapsed"),
+            ), task_id=state.current_task_id)
 
     decision = evaluate_rollback_revert_policy(
         deploy_result=deploy,
@@ -2259,11 +2464,12 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
         state.task_attempt_counts = counts
         if rep_task["blocked"] and not state.stop_reason:
             state.stop_reason = rep_task["stop_reason"]
-            log_event("loop_blocked_on_repeated_task", {
-                "task_id": task_id,
-                "attempt_count": rep_task["attempt_count"],
-                "max_task_attempts": cfg.max_task_attempts,
-            }, task_id=task_id)
+            log_event("loop_blocked_on_repeated_task", authority_payload(
+                "repeated_task",
+                task_id=task_id,
+                attempt_count=rep_task["attempt_count"],
+                max_task_attempts=cfg.max_task_attempts,
+            ), task_id=task_id)
 
     if result.get("success"):
         digest = state.worker_summary_digest or build_run_summary_digest(state.worker_summary, task=task, max_chars=500)
@@ -2285,12 +2491,13 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
         state.error_history = list(state.error_history) + [{"error": err, "task_id": task_id}]
         if rep_err["blocked"] and not state.stop_reason:
             state.stop_reason = rep_err["stop_reason"]
-            log_event("loop_blocked_on_repeated_error", {
-                "task_id": task_id,
-                "match_count": rep_err["match_count"],
-                "max_repeated_errors": cfg.max_repeated_errors,
-                "error": err,
-            }, task_id=task_id)
+            log_event("loop_blocked_on_repeated_error", authority_payload(
+                "repeated_error",
+                task_id=task_id,
+                match_count=rep_err["match_count"],
+                max_repeated_errors=cfg.max_repeated_errors,
+                error=err,
+            ), task_id=task_id)
 
         # ── Worker timeout guard ─────────────────────────────────────────────
         if cfg.worker_timeout_guard_enabled:
@@ -2309,13 +2516,22 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
                     "timeout_count": tg["timeout_count"],
                     "max_worker_timeouts": cfg.max_worker_timeouts,
                 }, task_id=task_id)
-            if tg["blocked"] and not state.stop_reason:
-                state.stop_reason = tg["stop_reason"]
-                log_event("loop_blocked_on_worker_timeout", {
-                    "task_id": task_id,
-                    "timeout_count": tg["timeout_count"],
-                    "max_worker_timeouts": cfg.max_worker_timeouts,
-                }, task_id=task_id)
+            if tg["blocked"]:
+                # Systemic: only fires after MAX_WORKER_TIMEOUTS across the
+                # session, so the evidence is about the run, not this task.
+                _record_gate_block(
+                    state,
+                    "worker_timeout",
+                    event="loop_blocked_on_worker_timeout",
+                    payload={
+                        "task_id": task_id,
+                        "timeout_count": tg["timeout_count"],
+                        "max_worker_timeouts": cfg.max_worker_timeouts,
+                    },
+                    stop_reason=tg["stop_reason"],
+                    task_id=task_id,
+                    pre_completion=False,
+                )
 
         # ── Codex usage-limit guard ──────────────────────────────────────────
         if cfg.codex_usage_limit_guard_enabled:
@@ -2332,13 +2548,20 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
                     "usage_limit_count": cug["usage_limit_count"],
                     "max_codex_usage_limit_errors": cfg.max_codex_usage_limit_errors,
                 }, task_id=task_id)
-            if cug["blocked"] and not state.stop_reason:
-                state.stop_reason = cug["stop_reason"]
-                log_event("loop_blocked_on_codex_usage_limit", {
-                    "task_id": task_id,
-                    "usage_limit_count": cug["usage_limit_count"],
-                    "max_codex_usage_limit_errors": cfg.max_codex_usage_limit_errors,
-                }, task_id=task_id)
+            if cug["blocked"]:
+                _record_gate_block(
+                    state,
+                    "codex_usage_limit",
+                    event="loop_blocked_on_codex_usage_limit",
+                    payload={
+                        "task_id": task_id,
+                        "usage_limit_count": cug["usage_limit_count"],
+                        "max_codex_usage_limit_errors": cfg.max_codex_usage_limit_errors,
+                    },
+                    stop_reason=cug["stop_reason"],
+                    task_id=task_id,
+                    pre_completion=False,
+                )
 
         # ── Claude subscription cooldown guard ───────────────────────────────
         # Detect Claude.ai subscription rate-limit responses and schedule
@@ -2439,11 +2662,12 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
                 # for the next run while this run stops cleanly.
                 if decision["circuit_open"]:
                     state.stop_reason = decision["stop_reason"]
-                    log_event("loop_blocked_on_failures", {
-                        "task_id": task_id,
-                        "consecutive_failures": state.consecutive_failures,
-                        "max_consecutive_failures": cfg.max_consecutive_failures,
-                    }, task_id=task_id)
+                    log_event("loop_blocked_on_failures", authority_payload(
+                        "repeated_error",
+                        task_id=task_id,
+                        consecutive_failures=state.consecutive_failures,
+                        max_consecutive_failures=cfg.max_consecutive_failures,
+                    ), task_id=task_id)
             else:
                 mark_task_failed(task_id, err)
                 log_event("error", {"task_id": task_id, "error": err})
@@ -2464,17 +2688,29 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
                 "task_cost": cb["task_cost"],
                 "session_cost": cb["session_cost"],
             }, task_id=task_id)
-        if cb["blocked"] and not state.stop_reason:
-            state.stop_reason = cb["stop_reason"]
-            log_event("loop_blocked_on_cost_budget", {
-                "task_id": task_id,
-                "task_cost": cb["task_cost"],
-                "session_cost": cb["session_cost"],
-                "max_session_cost": cfg.max_session_cost_dollars,
-                "max_task_cost": cfg.max_task_cost_dollars,
-                "task_exceeded": cb["task_exceeded"],
-                "session_exceeded": cb["session_exceeded"],
-            }, task_id=task_id)
+        if cb["blocked"]:
+            # The session cap is the real spend authority: exceeding it is
+            # irreversible and run-level, so it halts. A single task overrunning
+            # MAX_TASK_COST_DOLLARS is that task's problem — it has already run
+            # and paid, so record it and keep spending the remaining session
+            # budget on the other tasks rather than killing the loop (M4c.0).
+            _record_gate_block(
+                state,
+                "cost_budget_session" if cb["session_exceeded"] else "cost_budget_task",
+                event="loop_blocked_on_cost_budget",
+                payload={
+                    "task_id": task_id,
+                    "task_cost": cb["task_cost"],
+                    "session_cost": cb["session_cost"],
+                    "max_session_cost": cfg.max_session_cost_dollars,
+                    "max_task_cost": cfg.max_task_cost_dollars,
+                    "task_exceeded": cb["task_exceeded"],
+                    "session_exceeded": cb["session_exceeded"],
+                },
+                stop_reason=cb["stop_reason"],
+                task_id=task_id,
+                pre_completion=False,
+            )
 
     # ── Seeded mission sync ──────────────────────────────────────────────────
     # Propagate task completion/failure back to Supabase when the task was
@@ -2530,14 +2766,21 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
             max_stale_task_minutes=cfg.max_stale_task_minutes,
             warn_threshold_minutes=cfg.stale_run_warn_minutes,
         )
-        if sw["stale"] and not state.stop_reason:
-            state.stop_reason = sw["stop_reason"]
-            log_event("loop_blocked_on_stale_run", {
-                "task_id": task_id,
-                "stale_minutes": sw["stale_minutes"],
-                "max_stale_task_minutes": cfg.max_stale_task_minutes,
-                "last_task_completed_at": state.last_task_completed_at,
-            }, task_id=task_id)
+        if sw["stale"]:
+            _record_gate_block(
+                state,
+                "stale_run",
+                event="loop_blocked_on_stale_run",
+                payload={
+                    "task_id": task_id,
+                    "stale_minutes": sw["stale_minutes"],
+                    "max_stale_task_minutes": cfg.max_stale_task_minutes,
+                    "last_task_completed_at": state.last_task_completed_at,
+                },
+                stop_reason=sw["stop_reason"],
+                task_id=task_id,
+                pre_completion=False,
+            )
         elif sw["warn"] and not state.stale_run_warning_sent:
             state.stale_run_warning_sent = True
             log_event("stale_run_warning", {
@@ -2610,11 +2853,14 @@ def run_strategic_gate(state: RunnerState) -> RunnerState:
                 "message": "Human approved strategic review; resuming autonomous run.",
             })
         else:
+            # Deliberately loop-scoped: a whole-run pause every N tasks is the
+            # entire point of this gate, not an over-block (M4c.0).
             state.stop_reason = STRATEGIC_GATE_STOP
-            log_event("loop_blocked_on_strategic_gate", {
-                "gate_loop": gate_loop,
-                "message": f"Waiting for approval file: inbox/strategic_review_{gate_loop}_approved.txt",
-            })
+            log_event("loop_blocked_on_strategic_gate", authority_payload(
+                "strategic",
+                gate_loop=gate_loop,
+                message=f"Waiting for approval file: inbox/strategic_review_{gate_loop}_approved.txt",
+            ))
         return _persist(state, "run_strategic_gate")
 
     # Fresh evaluation: increment the counter and check whether the interval is reached.
@@ -2841,7 +3087,11 @@ def _route_after_chatgpt(state: RunnerState) -> str:
 
 
 def _route_after_business_repo(state: RunnerState) -> str:
-    if state.stop_reason:
+    # resource_request_status is checked alongside stop_reason because a
+    # task-scoped resource block (M4c.0) deliberately leaves stop_reason clear
+    # so the loop continues — but this task still has no usable repo, so it must
+    # not fall through to acceptance criteria and worker dispatch.
+    if state.stop_reason or state.resource_request_status == "pending":
         return "decide_continue_or_stop"
     return "check_acceptance_criteria"
 

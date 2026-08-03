@@ -210,11 +210,28 @@ def test_node_session_budget_exceeded_sets_stop_reason():
     _with_stubbed_task_io(body)
 
 
-def test_node_task_budget_exceeded_sets_stop_reason():
+def test_node_task_budget_exceeded_does_not_stop_the_loop():
+    """M4c.0: one task overrunning MAX_TASK_COST_DOLLARS is that task's
+    problem — it has already run and paid. Only the *session* cap, the real
+    spend authority, is allowed to halt the run."""
     def body(calls):
         graph.cfg.cost_budget_guard_enabled = True
         graph.cfg.max_session_cost_dollars = 0.0
         graph.cfg.max_task_cost_dollars = 5.0
+        graph.cfg.estimated_cost_per_task_dollars = 0.0
+        graph.cfg.failure_guard_enabled = False
+        s = _cost_state(session_cost=0.0, api_cost=6.0)
+        out = graph.update_logs_and_state(s)
+        assert out.stop_reason is None, out.stop_reason
+    _with_stubbed_task_io(body)
+
+
+def test_node_session_budget_exceeded_still_stops_the_loop():
+    """The session cap is irreversible run-level spend: it keeps halting."""
+    def body(calls):
+        graph.cfg.cost_budget_guard_enabled = True
+        graph.cfg.max_session_cost_dollars = 5.0
+        graph.cfg.max_task_cost_dollars = 0.0
         graph.cfg.estimated_cost_per_task_dollars = 0.0
         graph.cfg.failure_guard_enabled = False
         s = _cost_state(session_cost=0.0, api_cost=6.0)
@@ -286,7 +303,8 @@ if __name__ == "__main__":
         test_node_accumulates_estimated_cost,
         test_node_uses_api_cost_over_estimate,
         test_node_session_budget_exceeded_sets_stop_reason,
-        test_node_task_budget_exceeded_sets_stop_reason,
+        test_node_task_budget_exceeded_does_not_stop_the_loop,
+        test_node_session_budget_exceeded_still_stops_the_loop,
         test_node_guard_disabled_no_accumulation,
         test_node_cost_accumulates_on_failure,
         test_node_zero_cost_no_accumulation,

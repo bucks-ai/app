@@ -5,6 +5,7 @@ from typing import Optional
 import requests
 
 from config import get_config
+from tools.gate_authority import authority_payload
 from tools.http_retry import retry_request
 from tools.log_tools import log_event
 
@@ -444,11 +445,12 @@ def poll_pr_checks(
                     "sha": sha, "conclusions": advisory_failures,
                     "note": "non-blocking by PR_CHECKS_NON_BLOCKING; merge not gated on these",
                 })
-            log_event("pr_checks_completed" if ok else "pr_checks_failed", {
-                "sha": sha, "polls": polls, "elapsed": elapsed,
-                "conclusions": {run.get("name"): run.get("conclusion") for run in runs},
-                "advisory_ignored": sorted(advisory_failures),
-            })
+            log_event("pr_checks_completed" if ok else "pr_checks_failed", authority_payload(
+                "pr_checks",
+                sha=sha, polls=polls, elapsed=elapsed,
+                conclusions={run.get("name"): run.get("conclusion") for run in runs},
+                advisory_ignored=sorted(advisory_failures),
+            ))
             return {"success": ok, "timed_out": False, "runs": runs, "polls": polls, "elapsed": elapsed}
 
         if not runs:

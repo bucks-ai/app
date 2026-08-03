@@ -108,14 +108,32 @@ def mark_task_failed(task_id: str, error: str):
     save_tasks(tasks)
 
 
-def requeue_fulfilled_blocked_tasks(inbox_dir) -> list[str]:
-    """Requeue blocked tasks whose resource-fulfillment file has landed.
+# Inbox files that unblock a task, one per human-approval gate. Existence is the
+# whole signal — contents are never read (AGENTS.md: the resources file is a
+# human-only fulfillment marker and must stay opaque).
+_UNBLOCK_FILE_SUFFIXES = (
+    "_resources_provided.txt",   # resource & credential gate
+    "_merge_approved.txt",       # risk-based merge approval gate
+)
 
-    The resource gate blocks a task and waits for
-    ``inbox/{task_id}_resources_provided.txt``. The approvals daemon (or a
-    human) creates that file, but nothing flipped the task back to ``queued``
+
+def requeue_fulfilled_blocked_tasks(inbox_dir) -> list[str]:
+    """Requeue blocked tasks whose human-approval file has landed.
+
+    A task-scoped gate blocks its task and waits for a file under ``inbox/``:
+    the resource gate for ``{task_id}_resources_provided.txt``, the merge
+    approval gate for ``{task_id}_merge_approved.txt``. The approvals daemon (or
+    a human) creates that file, but nothing flipped the task back to ``queued``
     — so the loop restarted into an empty queue and stalled. This scan closes
     that gap. Only file *existence* is checked; contents are never read.
+
+    Each fulfillment file unblocks a task **once**. Since M4c.0 a task-scoped
+    gate block no longer stops the run, so a task that blocks again for the same
+    reason after being requeued (the human signalled fulfillment but the
+    credential still isn't resolvable) would otherwise be requeued, re-run, and
+    re-blocked forever, burning the whole loop. ``unblock_requeued_at`` records
+    that the signal has been consumed; clearing it (or deleting the inbox file
+    and re-creating it after fixing the credential) allows another attempt.
 
     Returns the list of requeued task ids.
     """
@@ -123,13 +141,16 @@ def requeue_fulfilled_blocked_tasks(inbox_dir) -> list[str]:
     requeued = []
     tasks = load_tasks()
     for task in tasks:
-        if task.get("status") != "blocked":
+        if task.get("status") != "blocked" or task.get("unblock_requeued_at"):
             continue
         task_id = task.get("id")
-        if task_id and (inbox_dir / f"{task_id}_resources_provided.txt").exists():
+        if task_id and any(
+            (inbox_dir / f"{task_id}{suffix}").exists() for suffix in _UNBLOCK_FILE_SUFFIXES
+        ):
             task["status"] = "queued"
             task["error"] = None
             task["updated_at"] = _now()
+            task["unblock_requeued_at"] = task["updated_at"]
             requeued.append(task_id)
     if requeued:
         save_tasks(tasks)
