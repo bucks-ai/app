@@ -713,14 +713,20 @@ def test_merge_via_pr_config_defaults():
                 os.environ[k] = v
 
     assert cfg.merge_via_pr is True, cfg.merge_via_pr
-    assert cfg.pr_checks_timeout_s == 900, cfg.pr_checks_timeout_s
+    # M4c.0 calibration (docs/M4C0-THRESHOLD-CALIBRATION.md): timeout raised
+    # from 900 (observed check completion max 695.5s left only 1.3x headroom),
+    # empty grace lowered from 180 (checks register within one poll — max
+    # 22.6s over 67 samples — so 120 fast-fails a check-less PR sooner).
+    assert cfg.pr_checks_timeout_s == 1200, cfg.pr_checks_timeout_s
     assert cfg.pr_checks_poll_interval_s == 20, cfg.pr_checks_poll_interval_s
-    assert cfg.pr_checks_empty_grace_s == 180, cfg.pr_checks_empty_grace_s
+    assert cfg.pr_checks_empty_grace_s == 120, cfg.pr_checks_empty_grace_s
+    # The zero-check recovery needs two grace windows inside the poll budget.
+    assert cfg.pr_checks_empty_grace_s * 2 < cfg.pr_checks_timeout_s
     report = cfg.report()
     assert report["merge_via_pr"] is True, report
-    assert report["pr_checks_timeout_s"] == 900, report
+    assert report["pr_checks_timeout_s"] == 1200, report
     assert report["pr_checks_poll_interval_s"] == 20, report
-    assert report["pr_checks_empty_grace_s"] == 180, report
+    assert report["pr_checks_empty_grace_s"] == 120, report
 
 
 def test_merge_via_pr_config_env_overrides(monkeypatch):
