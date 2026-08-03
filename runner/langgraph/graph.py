@@ -58,6 +58,7 @@ from tools.git_tools import (
     current_branch,
     current_commit_sha,
 )
+from tools.git_autonomy import scope_from_task, wake_pr_checks
 from tools.sql_guard import scan_sql_text
 from tools.sql_environment_gate import evaluate_sql_approval_policy, infer_environment
 from tools.supabase_tools import apply_sql_file
@@ -1962,14 +1963,51 @@ def _merge_via_pull_request(state: RunnerState, task: dict, branch: str) -> None
     state.pr_url = pr.get("url")
 
     sha = current_commit_sha(repo_path)
-    checks = poll_pr_checks(
-        github_repo,
-        sha,
-        timeout_s=cfg.pr_checks_timeout_s,
-        interval_s=cfg.pr_checks_poll_interval_s,
-        pr_number=state.pr_number,
-        token=github_token,
-    )
+
+    def _poll(head_sha: str) -> dict:
+        return poll_pr_checks(
+            github_repo,
+            head_sha,
+            timeout_s=cfg.pr_checks_timeout_s,
+            interval_s=cfg.pr_checks_poll_interval_s,
+            pr_number=state.pr_number,
+            token=github_token,
+        )
+
+    checks = _poll(sha)
+
+    # M4c: "no checks reported" was the single most common state the founder had
+    # to clear by hand — Actions never scheduled a run for the head SHA, and
+    # putting the branch back on top of latest main woke them. Do that here and
+    # re-poll, instead of failing the task and waiting for a human.
+    wake_attempts = 0
+    while (
+        checks.get("reason") == "pr_checks_no_runs"
+        and wake_attempts < max(0, cfg.pr_checks_wake_attempts)
+    ):
+        wake_attempts += 1
+        wake = wake_pr_checks(
+            repo_path,
+            branch,
+            github_repo=github_repo,
+            pr_number=state.pr_number,
+            token=github_token,
+            allowed_paths=scope_from_task(task),
+            strategies=cfg.pr_checks_wake_strategies,
+            allow_force_with_lease=cfg.git_allow_force_with_lease,
+            cfg=cfg,
+        )
+        log_event("pr_checks_wake", {
+            "task_id": task_id, "pr_number": state.pr_number, "attempt": wake_attempts,
+            "success": wake.get("success"), "strategy": wake.get("strategy"),
+            "reason": wake.get("reason"),
+        }, task_id=task_id)
+        if not wake.get("success"):
+            break
+        # The wake pushed a new head commit; checks are scheduled against that
+        # SHA, not the one we polled.
+        sha = current_commit_sha(repo_path)
+        checks = _poll(sha)
 
     if checks.get("timed_out"):
         _mark_merge_step_failed(
@@ -1981,7 +2019,8 @@ def _merge_via_pull_request(state: RunnerState, task: dict, branch: str) -> None
     if checks.get("reason") == "pr_checks_no_runs":
         _mark_merge_step_failed(
             state,
-            f"pr_checks_no_runs: PR #{state.pr_number} never had any check runs scheduled",
+            f"pr_checks_no_runs: PR #{state.pr_number} never had any check runs scheduled"
+            + (f" (after {wake_attempts} wake attempt(s))" if wake_attempts else ""),
         )
         return
 

@@ -484,8 +484,27 @@ def _worker_done_state():
     )
 
 
-def _wire_for_pr_merge(commit_result, *, create_result, checks_result, merge_result):
-    calls = {"push": [], "create_pr": [], "poll_checks": [], "merge_pr": [], "cleanup": [], "fetch": 0}
+def _wire_for_pr_merge(
+    commit_result, *, create_result, checks_result, merge_result, wake_result=None,
+):
+    """Wire graph's merge path to canned results.
+
+    ``wake_pr_checks`` MUST be stubbed here: it is the one collaborator that
+    runs real git against cfg.repo_path (stash/rebase/commit/push), so leaving
+    it live lets a unit test mutate the actual working repo — it once put three
+    empty commits on the checked-out branch. ``wake_result`` defaults to "the
+    wake could not do anything", which keeps every pre-existing test's
+    expectations intact.
+    """
+    calls = {
+        "push": [], "create_pr": [], "poll_checks": [], "merge_pr": [],
+        "cleanup": [], "fetch": 0, "wake": [],
+    }
+
+    def _wake(repo, branch, **kw):
+        calls["wake"].append(branch)
+        return wake_result or {"success": False, "reason": "wake_strategies_exhausted"}
+    graph.wake_pr_checks = _wake
     graph.create_branch = lambda repo, branch: {"success": True, "output": ""}
     graph.commit_all = lambda repo, message: commit_result
     graph.push_branch = lambda repo, branch: calls["push"].append(branch)
@@ -498,6 +517,10 @@ def _wire_for_pr_merge(commit_result, *, create_result, checks_result, merge_res
 
     def _poll_checks(repo, sha, timeout_s=None, interval_s=None, pr_number=None, **kw):
         calls["poll_checks"].append((repo, sha))
+        # A list means "one result per poll" — used to model a PR that reports
+        # no check runs until a wake pushes a fresh head SHA.
+        if isinstance(checks_result, list):
+            return checks_result[min(len(calls["poll_checks"]), len(checks_result)) - 1]
         return checks_result
     graph.poll_pr_checks = _poll_checks
 
@@ -583,11 +606,63 @@ def test_pr_merge_checks_timeout_marks_task_failed_distinctly():
     assert "pr_checks_timeout" in state.worker_result["error"], state.worker_result
 
 
+def test_pr_merge_no_runs_wakes_the_checks_then_merges_on_green():
+    """M4c: "no checks reported" was the state the founder cleared by hand most
+    often. The runner now pushes a fresh head SHA on top of latest main, re-polls,
+    and merges on green — no human in the loop."""
+    calls = _wire_for_pr_merge(
+        _LANDED_COMMIT,
+        create_result={"success": True, "created": True, "number": 42, "url": "https://github.test/pull/42"},
+        checks_result=[
+            {"success": False, "timed_out": False, "reason": "pr_checks_no_runs"},
+            {"success": True, "timed_out": False},
+        ],
+        merge_result={"success": True, "sha": "def456"},
+        wake_result={"success": True, "strategy": "merge_base"},
+    )
+    graph.cfg.auto_merge = True
+    graph.cfg.auto_cleanup_branches = True
+    graph.cfg.merge_via_pr = True
+    graph.cfg.github_token = "test-token"
+    graph.cfg.github_repo = "owner/repo"
+    graph.cfg.pr_checks_wake_attempts = 1
+
+    state = graph.commit_push_merge_if_needed(_worker_done_state())
+
+    assert calls["wake"] == ["feature/t1"], calls
+    assert len(calls["poll_checks"]) == 2, "must re-poll after waking the checks"
+    assert calls["merge_pr"] == [("owner/repo", 42)], calls
+    assert state.worker_result["success"] is True, state.worker_result
+
+
+def test_pr_merge_no_runs_does_not_wake_when_disabled():
+    calls = _wire_for_pr_merge(
+        _LANDED_COMMIT,
+        create_result={"success": True, "created": True, "number": 42, "url": "https://github.test/pull/42"},
+        checks_result={"success": False, "timed_out": False, "reason": "pr_checks_no_runs"},
+        merge_result={"success": True, "sha": "def456"},
+    )
+    graph.cfg.auto_merge = True
+    graph.cfg.merge_via_pr = True
+    graph.cfg.github_token = "test-token"
+    graph.cfg.github_repo = "owner/repo"
+    graph.cfg.pr_checks_wake_attempts = 0
+
+    state = graph.commit_push_merge_if_needed(_worker_done_state())
+
+    assert calls["wake"] == [], "PR_CHECKS_WAKE_ATTEMPTS=0 must disable the recovery"
+    assert calls["merge_pr"] == [], calls
+    assert "pr_checks_no_runs" in state.worker_result["error"], state.worker_result
+
+
 def test_pr_merge_checks_no_runs_marks_task_failed_distinctly():
     """A PR that never had any check runs scheduled (poll_pr_checks returned
     reason='pr_checks_no_runs') must be marked failed with that distinct
     reason — never generic pr_checks_failed/pr_checks_timeout text — and
-    must not merge, matching the timeout/failed cases above."""
+    must not merge, matching the timeout/failed cases above.
+
+    M4c: this is now the state *after* the wake ladder has been tried and
+    failed, so the error also records how many wake attempts were made."""
     calls = _wire_for_pr_merge(
         _LANDED_COMMIT,
         create_result={"success": True, "created": True, "number": 42, "url": "https://github.test/pull/42"},
@@ -599,14 +674,17 @@ def test_pr_merge_checks_no_runs_marks_task_failed_distinctly():
     graph.cfg.merge_via_pr = True
     graph.cfg.github_token = "test-token"
     graph.cfg.github_repo = "owner/repo"
+    graph.cfg.pr_checks_wake_attempts = 1
 
     state = graph.commit_push_merge_if_needed(_worker_done_state())
 
+    assert calls["wake"] == ["feature/t1"], "the wake ladder must be tried before giving up"
     assert calls["merge_pr"] == [], "must not merge when no check runs were ever scheduled"
     assert calls["fetch"] == 0, calls
     assert calls["cleanup"] == [], "PR must be left open, branch not cleaned up"
     assert state.worker_result["success"] is False, state.worker_result
     assert "pr_checks_no_runs" in state.worker_result["error"], state.worker_result
+    assert "wake attempt" in state.worker_result["error"], state.worker_result
 
 
 def test_pr_merge_rejected_by_branch_protection_marks_task_failed():
@@ -768,6 +846,8 @@ if __name__ == "__main__":
         test_pr_merge_happy_path_merges_and_cleans_up,
         test_pr_merge_checks_failure_marks_task_failed_and_leaves_pr_open,
         test_pr_merge_checks_timeout_marks_task_failed_distinctly,
+        test_pr_merge_no_runs_wakes_the_checks_then_merges_on_green,
+        test_pr_merge_no_runs_does_not_wake_when_disabled,
         test_pr_merge_checks_no_runs_marks_task_failed_distinctly,
         test_pr_merge_rejected_by_branch_protection_marks_task_failed,
         test_pr_merge_idempotent_pr_reuse_still_polls_and_merges,

@@ -313,6 +313,12 @@ Copy `.env.example` to `.env` and fill in:
 | `PR_CHECKS_POLL_INTERVAL_S` | Seconds between check-run polls (default: 20) |
 | `PR_CHECKS_EMPTY_GRACE_S` | Seconds to wait with zero check runs scheduled before attempting recovery (querying mergeable state and refreshing the branch); a further wait of the same length with still-zero runs fails fast with `pr_checks_no_runs`; must satisfy `PR_CHECKS_EMPTY_GRACE_S * 2 < PR_CHECKS_TIMEOUT_S` (default: 120 — calibrated from observed check-registration latency, max 22.6s over 67 samples) |
 | `PR_CHECKS_NON_BLOCKING` | Comma-separated, case-insensitive substrings; any check run whose **name** contains one is advisory — its conclusion is logged (`pr_checks_advisory_failed`) but never blocks a merge (default: `[informational]`). Branch protection remains the authority on what actually gates merges |
+| `PR_CHECKS_WAKE_ATTEMPTS` | How many times to *wake* a PR that reported no check runs — push a fresh head SHA on top of latest `main` and re-poll — before failing with `pr_checks_no_runs` (default: 1; `0` disables the recovery and restores the pre-M4c behaviour of failing immediately) |
+| `PR_CHECKS_WAKE_STRATEGIES` | Ordered, comma-separated wake ladder (default: `update_branch,rebase,merge_base,empty_commit`). `update_branch` = GitHub's update-branch API; `rebase` = rebase onto `origin/main` + `--force-with-lease` push (inert unless `GIT_ALLOW_FORCE_WITH_LEASE=true`); `merge_base` = merge `origin/main` into the branch and push (same end state, no history rewrite); `empty_commit` = last-resort empty commit to change the head SHA |
+| `GIT_PREFER_REBASE` | Sync a branch with its base using `pull --rebase` semantics instead of a merge commit (default: true). Also drops local commits whose content is already upstream and auto-resolves formatting-only conflicts; `false` restores the plain `git pull origin main --no-edit` |
+| `GIT_AUTO_RESOLVE_TRIVIAL_CONFLICTS` | Auto-resolve merge/rebase conflicts that are provably formatting-only — identical code after line-wrap and whitespace normalisation, with string and comment contents compared verbatim (default: true). Anything semantic, or any file outside the task's `allowed_scope`, is always escalated to a human regardless of this flag |
+| `GIT_TRIVIAL_CONFLICT_SUFFIXES` | Comma-separated file suffixes eligible for trivial-conflict auto-resolution (default: `.py,.ts,.tsx,.js,.jsx,.mjs,.cjs,.css,.scss,.go,.rs,.java,.kt,.c,.h,.cpp,.hpp,.sql`). Deliberately excludes formats where whitespace or a trailing comma *is* content — `.md`, `.json`, `.yaml`, `.sh`, `.txt` |
+| `GIT_ALLOW_FORCE_WITH_LEASE` | Permit the `rebase` wake rung to push a rewritten branch with `--force-with-lease` (default: **false**). `AGENTS.md` forbids `git push --force`; with this off the ladder reaches the same end state via `merge_base` without rewriting history. Even when on, `--force-with-lease` refuses if origin moved since the last fetch, so a human's push to the branch is never clobbered |
 | `AUTO_DEPLOY` | Auto-trigger Vercel (default: true) |
 | `AUTO_DEPLOY_POLL` | Poll the triggered deployment until it finishes (default: true) |
 | `BLOCK_ON_DEPLOY_FAILURE` | Stop the loop when a polled deploy fails or times out (default: true) |
@@ -661,9 +667,13 @@ merges through a pull request instead:
    seconds, polling fails fast with the distinct reason `pr_checks_no_runs`
    (logged and returned instead of the generic timeout) so the failure guard
    sees an actionable, specific cause rather than an ambiguous timeout.
-4. `merge_pull_request` — merge the PR via `PUT
+4. **Wake the checks** (M4c) — when step 3 returns `pr_checks_no_runs`, the
+   runner does what the founder used to do by hand: push a fresh head SHA on
+   top of latest `main` so Actions schedules a run, then re-poll (up to
+   `PR_CHECKS_WAKE_ATTEMPTS` times, default 1). See **Git & PR autonomy** below.
+5. `merge_pull_request` — merge the PR via `PUT
    /repos/{repo}/pulls/{number}/merge`, only once checks are green.
-5. `fetch_pull_main` + local feature-branch cleanup — unchanged from before.
+6. `fetch_pull_main` + local feature-branch cleanup — unchanged from before.
 
 **Failure handling:** a failed or timed-out check run, or a rejected merge
 (405 — branch protection unmet, 409 — branch changed since checks ran), is
@@ -683,6 +693,65 @@ without merge rights will see the same 405/409 rejections a human would.
 Set `MERGE_VIA_PR=false` to fall back to the old direct-merge path
 (`merge_feature.sh`, local `git merge` + push to `main`) unchanged — an
 escape hatch for lab/sandbox repos that don't have branch protection.
+
+---
+
+## Git & PR autonomy (`tools/git_autonomy.py`)
+
+During M4b the founder personally ran `gh pr create` → `gh pr checks` →
+`gh pr merge` for every PR, hand-chose rebase vs reset on a diverged `main`,
+and resolved six identical-formatting conflicts. This module removes each of
+those interventions.
+
+**Waking a PR with no checks.** `wake_pr_checks` pushes a fresh head SHA using
+an escalating ladder (`PR_CHECKS_WAKE_STRATEGIES`), stopping at the first rung
+that moves the branch:
+
+| Rung | What it does | Rewrites history? |
+| --- | --- | --- |
+| `update_branch` | GitHub's `PUT /pulls/{n}/update-branch` API | no |
+| `rebase` | rebase onto `origin/main`, push `--force-with-lease` | yes — **off unless `GIT_ALLOW_FORCE_WITH_LEASE=true`** |
+| `merge_base` | merge `origin/main` into the branch, normal push | no |
+| `empty_commit` | last-resort empty commit to change the head SHA | no |
+
+`AGENTS.md` forbids `git push --force`, so the `rebase` rung is inert by
+default and the ladder reaches the same end state — the branch on top of latest
+`main` with a new head SHA — via `merge_base`, which is exactly what GitHub's
+own "Update branch" button does. When the rung *is* enabled, a
+`--force-with-lease` refusal (origin moved since our fetch — i.e. a human
+pushed) is treated as a stop signal and never escalated to a bare `--force`.
+
+**Divergence.** `sync_with_base` (used by `fetch_pull_main` when
+`GIT_PREFER_REBASE=true`, the default) always rebases, never resets. A local
+commit whose content is already upstream is dropped cleanly — git reports this
+as `dropping <sha> <subject> -- patch contents already upstream`, or, on the
+apply backend, stops with `No changes - did you forget to use 'git add'?`, and
+both are recognised and answered with `git rebase --skip`.
+
+**Trivial conflict resolution.** A conflict is auto-resolved only when both
+sides are *provably* the same code: physical lines are joined where the join
+falls inside an open bracket (mirroring Python's implicit line joining),
+whitespace outside string literals is collapsed, and the resulting logical
+lines must match with identical indentation. String and comment contents are
+compared verbatim. That accepts the M4b case — a call wrapped across three
+lines vs kept on one — and rejects everything else, including the traps that
+defeat naive whitespace-stripping: moving a statement in or out of an `if`
+body, `"hello  world"` vs `"hello world"`, and `not x` vs `notx`. Ineligible
+file types (`GIT_TRIVIAL_CONFLICT_SUFFIXES`) and any file outside the task's
+`acceptance_criteria.allowed_scope` are escalated even when textually trivial.
+A file resolves only if *every* hunk in it is trivial; otherwise the whole
+rebase aborts and `git_conflict_escalated` goes to Slack.
+
+**Never discard founder work.** During M4b a routine branch operation reverted
+uncommitted local doc edits. Every entry point here — including
+`git_tools.create_branch` and `cleanup_feature_branch` — stashes uncommitted
+work (untracked files included) under a labelled `runner-autonomy:<label>`
+message *before* any checkout, rebase, or pull, and restores it afterwards.
+Nothing in the module runs `git reset --hard`, `git checkout -- .`,
+`git clean`, or `git stash drop`. If a stash cannot be popped cleanly it is
+**left in the stash list** and reported via `git_work_restore_failed` (a
+curated Slack event) rather than discarded. `wake_pr_checks` also refuses to
+act when `HEAD` is not on the branch it was asked to wake.
 
 ---
 
