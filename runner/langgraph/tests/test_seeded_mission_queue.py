@@ -7,8 +7,11 @@ Runs standalone (no pytest dependency):
 Covers:
   - ``seed_tasks_from_mission`` pure conversion helper
   - ``check_mission_completion`` Supabase polling helper (stubbed client)
-  - ``fetch_next_queued_mission`` runner_target claim gate (CRITICAL SAFETY —
-    a mission with runner_target="business" must never be claimed)
+  - ``fetch_next_queued_mission`` / ``evaluate_business_mission_claim``
+    runner_target claim gate (CRITICAL SAFETY — a mission with
+    runner_target="business" is claimable only with BUSINESS_EXECUTION_ENABLED
+    on, a fully configured sandbox, and both named secrets resolving)
+  - ``BUSINESS_EXECUTION_ENABLED`` env wiring (the gate's kill switch)
   - Graph node ``seed_mission_queue_if_needed`` (Supabase stubbed via monkeypatching)
   - Routing: ``_route_after_compile_mission`` and ``_route_after_seed_mission_queue``
   - Graph wiring: node present in compiled graph
@@ -597,6 +600,51 @@ def test_claim_allowed_when_fully_configured():
 
 
 # ---------------------------------------------------------------------------
+# Config wiring: BUSINESS_EXECUTION_ENABLED -> cfg.business_execution_enabled
+#
+# The gate tests above flip ``cfg.business_execution_enabled`` directly, so on
+# their own they would still pass if the env var were renamed or dropped from
+# config.py — leaving the kill switch unreachable from the environment while
+# the suite stayed green.  These two tests pin the wiring itself: unset means
+# off (the safe default), and the documented env var is what turns it on.
+# ---------------------------------------------------------------------------
+
+def _config_with_env(value):
+    """Build a fresh RunnerConfig with BUSINESS_EXECUTION_ENABLED set to *value*.
+
+    ``value=None`` unsets the variable entirely.  RunnerConfig reads env at
+    construction time (``default_factory``), so a new instance re-reads it;
+    the process-wide ``get_config()`` singleton is left untouched.
+    """
+    from config import RunnerConfig
+    original = os.environ.get("BUSINESS_EXECUTION_ENABLED")
+    if value is None:
+        os.environ.pop("BUSINESS_EXECUTION_ENABLED", None)
+    else:
+        os.environ["BUSINESS_EXECUTION_ENABLED"] = value
+    try:
+        return RunnerConfig().business_execution_enabled
+    finally:
+        if original is None:
+            os.environ.pop("BUSINESS_EXECUTION_ENABLED", None)
+        else:
+            os.environ["BUSINESS_EXECUTION_ENABLED"] = original
+
+
+def test_business_execution_defaults_off_when_env_unset():
+    assert _config_with_env(None) is False
+
+
+def test_business_execution_only_enabled_by_explicit_true():
+    assert _config_with_env("true") is True
+    assert _config_with_env("TRUE") is True
+    assert _config_with_env("false") is False
+    assert _config_with_env("") is False
+    assert _config_with_env("1") is False
+    assert _config_with_env("yes") is False
+
+
+# ---------------------------------------------------------------------------
 # Graph node: seed_mission_queue_if_needed
 # ---------------------------------------------------------------------------
 
@@ -1015,6 +1063,23 @@ if __name__ == "__main__":
         test_check_completion_queued_still_running,
         test_check_completion_no_rows,
         test_check_completion_blocked_counts_as_terminal,
+        test_fetch_next_queued_mission_skips_business_target_when_disabled,
+        test_fetch_next_queued_mission_claims_self_target,
+        test_fetch_next_queued_mission_prefers_self_over_blocked_business,
+        test_fetch_next_queued_mission_none_when_only_business_targets_disabled,
+        test_fetch_next_queued_mission_logs_business_mission_blocked,
+        test_fetch_next_queued_mission_claims_business_when_fully_configured,
+        test_claim_refused_when_business_execution_disabled,
+        test_claim_refused_when_missing_business_id,
+        test_claim_refused_when_business_not_found,
+        test_claim_refused_when_sandbox_not_configured,
+        test_claim_refused_when_sandbox_config_absent,
+        test_claim_refused_when_only_legacy_business_sandbox_config_populated,
+        test_claim_refused_when_github_secret_unresolved,
+        test_claim_refused_when_vercel_secret_unresolved,
+        test_claim_allowed_when_fully_configured,
+        test_business_execution_defaults_off_when_env_unset,
+        test_business_execution_only_enabled_by_explicit_true,
         test_node_disabled_by_config,
         test_node_no_supabase,
         test_node_no_queued_mission,
