@@ -31,7 +31,10 @@ from tools.worker_timeout_guard import evaluate_worker_timeout
 from tools.worker_health_probe import probe_worker_health
 from tools.stale_run_watchdog import evaluate_stale_run
 from tools.codex_usage_limit_guard import evaluate_codex_usage_limit
-from tools.claude_subscription_cooldown import evaluate_subscription_cooldown
+from tools.claude_subscription_cooldown import (
+    evaluate_subscription_cooldown,
+    _is_cooldown_error,
+)
 from tools.cost_budget_guard import evaluate_cost_budget
 from tools.summary_tools import build_run_summary_digest, parse_worker_summary
 from tools.context_compression import compress_messages
@@ -2568,10 +2571,33 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
         state.retry_pending = False
 
         # ── Repeated-error guard ─────────────────────────────────────────────
+        # A subscription cooldown is NOT a repeated error. The cooldown guard
+        # further down handles it by sleeping until the window resets, but it
+        # runs ~120ms later — so without this exemption every cooldown also
+        # incremented the repeated-error counter, and three cooldowns in one
+        # session killed the loop with `repeated_errors` while the cooldown
+        # guard was busy correctly waiting them out (observed 2026-08-03
+        # 18:39:41 on m4c0-05: blocked at match_count 3 / cooldown_count 3).
+        # Waiting out a rate limit is the designed behaviour; it must never
+        # accumulate toward a failure ceiling.
+        _is_cooldown_failure = (
+            cfg.claude_subscription_cooldown_enabled
+            and result.get("worker") == "claude"
+            and cfg.claude_auth_mode == "subscription"
+            and _is_cooldown_error(result.get("output"), err)
+        )
+        if _is_cooldown_failure:
+            log_event("repeated_error_guard_skipped", {
+                "task_id": task_id,
+                "reason": "claude subscription cooldown — not a task failure",
+                "error": err,
+            }, task_id=task_id)
+
         rep_err = evaluate_error_repetition(
             err, state.error_history, cfg.max_repeated_errors, cfg.repeated_error_window
-        )
-        state.error_history = list(state.error_history) + [{"error": err, "task_id": task_id}]
+        ) if not _is_cooldown_failure else {"blocked": False, "match_count": 0, "stop_reason": None}
+        if not _is_cooldown_failure:
+            state.error_history = list(state.error_history) + [{"error": err, "task_id": task_id}]
         if rep_err["blocked"] and not state.stop_reason:
             state.stop_reason = rep_err["stop_reason"]
             log_event("loop_blocked_on_repeated_error", authority_payload(
