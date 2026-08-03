@@ -10,6 +10,7 @@ Usage:
   python main.py analytics-report [--days N]
   python main.py scan-sql path/to/file.sql
   python main.py logs [--tail N]
+  python main.py doctor [--fix] [--json] [--no-supabase]
   python main.py reset-state [--hard]
 """
 import sys
@@ -411,6 +412,27 @@ def cmd_logs(args):
         print(f"{ts}{tid_str}  {et}")
 
 
+def cmd_doctor(args):
+    """Report task-queue health; with --fix, repair what can be repaired.
+
+    Exits non-zero when the queue is unhealthy and nothing was fixed, so this
+    is usable as a pre-flight check in a script and not just by eye.
+    """
+    from tools.queue_doctor import run_doctor
+
+    result = run_doctor(
+        fix=getattr(args, "fix", False),
+        check_supabase=not getattr(args, "no_supabase", False),
+    )
+    if getattr(args, "json", False):
+        print(json.dumps({"report": result["report"], "repairs": result["repairs"]}, indent=2))
+    else:
+        print(result["text"])
+
+    if not result["report"]["healthy"]:
+        sys.exit(1)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="bucks.ai Autonomous Development Runner",
@@ -448,6 +470,19 @@ def main():
     p_logs = sub.add_parser("logs", help="Print recent log events")
     p_logs.add_argument("--tail", type=int, default=50, help="Number of events to show")
 
+    p_doctor = sub.add_parser(
+        "doctor",
+        help="Report task-queue health (orphans, duplicates, invariant violations, Supabase divergence)",
+    )
+    p_doctor.add_argument("--fix", action="store_true", help="Apply the automatic repairs")
+    p_doctor.add_argument("--json", action="store_true", help="Print the raw report as JSON")
+    p_doctor.add_argument(
+        "--no-supabase",
+        action="store_true",
+        dest="no_supabase",
+        help="Skip the Supabase mission_tasks divergence check (offline / faster)",
+    )
+
     p_reset = sub.add_parser("reset-state", help="Reset runner state to idle defaults")
     p_reset.add_argument(
         "--hard",
@@ -467,6 +502,7 @@ def main():
         "analytics-report": cmd_analytics_report,
         "scan-sql": cmd_scan_sql,
         "logs": cmd_logs,
+        "doctor": cmd_doctor,
         "reset-state": cmd_reset_state,
         "soak": cmd_soak,
         "dry-run": cmd_dry_run,
