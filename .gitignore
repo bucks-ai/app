@@ -56,6 +56,9 @@ runner/langgraph/.env
 runner/langgraph/__pycache__/
 runner/langgraph/**/__pycache__/
 runner/langgraph/logs/*.jsonl
+# Runner stdout captures (tee -a). Tracked copies made the runner dirty its own
+# working tree on every run, which deadlocked m4c-01's dirty-tree preflight.
+runner/langgraph/logs/*.out
 runner/langgraph/outbox/*
 runner/langgraph/inbox/*
 !runner/langgraph/outbox/.gitkeep
