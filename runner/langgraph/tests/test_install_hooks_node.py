@@ -119,10 +119,14 @@ def test_install_hooks_node_present_in_graph():
 
 
 def test_install_hooks_node_is_entry_point():
-    # Verify __start__ → install_hooks → check_launch_readiness_if_needed via the drawable graph edges
+    # Verify __start__ → install_hooks → run_startup_preflight_if_needed →
+    # check_launch_readiness_if_needed via the drawable graph edges. The M4c.0
+    # startup preflight sits between hook installation and readiness scoring so
+    # production assumptions are verified before any task is claimed.
     edges = [(e.source, e.target) for e in graph.graph.get_graph().edges]
     assert ("__start__", "install_hooks") in edges
-    assert ("install_hooks", "check_launch_readiness_if_needed") in edges
+    assert ("install_hooks", "run_startup_preflight_if_needed") in edges
+    assert ("run_startup_preflight_if_needed", "check_launch_readiness_if_needed") in edges
 
 
 if __name__ == "__main__":

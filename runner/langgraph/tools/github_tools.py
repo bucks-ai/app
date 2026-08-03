@@ -226,6 +226,31 @@ def _status_code(exc: Exception) -> Optional[int]:
     return getattr(resp, "status_code", None) if resp is not None else None
 
 
+def get_repo(repo: str, token: Optional[str] = None) -> dict:
+    """``GET /repos/{owner}/{repo}`` — does this repo exist for this token?
+
+    Returns ``{"available": True, "repo": {...}}`` or ``{"available": False,
+    "status_code": int|None, "error": str}``. The startup preflight uses the
+    status code to tell "wrong repo name" (404/403 — every clone this session
+    will fail) apart from "GitHub is having a moment" (5xx, timeout).
+    """
+    cfg = get_config()
+    if not (token or cfg.has_github):
+        log_event("github_degraded", {"reason": "no GITHUB_TOKEN", "action": "get_repo"})
+        return {"available": False, "error": "no GITHUB_TOKEN", "status_code": None}
+    if not repo:
+        return {"available": False, "error": "no repo", "status_code": None}
+    try:
+        r = retry_request(
+            requests.get, f"{_API_BASE}/repos/{repo}", headers=_rest_headers(token), timeout=15
+        )
+        r.raise_for_status()
+        return {"available": True, "repo": r.json()}
+    except Exception as e:
+        log_event("error", {"tool": "github", "action": "get_repo", "repo": repo, "error": str(e)})
+        return {"available": False, "status_code": _status_code(e), "error": str(e)}
+
+
 def create_pull_request(
     repo: str, branch: str, title: str, body: str, base: str = "main",
     token: Optional[str] = None,

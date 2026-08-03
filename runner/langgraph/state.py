@@ -110,6 +110,7 @@ class RunnerState(BaseModel):
     ui_flow_result: Optional[dict] = None          # result dict from ui_flow_validator.run_ui_flow_validation
     product_eval_result: Optional[dict] = None     # result dict from product_eval_harness.run_product_eval_suite
     launch_readiness_result: Optional[dict] = None  # result dict from launch_readiness_scorecard
+    preflight_report: Optional[dict] = None         # consolidated startup_preflight summary; carries session_started_at so it runs once per session
     last_task_completed_at: Optional[str] = None    # ISO-8601 UTC timestamp of the last completed task loop
     stale_run_warning_sent: bool = False             # True once the stale-run Slack warning has fired this episode
     live_batch_validation_result: Optional[dict] = None  # result dict from live_batch_validation_report
