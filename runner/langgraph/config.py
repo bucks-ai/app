@@ -65,6 +65,11 @@ _DEFAULT_SLACK_EVENTS = frozenset({
     "gate_blocked",
     "config_invariant_violated",
     "preflight_report",
+    # The one message per stop that says what stopped the loop and what to do
+    # about it (M4c.0). Paired with the bare "loop_stopped" token above: that
+    # one is the alert, this one is the diagnosis.
+    "loop_stop_report",
+    "stop_diagnostics_degraded",
 })
 
 

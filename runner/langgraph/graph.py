@@ -110,6 +110,7 @@ from tools.model_routing_policy import evaluate_model_routing_policy
 from tools.launch_readiness_scorecard import guard_launch_readiness
 from tools.startup_preflight import guard_startup_preflight
 from tools.live_batch_validation_report import generate_live_batch_report
+from tools.stop_diagnostics import report_loop_stop
 from tools.mission_compiler import (
     parse_mission_file,
     validate_mission,
@@ -3094,6 +3095,38 @@ def generate_live_batch_validation_report(state: RunnerState) -> RunnerState:
     return _persist(state, "generate_live_batch_validation_report")
 
 
+def report_loop_stop_diagnostics(state: RunnerState) -> RunnerState:
+    """Explain the stop (M4c.0) — the last thing that runs before the graph ends.
+
+    Writes ONE structured record to outbox/loop_stop_report.txt and fires ONE
+    Slack message naming the stop reason, the triggering task, the five events
+    before it, the observed-vs-configured numbers that produced it, a CAUSE
+    sentence and a RECOMMENDED ACTION. Also classifies the stop EXPECTED
+    (finished) or ANOMALOUS (broke) — the field m4c-06's watchdog reads to
+    decide whether to auto-restart.
+
+    Placed on the terminal edge so it sees the whole run, and runs exactly once
+    per stop. Reporting a stop must never change how the run ended, so every
+    failure here is swallowed: the diagnosis is the deliverable, not a gate.
+    """
+    try:
+        report_loop_stop(
+            stop_reason=state.stop_reason,
+            session_state=_state_dict(state),
+            config_report=cfg.report(),
+            outbox_dir=_RUNNER_DIR / "outbox",
+            task=state.current_task,
+        )
+    except Exception as e:  # pragma: no cover - defensive
+        log_event("stop_diagnostics_degraded", {
+            "stop_reason": state.stop_reason,
+            "error": str(e),
+        })
+    # Persisted after the report is built, so the record quotes the last node
+    # that did real work rather than this one.
+    return _persist(state, "report_loop_stop_diagnostics")
+
+
 def decide_continue_or_stop(state: RunnerState) -> RunnerState:
     # ── Claude subscription cooldown auto-resume ─────────────────────────────
     # When the Claude subscription rate-limiter fired this iteration, sleep
@@ -3297,6 +3330,7 @@ def build_graph():
     builder.add_node("ask_chatgpt_next_task", ask_chatgpt_next_task)
     builder.add_node("decide_continue_or_stop", decide_continue_or_stop)
     builder.add_node("generate_live_batch_validation_report", generate_live_batch_validation_report)
+    builder.add_node("report_loop_stop_diagnostics", report_loop_stop_diagnostics)
 
     builder.set_entry_point("install_hooks")
     builder.add_edge("install_hooks", "run_startup_preflight_if_needed")
@@ -3395,7 +3429,8 @@ def build_graph():
         "generate_live_batch_validation_report": "generate_live_batch_validation_report",
         "load_next_task": "load_next_task",
     })
-    builder.add_edge("generate_live_batch_validation_report", END)
+    builder.add_edge("generate_live_batch_validation_report", "report_loop_stop_diagnostics")
+    builder.add_edge("report_loop_stop_diagnostics", END)
 
     return builder.compile()
 

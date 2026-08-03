@@ -32,6 +32,7 @@ _EVENT_EMOJI = {
     "check_failed": ":warning:",
     "stale_run_warning": ":sleeping:",
     "preflight_report": ":airplane_departure:",
+    "loop_stop_report": ":mag:",
 }
 
 
@@ -78,6 +79,12 @@ def _detail_for(event_type: str, payload: dict) -> str:
         if not notable:
             return head
         return "\n".join([head] + [f"• {c['name']}: {c['detail']}" for c in notable])
+    if event_type == "loop_stop_report":
+        # tools/stop_diagnostics already composed the whole message — cause,
+        # action, observed-vs-configured numbers, event trail. Re-deriving a
+        # one-liner here would drop exactly the parts that make the stop
+        # readable from a phone, so pass it through verbatim.
+        return str(p.get("message") or "")
     if event_type == "stale_run_warning":
         bits = [f"idle: {p.get('stale_minutes', '?')} min"]
         if p.get("warn_threshold_minutes") is not None:
