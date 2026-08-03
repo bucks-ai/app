@@ -42,6 +42,14 @@ _DEFAULT_SLACK_EVENTS = frozenset({
     "pr_checks_failed",
     "pr_checks_timeout",
     "pr_checks_no_runs",
+    "pr_checks_wake_exhausted",
+    # A conflict the runner refused to guess at, and — most important — work
+    # that was stashed for safety but could not be restored. The latter is the
+    # only way founder edits can end up somewhere unexpected, so it must always
+    # reach a human.
+    "git_conflict_escalated",
+    "git_work_restore_failed",
+    "git_work_protect_failed",
     "product_eval_failed",
     "worker_dispatch_crash",
     "loop_blocked_on_stale_run",
@@ -177,6 +185,55 @@ class RunnerConfig:
             for s in os.getenv("PR_CHECKS_NON_BLOCKING", "[informational]").split(",")
             if s.strip()
         ]
+    )
+    # M4c git/PR autonomy (tools/git_autonomy.py). A PR whose head SHA never got
+    # check runs scheduled is woken by pushing a fresh head SHA on top of latest
+    # main, then re-polled — instead of failing the task and waiting for the
+    # founder to do it by hand. 0 disables the recovery entirely.
+    pr_checks_wake_attempts: int = field(
+        default_factory=lambda: int(os.getenv("PR_CHECKS_WAKE_ATTEMPTS", "1"))
+    )
+    # Ordered ladder of wake strategies; see git_autonomy.DEFAULT_WAKE_STRATEGIES.
+    pr_checks_wake_strategies: list = field(
+        default_factory=lambda: [
+            s.strip().lower()
+            for s in os.getenv(
+                "PR_CHECKS_WAKE_STRATEGIES", "update_branch,rebase,merge_base,empty_commit"
+            ).split(",")
+            if s.strip()
+        ]
+    )
+    # Auto-resolve conflicts that are provably formatting-only (identical code
+    # after line-wrap/whitespace normalisation). Anything semantic is always
+    # escalated regardless of this flag.
+    git_auto_resolve_trivial_conflicts: bool = field(
+        default_factory=lambda: os.getenv("GIT_AUTO_RESOLVE_TRIVIAL_CONFLICTS", "true").lower() == "true"
+    )
+    # File suffixes eligible for trivial-conflict auto-resolution. The default
+    # (git_autonomy._DEFAULT_AUTO_RESOLVE_SUFFIXES) deliberately excludes
+    # formats where whitespace or a trailing comma IS content (.md, .json,
+    # .yaml, .sh).
+    git_trivial_conflict_suffixes: list = field(
+        default_factory=lambda: [
+            s.strip().lower() if s.strip().startswith(".") else f".{s.strip().lower()}"
+            for s in os.getenv("GIT_TRIVIAL_CONFLICT_SUFFIXES", "").split(",")
+            if s.strip()
+        ]
+    )
+    # AGENTS.md forbids `git push --force`. The rebase rung of the check-wake
+    # ladder rewrites an already-pushed branch and so is inert unless this is
+    # on; even then it pushes with --force-with-lease, which refuses when origin
+    # moved since our fetch (i.e. when a human pushed to the branch). Off by
+    # default: the merge_base rung reaches the same end state without any
+    # history rewrite.
+    git_allow_force_with_lease: bool = field(
+        default_factory=lambda: os.getenv("GIT_ALLOW_FORCE_WITH_LEASE", "false").lower() == "true"
+    )
+    # Prefer `pull --rebase` over a merge when syncing a branch with its base.
+    # M4b needed the founder to hand-choose rebase vs reset on a diverged main;
+    # rebase is now the standing answer and reset is never an option.
+    git_prefer_rebase: bool = field(
+        default_factory=lambda: os.getenv("GIT_PREFER_REBASE", "true").lower() == "true"
     )
     auto_deploy: bool = field(
         default_factory=lambda: os.getenv("AUTO_DEPLOY", "true").lower() == "true"
@@ -602,6 +659,12 @@ class RunnerConfig:
             "pr_checks_poll_interval_s": self.pr_checks_poll_interval_s,
             "pr_checks_empty_grace_s": self.pr_checks_empty_grace_s,
             "pr_checks_non_blocking": self.pr_checks_non_blocking,
+            "pr_checks_wake_attempts": self.pr_checks_wake_attempts,
+            "pr_checks_wake_strategies": self.pr_checks_wake_strategies,
+            "git_auto_resolve_trivial_conflicts": self.git_auto_resolve_trivial_conflicts,
+            "git_trivial_conflict_suffixes": self.git_trivial_conflict_suffixes,
+            "git_allow_force_with_lease": self.git_allow_force_with_lease,
+            "git_prefer_rebase": self.git_prefer_rebase,
             "auto_deploy": self.auto_deploy,
             "auto_deploy_poll": self.auto_deploy_poll,
             "block_on_deploy_failure": self.block_on_deploy_failure,
