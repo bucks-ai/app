@@ -433,6 +433,9 @@ python main.py run-loop        # Run continuous autonomous loop
 python main.py analytics-report [--days 7]  # Build the weekly analytics report (PostHog funnel + new Sentry issues)
 python main.py scan-sql path/to/file.sql   # Scan SQL file for dangerous statements
 python main.py logs --tail 50  # Print last 50 log events
+python main.py doctor          # Report task-queue health (orphans, duplicates, invariant violations, Supabase divergence)
+python main.py doctor --fix    # Apply the automatic repairs
+
 ```
 
 ---
@@ -472,6 +475,50 @@ Codex UI tasks should always use feature branches so UI work can be checked befo
 > **Branch safety rule:** Tasks must **never** set `"branch": "main"`. Every task must use a feature branch in the form `feature/<task-id>`. The runner will create, push, and merge this branch automatically — writing to `main` directly bypasses all safety checks and will corrupt the loop state.
 
 On first run, the runner migrates any existing `tasks.json` to `.runtime/tasks.local.json` automatically.
+
+---
+
+## Task Queue Integrity (M4c.0)
+
+The queue file has a schema, invariants, and automatic repair. Full reference:
+[`docs/M4C0-TASK-STATE-INTEGRITY.md`](docs/M4C0-TASK-STATE-INTEGRITY.md).
+
+**Schema** (`tools/task_schema.py`) — required `id`, `title`, `status`; statuses
+are `queued`, `running`, `complete`, `failed`, `blocked`; unknown extra fields
+are allowed, but a known field with the wrong type is a violation. Ids must be
+globally unique, and one Supabase `mission_tasks` row maps to at most one local
+task. Terminal states (`complete`, `failed`) are only left via an explicit
+requeue — any other transition out of them is logged as
+`task_transition_rejected` and skipped.
+
+**Auto-repair on load** — every `load_tasks()` repairs impossible states,
+persists the result atomically, and logs each class of damage separately:
+
+| Repair | What it fixes |
+| --- | --- |
+| `orphaned_running_requeued` | `running` with no live session owner → `queued` |
+| `duplicate_seeded_task_merged` | two local rows for one `mission_tasks` row → the one with real progress |
+| `duplicate_id_reassigned` | distinct work sharing an id → suffixed unique ids (never dropped) |
+| `duplicate_id_merged` | indistinguishable rows sharing an id → the one with real progress |
+| `stale_retry_window_cleared` | a terminal task still holding `retry_not_before` |
+| `unknown_status_requeued` | an unrecognised status → `queued`, loudly |
+
+**Ownership** — `mark_task_running` stamps `owner_pid` and `owner_host`. A
+`running` row is orphaned only when its owner process is provably gone on this
+host, or (for rows predating M4c.0, which carry no owner) when it has been
+untouched for an hour. Anything unprovable is left running and reported by
+`doctor` rather than requeued out from under a live loop.
+
+**Atomic writes** — every save is a temp file plus `os.replace`, so an
+interrupted process leaves either the old queue or the new one, never a
+truncated one.
+
+```bash
+python main.py doctor              # report only; exits 1 when unhealthy
+python main.py doctor --fix        # apply the repairs (stop the loop first)
+python main.py doctor --json       # machine-readable report
+python main.py doctor --no-supabase  # skip the mission_tasks divergence check
+```
 
 ---
 
