@@ -6,6 +6,7 @@ import {
   Space_Grotesk,
 } from "next/font/google";
 import "./globals.css";
+import PostHogProvider from "@/components/PostHogProvider";
 import { cn } from "@/lib/utils";
 
 const spaceGrotesk = Space_Grotesk({
@@ -98,7 +99,7 @@ export default function RootLayout({
         >
           Skip to content
         </a>
-        {children}
+        <PostHogProvider>{children}</PostHogProvider>
       </body>
     </html>
   );

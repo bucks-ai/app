@@ -14,7 +14,7 @@ const toneColor = {
   success: "var(--status-done)",
   warning: "var(--status-pending)",
   danger: "var(--status-blocked)",
-  neutral: "var(--text-muted)",
+  neutral: "var(--text-muted-foreground)",
 };
 
 export function ExecutionLog({

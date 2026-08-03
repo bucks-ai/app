@@ -16,6 +16,9 @@ const eslintConfig = defineConfig([
     "runner/langgraph/.venv/**",
     // Installed AI skills (bundled scripts are not app code)
     ".claude/**",
+    // M4b: cloned customer repos the runner checks out to execute business
+    // missions (see .gitignore) — not bucks-ai source, must never be linted here
+    "runner/langgraph/.workspaces/**",
   ]),
 ]);
 

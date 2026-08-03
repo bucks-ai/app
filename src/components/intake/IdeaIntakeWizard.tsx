@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BlueprintPreview } from "@/components/intake/BlueprintPreview";
 import { IntakeStep } from "@/components/intake/IntakeStep";
 import { OperatorPanel } from "@/components/ui/OperatorPanel";
 import { SectionLabel } from "@/components/ui/SectionLabel";
 import { StatusPill } from "@/components/ui/StatusPill";
+import { captureIntakeStarted, captureIntakeSubmitted } from "@/lib/analytics/intake";
 import { generateMockBlueprint } from "@/lib/mock-blueprint";
 import { createBrowserClient } from "@/lib/supabase/client";
 import type {
@@ -353,6 +354,7 @@ function TextInput(props: BaseFieldProps) {
       <input
         id={fieldIds(props.name).id}
         type="text"
+        name={props.name}
         aria-required={props.required || undefined}
         aria-describedby={describedBy(props.name, props.helper, props.error)}
         value={props.value}
@@ -380,6 +382,7 @@ function TextArea(props: BaseFieldProps) {
     >
       <textarea
         id={fieldIds(props.name).id}
+        name={props.name}
         aria-required={props.required || undefined}
         aria-describedby={describedBy(props.name, props.helper, props.error)}
         value={props.value}
@@ -411,6 +414,7 @@ function SelectField({
     >
       <select
         id={fieldIds(props.name).id}
+        name={props.name}
         aria-required={props.required || undefined}
         aria-describedby={describedBy(props.name, props.helper, props.error)}
         value={props.value}
@@ -440,6 +444,14 @@ export function IdeaIntakeWizard() {
   const [isPreviewVisible, setIsPreviewVisible] = useState(false);
   const [generateState, setGenerateState] = useState<GenerateState>({ status: "idle" });
   const [saveState, setSaveState] = useState<SaveState>({ status: "idle" });
+  const hasCapturedStart = useRef(false);
+
+  useEffect(() => {
+    if (hasCapturedStart.current) return;
+
+    hasCapturedStart.current = true;
+    captureIntakeStarted();
+  }, []);
 
   useEffect(() => {
     if (isPreviewVisible) {
@@ -524,6 +536,7 @@ export function IdeaIntakeWizard() {
       }
 
       setGenerateState({ status: "idle" });
+      captureIntakeSubmitted();
       setBlueprint(data.blueprint);
       setIsPreviewVisible(true);
       void saveGeneratedBlueprint(data.blueprint);

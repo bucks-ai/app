@@ -15,7 +15,8 @@
 //   agent_run_create_failed    — DB write failed
 
 import { hasSupabaseEnv } from "@/lib/supabase/env";
-import { getCurrentUser, getBusinessById } from "@/lib/projects";
+import { getBusinessById } from "@/lib/projects";
+import { requireUser } from "@/lib/api-auth";
 import {
   getAgentRunsForBusiness,
   getAgentRunSummaryForBusiness,
@@ -24,36 +25,32 @@ import {
 import type { AgentRunCreateInput } from "@/types/agent-runs";
 import type { AgentTemplateId, AgentNodeId } from "@/types/agents";
 import { getAgentTemplate } from "@/lib/agents/registry";
-
-function errorResponse(error: string, code: string, status: number) {
-  return Response.json({ ok: false, error, code }, { status });
-}
+import { limit, tooManyRequests, RATE_LIMITS } from "@/lib/rate-limit";
+import { apiError, badRequest, notFound } from "@/lib/api-error";
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   if (!hasSupabaseEnv()) {
-    return errorResponse("Supabase is not configured.", "missing_supabase_env", 503);
+    return apiError("Supabase is not configured.", "missing_supabase_env", 503);
   }
 
   const { id } = await params;
   if (!id) {
-    return errorResponse("Business id is required.", "invalid_input", 400);
+    return badRequest("Business id is required.", "invalid_input");
   }
 
-  const userResult = await getCurrentUser();
-  if (userResult.error || !userResult.data) {
-    return errorResponse("Authentication required.", "unauthenticated", 401);
-  }
+  const { user, response } = await requireUser();
+  if (!user) return response;
 
   const businessResult = await getBusinessById(id);
   if (businessResult.error || !businessResult.data) {
-    return errorResponse("Business not found.", "business_not_found", 404);
+    return notFound("Business not found.", "business_not_found");
   }
 
-  if (businessResult.data.user_id !== userResult.data.id) {
-    return errorResponse("Access denied.", "forbidden", 403);
+  if (businessResult.data.user_id !== user.id) {
+    return apiError("Access denied.", "forbidden", 403);
   }
 
   const [runsResult, summaryResult] = await Promise.all([
@@ -88,7 +85,7 @@ export async function GET(
   }
 
   if (runsResult.error || !runsResult.data) {
-    return errorResponse(
+    return apiError(
       runsResult.error ?? "Could not load agent runs.",
       runsResult.code ?? "agent_runs_fetch_failed",
       500
@@ -96,7 +93,7 @@ export async function GET(
   }
 
   if (summaryResult.error || !summaryResult.data) {
-    return errorResponse(
+    return apiError(
       summaryResult.error ?? "Could not build agent runs summary.",
       summaryResult.code ?? "agent_runs_fetch_failed",
       500
@@ -117,54 +114,55 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   if (!hasSupabaseEnv()) {
-    return errorResponse("Supabase is not configured.", "missing_supabase_env", 503);
+    return apiError("Supabase is not configured.", "missing_supabase_env", 503);
   }
 
   const { id } = await params;
   if (!id) {
-    return errorResponse("Business id is required.", "invalid_input", 400);
+    return badRequest("Business id is required.", "invalid_input");
   }
 
-  const userResult = await getCurrentUser();
-  if (userResult.error || !userResult.data) {
-    return errorResponse("Authentication required.", "unauthenticated", 401);
-  }
+  const { user, response } = await requireUser();
+  if (!user) return response;
+
+  const rateLimitResult = await limit(`${user.id}:agent-runs`, RATE_LIMITS.mutationDefault);
+  if (!rateLimitResult.allowed) return tooManyRequests();
 
   const businessResult = await getBusinessById(id);
   if (businessResult.error || !businessResult.data) {
-    return errorResponse("Business not found.", "business_not_found", 404);
+    return notFound("Business not found.", "business_not_found");
   }
 
-  if (businessResult.data.user_id !== userResult.data.id) {
-    return errorResponse("Access denied.", "forbidden", 403);
+  if (businessResult.data.user_id !== user.id) {
+    return apiError("Access denied.", "forbidden", 403);
   }
 
   let body: Record<string, unknown>;
   try {
     body = await request.json();
   } catch {
-    return errorResponse("Invalid JSON body.", "invalid_input", 400);
+    return badRequest("Invalid JSON body.", "invalid_input");
   }
 
   const agentId = body.agentId as string | undefined;
   if (!agentId) {
-    return errorResponse("agentId is required.", "invalid_input", 400);
+    return badRequest("agentId is required.", "invalid_input");
   }
 
   const title = body.title as string | undefined;
   if (!title) {
-    return errorResponse("title is required.", "invalid_input", 400);
+    return badRequest("title is required.", "invalid_input");
   }
 
   // Resolve node_id from agent registry
   const template = getAgentTemplate(agentId as AgentTemplateId);
   if (!template) {
-    return errorResponse(`Unknown agent id: ${agentId}`, "invalid_input", 400);
+    return badRequest(`Unknown agent id: ${agentId}`, "invalid_input");
   }
 
   const input: AgentRunCreateInput = {
     business_id: id,
-    user_id: userResult.data.id,
+    user_id: user.id,
     agent_id: agentId as AgentTemplateId,
     node_id: template.node as AgentNodeId,
     title,
@@ -183,7 +181,7 @@ export async function POST(
   if (result.error || !result.data) {
     const code = result.code ?? "agent_run_create_failed";
     const httpStatus = code === "agent_runs_schema_missing" ? 503 : 500;
-    return errorResponse(
+    return apiError(
       result.error ?? "Failed to create agent run.",
       code,
       httpStatus

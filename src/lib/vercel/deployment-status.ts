@@ -4,7 +4,8 @@
 import { hasVercelEnv } from "@/lib/vercel/env";
 import { listVercelDeployments } from "@/lib/vercel/client";
 import { getLatestVercelProjectForBusiness } from "@/lib/vercel/project-metadata";
-import { createAgentActivityLog } from "@/lib/projects";
+import { createAgentActivityLog, getAgentActivityLogs } from "@/lib/projects";
+import { capture } from "@/lib/analytics/server";
 import type { VercelDeploymentRecord } from "@/types/vercel";
 import type {
   DeploymentStatus,
@@ -84,8 +85,9 @@ export async function getLatestVercelDeploymentForProject(input: {
 
 export async function refreshVercelDeploymentStatusForBusiness(
   businessId: string,
-  userId: string
+  user: { id: string; email?: string | null }
 ): Promise<Result<RefreshDeploymentStatusResult>> {
+  const userId = user.id;
   // Load stored Vercel project metadata
   const metaResult = await getLatestVercelProjectForBusiness(businessId);
   if (metaResult.error || !metaResult.data) {
@@ -192,6 +194,11 @@ export async function refreshVercelDeploymentStatusForBusiness(
 
   // Log ready event
   if (status === "ready" && deploymentUrl) {
+    const priorLogsResult = await getAgentActivityLogs(businessId);
+    const alreadyReportedReady = (priorLogsResult.data ?? []).some(
+      (log) => log.activity_type === "vercel_deployment_ready"
+    );
+
     await createAgentActivityLog({
       business_id: businessId,
       user_id: userId,
@@ -203,6 +210,10 @@ export async function refreshVercelDeploymentStatusForBusiness(
         readyAt,
       },
     });
+
+    if (!alreadyReportedReady) {
+      capture("DEPLOY_SUCCEEDED", user, { business_id: businessId });
+    }
   }
 
   // Log failed event

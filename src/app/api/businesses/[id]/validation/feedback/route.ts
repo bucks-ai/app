@@ -1,20 +1,13 @@
 // POST /api/businesses/[id]/validation/feedback   — create structured feedback note
 
 import { hasSupabaseEnv } from "@/lib/supabase/env";
-import { getCurrentUser, getBusinessById } from "@/lib/projects";
+import { getBusinessById } from "@/lib/projects";
+import { requireUser } from "@/lib/api-auth";
 import { createValidationFeedbackNote } from "@/lib/validation";
-import type {
-  NewValidationFeedbackNoteInput,
-  ValidationSignalStrength,
-} from "@/types/validation";
-
-const VALID_SIGNAL_STRENGTHS = new Set<ValidationSignalStrength>([
-  "weak", "medium", "strong",
-]);
-
-function errorResponse(error: string, code: string, status: number) {
-  return Response.json({ ok: false, error, code }, { status });
-}
+import type { NewValidationFeedbackNoteInput } from "@/types/validation";
+import { apiError, badRequest, notFound, zodIssuesToFields } from "@/lib/api-error";
+import { createValidationFeedbackNoteBodySchema } from "@/lib/schemas/validation";
+import { limit, tooManyRequests, RATE_LIMITS } from "@/lib/rate-limit";
 
 // ---------------------------------------------------------------------------
 // POST /api/businesses/[id]/validation/feedback
@@ -25,59 +18,63 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   if (!hasSupabaseEnv()) {
-    return errorResponse("Supabase is not configured.", "missing_supabase_env", 503);
+    return apiError("Supabase is not configured.", "missing_supabase_env", 503);
   }
 
   const { id } = await params;
-  if (!id) return errorResponse("Business id is required.", "invalid_input", 400);
+  if (!id) return badRequest("Business id is required.", "invalid_input");
 
-  const userResult = await getCurrentUser();
-  if (userResult.error || !userResult.data) {
-    return errorResponse("Authentication required.", "unauthenticated", 401);
-  }
+  const { user, response } = await requireUser();
+  if (!user) return response;
+
+  const rateLimitResult = await limit(`${user.id}:validation-feedback`, RATE_LIMITS.mutationDefault);
+  if (!rateLimitResult.allowed) return tooManyRequests();
 
   const businessResult = await getBusinessById(id);
   if (businessResult.error || !businessResult.data) {
-    return errorResponse("Business not found.", "business_not_found", 404);
+    return notFound("Business not found.", "business_not_found");
   }
 
-  if (businessResult.data.user_id !== userResult.data.id) {
-    return errorResponse("Access denied.", "forbidden", 403);
+  if (businessResult.data.user_id !== user.id) {
+    return apiError("Access denied.", "forbidden", 403);
   }
 
-  let body: Record<string, unknown> = {};
+  let json: unknown;
   try {
-    body = (await request.json()) as Record<string, unknown>;
+    json = await request.json();
   } catch {
-    return errorResponse("Invalid JSON body.", "invalid_input", 400);
+    return badRequest("Request body must be valid JSON.", "invalid_json");
   }
 
-  const summary = typeof body.summary === "string" ? body.summary.trim() : "";
-  if (!summary) return errorResponse("summary is required.", "invalid_input", 400);
-
-  const rawSignal = body.signal_strength as string | undefined;
+  const parsed = createValidationFeedbackNoteBodySchema.safeParse(json);
+  if (!parsed.success) {
+    return badRequest(
+      "Request body failed validation.",
+      "validation_error",
+      zodIssuesToFields(parsed.error),
+    );
+  }
+  const body = parsed.data;
 
   const input: NewValidationFeedbackNoteInput = {
     business_id: id,
-    user_id: userResult.data.id,
-    summary,
-    lead_id: (body.lead_id as string | null) ?? null,
-    hypothesis_id: (body.hypothesis_id as string | null) ?? null,
-    pain_signal: (body.pain_signal as string | null) ?? null,
-    willingness_to_pay_signal: (body.willingness_to_pay_signal as string | null) ?? null,
-    objections: Array.isArray(body.objections) ? (body.objections as string[]) : null,
-    quotes: Array.isArray(body.quotes) ? (body.quotes as string[]) : null,
-    next_step: (body.next_step as string | null) ?? null,
-    signal_strength: VALID_SIGNAL_STRENGTHS.has(rawSignal as ValidationSignalStrength)
-      ? (rawSignal as ValidationSignalStrength)
-      : null,
+    user_id: user.id,
+    summary: body.summary,
+    lead_id: body.lead_id ?? null,
+    hypothesis_id: body.hypothesis_id ?? null,
+    pain_signal: body.pain_signal ?? null,
+    willingness_to_pay_signal: body.willingness_to_pay_signal ?? null,
+    objections: body.objections ?? null,
+    quotes: body.quotes ?? null,
+    next_step: body.next_step ?? null,
+    signal_strength: body.signal_strength ?? null,
   };
 
   const result = await createValidationFeedbackNote(input);
 
   if (result.error || !result.data) {
     const code = result.code ?? "validation_create_failed";
-    return errorResponse(result.error ?? "Could not create feedback note.", code,
+    return apiError(result.error ?? "Could not create feedback note.", code,
       code === "validation_schema_missing" ? 503 : 500);
   }
 

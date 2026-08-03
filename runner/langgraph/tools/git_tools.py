@@ -3,6 +3,8 @@ import os
 from tools.shell_tools import run_command
 from tools.log_tools import log_event
 
+_PROTECTED_BRANCHES = {"main", "master", "dev", "develop", "production", "release"}
+
 
 def _git(args: list[str], cwd: str, timeout: int = 60):
     return run_command(["git"] + args, cwd=cwd, timeout=timeout)
@@ -20,6 +22,14 @@ def current_branch(repo_path: str) -> str:
 
 def latest_commit(repo_path: str) -> str:
     r = _git(["log", "--oneline", "-1"], repo_path)
+    return r.output.strip() if r.success else ""
+
+
+def current_commit_sha(repo_path: str) -> str:
+    """Return the full SHA of HEAD — used as the `ref` for the GitHub checks API
+    (unlike ``latest_commit``, which returns a `<short-sha> <message>` line meant
+    for display/logging, not for use as a git ref)."""
+    r = _git(["rev-parse", "HEAD"], repo_path)
     return r.output.strip() if r.success else ""
 
 
@@ -42,6 +52,14 @@ def create_branch(repo_path: str, branch: str) -> dict:
 
 def run_check(repo_path: str) -> dict:
     log_event("check_started", {"repo_path": repo_path})
+    # scripts/check.sh is a bucks-ai convention (see AGENTS.md); business/foreign
+    # repos resolved via tools/foreign_repo_workspace.py have no such script and
+    # never will, so a missing script is "no check configured" — not a failure.
+    # Treating it as a failure sent every business mission into an unwinnable
+    # auto-repair loop (the worker can't create a check that isn't part of its task).
+    if not os.path.isfile(os.path.join(repo_path, "scripts", "check.sh")):
+        log_event("check_skipped", {"repo_path": repo_path, "reason": "no scripts/check.sh"})
+        return {"success": True, "output": "[check skipped: no scripts/check.sh in this repo]"}
     r = run_command(["bash", "scripts/check.sh"], cwd=repo_path, timeout=300)
     event_type = "check_passed" if r.success else "check_failed"
     log_event(event_type, {"output": r.output[-1000:] if r.output else ""})
@@ -51,9 +69,28 @@ def run_check(repo_path: str) -> dict:
 def commit_all(repo_path: str, message: str) -> dict:
     add = _git(["add", "-A"], repo_path)
     commit = _git(["commit", "-m", message], repo_path)
-    sha = latest_commit(repo_path) if commit.success else ""
-    log_event("commit_created", {"message": message, "sha": sha, "success": commit.success})
-    return {"success": commit.success, "sha": sha, "output": commit.output}
+    # `git commit` exits non-zero when the tree is already clean. That happens when
+    # the worker committed its own changes (the task prompt asks workers to commit) —
+    # not a failure, and the existing HEAD is still deployable. Treat that case as a
+    # landed commit so push/merge/deploy proceed instead of being skipped.
+    nothing_to_commit = (
+        not commit.success and "nothing to commit" in (commit.output or "").lower()
+    )
+    committed = commit.success or nothing_to_commit
+    sha = latest_commit(repo_path) if committed else ""
+    log_event("commit_created", {
+        "message": message,
+        "sha": sha,
+        "success": commit.success,
+        "nothing_to_commit": nothing_to_commit,
+    })
+    return {
+        "success": commit.success,
+        "committed": committed,
+        "nothing_to_commit": nothing_to_commit,
+        "sha": sha,
+        "output": commit.output,
+    }
 
 
 def push_branch(repo_path: str, branch: str) -> dict:
@@ -68,6 +105,58 @@ def merge_feature_branch(repo_path: str, branch: str) -> dict:
     r = run_command(["bash", script, branch], cwd=repo_path, timeout=300)
     log_event("merge_completed", {"branch": branch, "success": r.success, "output": r.output[-500:]})
     return {"success": r.success, "output": r.output}
+
+
+def cleanup_feature_branch(repo_path: str, branch: str, force: bool = False) -> dict:
+    """Delete a feature branch locally and on origin.
+
+    ``force=True`` retries a failed ``-d`` with ``-D``.  Only pass it when the
+    branch's changes are already confirmed on the base branch by an external
+    authority (e.g. the GitHub merge API returned success, or the PR had no
+    diff against base).  Squash/API merges rewrite history, so git's local
+    "not fully merged" check false-positives on branches whose content HAS
+    landed — that is the case force exists for (M0.9 finding, 2026-07-06).
+    """
+    if branch.lower() in _PROTECTED_BRANCHES:
+        result = {
+            "success": False,
+            "local_deleted": False,
+            "remote_deleted": False,
+            "output": f"Refusing to clean up protected branch '{branch}'.",
+        }
+        log_event("branch_cleanup_completed", {"branch": branch, **result})
+        return result
+
+    current = current_branch(repo_path)
+    checkout = None
+    if current == branch:
+        checkout = _git(["checkout", "main"], repo_path)
+        if not checkout.success:
+            result = {
+                "success": False,
+                "local_deleted": False,
+                "remote_deleted": False,
+                "output": checkout.output,
+            }
+            log_event("branch_cleanup_completed", {"branch": branch, **result})
+            return result
+
+    local = _git(["branch", "-d", branch], repo_path)
+    if not local.success and force and "not fully merged" in (local.output or ""):
+        log_event("branch_cleanup_forced", {
+            "branch": branch,
+            "reason": "squash/API merge not detectable locally; -d refused, retrying -D",
+        })
+        local = _git(["branch", "-D", branch], repo_path)
+    remote = _git(["push", "origin", "--delete", branch], repo_path, timeout=120)
+    result = {
+        "success": local.success and remote.success,
+        "local_deleted": local.success,
+        "remote_deleted": remote.success,
+        "output": "\n".join(part for part in [local.output, remote.output] if part),
+    }
+    log_event("branch_cleanup_completed", {"branch": branch, **result})
+    return result
 
 
 def push_deploy_if_available(repo_path: str) -> dict:

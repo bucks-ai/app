@@ -10,22 +10,13 @@ import {
 import type {
   NewResearchDistributionChannelInput,
   UpdateResearchDistributionChannelInput,
-  ResearchConfidence,
-  ResearchPriority,
 } from "@/types/research";
-
-const VALID_CONFIDENCES = new Set<ResearchConfidence>([
-  "assumption", "weak_signal", "medium_signal", "strong_signal", "validated", "invalidated",
-]);
-const VALID_PRIORITIES = new Set<ResearchPriority>(["high", "medium", "low"]);
-
-function safeScore(v: unknown): number | null {
-  return typeof v === "number" && v >= 0 && v <= 10 ? v : null;
-}
-
-function errorResponse(error: string, code: string, status: number) {
-  return Response.json({ ok: false, error, code }, { status });
-}
+import { apiError, unauthorized, badRequest, notFound, zodIssuesToFields } from "@/lib/api-error";
+import {
+  createResearchDistributionChannelBodySchema,
+  updateResearchDistributionChannelBodySchema,
+} from "@/lib/schemas/research";
+import { limit, tooManyRequests, RATE_LIMITS } from "@/lib/rate-limit";
 
 async function resolveAuth(id: string) {
   const userResult = await getCurrentUser();
@@ -44,52 +35,56 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   if (!hasSupabaseEnv()) {
-    return errorResponse("Supabase is not configured.", "missing_supabase_env", 503);
+    return apiError("Supabase is not configured.", "missing_supabase_env", 503);
   }
 
   const { id } = await params;
-  if (!id) return errorResponse("Business id is required.", "invalid_input", 400);
+  if (!id) return badRequest("Business id is required.", "invalid_input");
 
   const { user, business } = await resolveAuth(id);
-  if (!user) return errorResponse("Authentication required.", "unauthenticated", 401);
-  if (!business) return errorResponse("Business not found.", "business_not_found", 404);
-  if (business.user_id !== user.id) return errorResponse("Access denied.", "forbidden", 403);
+  if (!user) return unauthorized();
 
-  let body: Record<string, unknown> = {};
+  const rateLimitResult = await limit(`${user.id}:research-distribution`, RATE_LIMITS.mutationDefault);
+  if (!rateLimitResult.allowed) return tooManyRequests();
+
+  if (!business) return notFound("Business not found.", "business_not_found");
+  if (business.user_id !== user.id) return apiError("Access denied.", "forbidden", 403);
+
+  let json: unknown;
   try {
-    body = (await request.json()) as Record<string, unknown>;
+    json = await request.json();
   } catch {
-    return errorResponse("Invalid JSON body.", "invalid_input", 400);
+    return badRequest("Request body must be valid JSON.", "invalid_json");
   }
 
-  const channel = typeof body.channel === "string" ? body.channel.trim() : "";
-  if (!channel) return errorResponse("channel is required.", "invalid_input", 400);
-
-  const rawConfidence = body.confidence as string | undefined;
-  const rawPriority = body.priority as string | undefined;
+  const parsed = createResearchDistributionChannelBodySchema.safeParse(json);
+  if (!parsed.success) {
+    return badRequest(
+      "Request body failed validation.",
+      "validation_error",
+      zodIssuesToFields(parsed.error),
+    );
+  }
+  const body = parsed.data;
 
   const input: NewResearchDistributionChannelInput = {
     business_id: id,
     user_id: user.id,
-    channel,
-    description: (body.description as string | null) ?? null,
-    speed_score: safeScore(body.speed_score),
-    cost_score: safeScore(body.cost_score),
-    difficulty_score: safeScore(body.difficulty_score),
-    reasoning: (body.reasoning as string | null) ?? null,
-    confidence: VALID_CONFIDENCES.has(rawConfidence as ResearchConfidence)
-      ? (rawConfidence as ResearchConfidence)
-      : null,
-    priority: VALID_PRIORITIES.has(rawPriority as ResearchPriority)
-      ? (rawPriority as ResearchPriority)
-      : "medium",
+    channel: body.channel,
+    description: body.description ?? null,
+    speed_score: body.speed_score ?? null,
+    cost_score: body.cost_score ?? null,
+    difficulty_score: body.difficulty_score ?? null,
+    reasoning: body.reasoning ?? null,
+    confidence: body.confidence ?? null,
+    priority: body.priority ?? "medium",
   };
 
   const result = await createResearchDistributionChannel(input);
 
   if (result.error || !result.data) {
     const code = result.code ?? "research_create_failed";
-    return errorResponse(result.error ?? "Could not create distribution channel.", code,
+    return apiError(result.error ?? "Could not create distribution channel.", code,
       code === "research_schema_missing" ? 503 : 500);
   }
 
@@ -105,54 +100,56 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   if (!hasSupabaseEnv()) {
-    return errorResponse("Supabase is not configured.", "missing_supabase_env", 503);
+    return apiError("Supabase is not configured.", "missing_supabase_env", 503);
   }
 
   const { id } = await params;
-  if (!id) return errorResponse("Business id is required.", "invalid_input", 400);
+  if (!id) return badRequest("Business id is required.", "invalid_input");
 
   const { user, business } = await resolveAuth(id);
-  if (!user) return errorResponse("Authentication required.", "unauthenticated", 401);
-  if (!business) return errorResponse("Business not found.", "business_not_found", 404);
-  if (business.user_id !== user.id) return errorResponse("Access denied.", "forbidden", 403);
+  if (!user) return unauthorized();
 
-  let body: Record<string, unknown> = {};
+  const rateLimitResult = await limit(`${user.id}:research-distribution`, RATE_LIMITS.mutationDefault);
+  if (!rateLimitResult.allowed) return tooManyRequests();
+
+  if (!business) return notFound("Business not found.", "business_not_found");
+  if (business.user_id !== user.id) return apiError("Access denied.", "forbidden", 403);
+
+  let json: unknown;
   try {
-    body = (await request.json()) as Record<string, unknown>;
+    json = await request.json();
   } catch {
-    return errorResponse("Invalid JSON body.", "invalid_input", 400);
+    return badRequest("Request body must be valid JSON.", "invalid_json");
   }
 
-  const channelId = typeof body.id === "string" ? body.id.trim() : "";
-  if (!channelId) return errorResponse("id (channel uuid) is required.", "invalid_input", 400);
-
-  const rawConfidence = body.confidence as string | undefined;
-  const rawPriority = body.priority as string | undefined;
+  const parsed = updateResearchDistributionChannelBodySchema.safeParse(json);
+  if (!parsed.success) {
+    return badRequest(
+      "Request body failed validation.",
+      "validation_error",
+      zodIssuesToFields(parsed.error),
+    );
+  }
+  const body = parsed.data;
 
   const input: UpdateResearchDistributionChannelInput = {
-    id: channelId,
+    id: body.id,
     business_id: id,
-    ...(body.channel !== undefined && { channel: body.channel as string }),
-    ...(body.description !== undefined && { description: body.description as string | null }),
-    ...(body.speed_score !== undefined && { speed_score: safeScore(body.speed_score) }),
-    ...(body.cost_score !== undefined && { cost_score: safeScore(body.cost_score) }),
-    ...(body.difficulty_score !== undefined && { difficulty_score: safeScore(body.difficulty_score) }),
-    ...(body.reasoning !== undefined && { reasoning: body.reasoning as string | null }),
-    ...(rawConfidence !== undefined &&
-      VALID_CONFIDENCES.has(rawConfidence as ResearchConfidence) && {
-        confidence: rawConfidence as ResearchConfidence,
-      }),
-    ...(rawPriority !== undefined &&
-      VALID_PRIORITIES.has(rawPriority as ResearchPriority) && {
-        priority: rawPriority as ResearchPriority,
-      }),
+    ...(body.channel !== undefined && { channel: body.channel }),
+    ...(body.description !== undefined && { description: body.description }),
+    ...(body.speed_score !== undefined && { speed_score: body.speed_score }),
+    ...(body.cost_score !== undefined && { cost_score: body.cost_score }),
+    ...(body.difficulty_score !== undefined && { difficulty_score: body.difficulty_score }),
+    ...(body.reasoning !== undefined && { reasoning: body.reasoning }),
+    ...(body.confidence !== undefined && { confidence: body.confidence }),
+    ...(body.priority !== undefined && { priority: body.priority }),
   };
 
   const result = await updateResearchDistributionChannel(input);
 
   if (result.error || !result.data) {
     const code = result.code ?? "research_update_failed";
-    return errorResponse(result.error ?? "Could not update distribution channel.", code,
+    return apiError(result.error ?? "Could not update distribution channel.", code,
       code === "research_schema_missing" ? 503 : 500);
   }
 

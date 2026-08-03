@@ -10,18 +10,13 @@ import {
 import type {
   NewResearchBuyerBudgetInput,
   UpdateResearchBuyerBudgetInput,
-  ResearchConfidence,
-  ResearchPriority,
 } from "@/types/research";
-
-const VALID_CONFIDENCES = new Set<ResearchConfidence>([
-  "assumption", "weak_signal", "medium_signal", "strong_signal", "validated", "invalidated",
-]);
-const VALID_PRIORITIES = new Set<ResearchPriority>(["high", "medium", "low"]);
-
-function errorResponse(error: string, code: string, status: number) {
-  return Response.json({ ok: false, error, code }, { status });
-}
+import { apiError, unauthorized, badRequest, notFound, zodIssuesToFields } from "@/lib/api-error";
+import {
+  createResearchBuyerBudgetBodySchema,
+  updateResearchBuyerBudgetBodySchema,
+} from "@/lib/schemas/research";
+import { limit, tooManyRequests, RATE_LIMITS } from "@/lib/rate-limit";
 
 async function resolveAuth(id: string) {
   const userResult = await getCurrentUser();
@@ -40,52 +35,56 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   if (!hasSupabaseEnv()) {
-    return errorResponse("Supabase is not configured.", "missing_supabase_env", 503);
+    return apiError("Supabase is not configured.", "missing_supabase_env", 503);
   }
 
   const { id } = await params;
-  if (!id) return errorResponse("Business id is required.", "invalid_input", 400);
+  if (!id) return badRequest("Business id is required.", "invalid_input");
 
   const { user, business } = await resolveAuth(id);
-  if (!user) return errorResponse("Authentication required.", "unauthenticated", 401);
-  if (!business) return errorResponse("Business not found.", "business_not_found", 404);
-  if (business.user_id !== user.id) return errorResponse("Access denied.", "forbidden", 403);
+  if (!user) return unauthorized();
 
-  let body: Record<string, unknown> = {};
+  const rateLimitResult = await limit(`${user.id}:research-buyer-budgets`, RATE_LIMITS.mutationDefault);
+  if (!rateLimitResult.allowed) return tooManyRequests();
+
+  if (!business) return notFound("Business not found.", "business_not_found");
+  if (business.user_id !== user.id) return apiError("Access denied.", "forbidden", 403);
+
+  let json: unknown;
   try {
-    body = (await request.json()) as Record<string, unknown>;
+    json = await request.json();
   } catch {
-    return errorResponse("Invalid JSON body.", "invalid_input", 400);
+    return badRequest("Request body must be valid JSON.", "invalid_json");
   }
 
-  const buyer = typeof body.buyer === "string" ? body.buyer.trim() : "";
-  if (!buyer) return errorResponse("buyer is required.", "invalid_input", 400);
-
-  const rawConfidence = body.confidence as string | undefined;
-  const rawPriority = body.priority as string | undefined;
+  const parsed = createResearchBuyerBudgetBodySchema.safeParse(json);
+  if (!parsed.success) {
+    return badRequest(
+      "Request body failed validation.",
+      "validation_error",
+      zodIssuesToFields(parsed.error),
+    );
+  }
+  const body = parsed.data;
 
   const input: NewResearchBuyerBudgetInput = {
     business_id: id,
     user_id: user.id,
-    buyer,
-    budget_owner: (body.budget_owner as string | null) ?? null,
-    existing_spend: (body.existing_spend as string | null) ?? null,
-    willingness_to_pay: (body.willingness_to_pay as string | null) ?? null,
-    value_driver: (body.value_driver as string | null) ?? null,
-    pricing_signal: (body.pricing_signal as string | null) ?? null,
-    confidence: VALID_CONFIDENCES.has(rawConfidence as ResearchConfidence)
-      ? (rawConfidence as ResearchConfidence)
-      : null,
-    priority: VALID_PRIORITIES.has(rawPriority as ResearchPriority)
-      ? (rawPriority as ResearchPriority)
-      : "medium",
+    buyer: body.buyer,
+    budget_owner: body.budget_owner ?? null,
+    existing_spend: body.existing_spend ?? null,
+    willingness_to_pay: body.willingness_to_pay ?? null,
+    value_driver: body.value_driver ?? null,
+    pricing_signal: body.pricing_signal ?? null,
+    confidence: body.confidence ?? null,
+    priority: body.priority ?? "medium",
   };
 
   const result = await createResearchBuyerBudget(input);
 
   if (result.error || !result.data) {
     const code = result.code ?? "research_create_failed";
-    return errorResponse(result.error ?? "Could not create buyer budget record.", code,
+    return apiError(result.error ?? "Could not create buyer budget record.", code,
       code === "research_schema_missing" ? 503 : 500);
   }
 
@@ -101,54 +100,56 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   if (!hasSupabaseEnv()) {
-    return errorResponse("Supabase is not configured.", "missing_supabase_env", 503);
+    return apiError("Supabase is not configured.", "missing_supabase_env", 503);
   }
 
   const { id } = await params;
-  if (!id) return errorResponse("Business id is required.", "invalid_input", 400);
+  if (!id) return badRequest("Business id is required.", "invalid_input");
 
   const { user, business } = await resolveAuth(id);
-  if (!user) return errorResponse("Authentication required.", "unauthenticated", 401);
-  if (!business) return errorResponse("Business not found.", "business_not_found", 404);
-  if (business.user_id !== user.id) return errorResponse("Access denied.", "forbidden", 403);
+  if (!user) return unauthorized();
 
-  let body: Record<string, unknown> = {};
+  const rateLimitResult = await limit(`${user.id}:research-buyer-budgets`, RATE_LIMITS.mutationDefault);
+  if (!rateLimitResult.allowed) return tooManyRequests();
+
+  if (!business) return notFound("Business not found.", "business_not_found");
+  if (business.user_id !== user.id) return apiError("Access denied.", "forbidden", 403);
+
+  let json: unknown;
   try {
-    body = (await request.json()) as Record<string, unknown>;
+    json = await request.json();
   } catch {
-    return errorResponse("Invalid JSON body.", "invalid_input", 400);
+    return badRequest("Request body must be valid JSON.", "invalid_json");
   }
 
-  const recordId = typeof body.id === "string" ? body.id.trim() : "";
-  if (!recordId) return errorResponse("id (record uuid) is required.", "invalid_input", 400);
-
-  const rawConfidence = body.confidence as string | undefined;
-  const rawPriority = body.priority as string | undefined;
+  const parsed = updateResearchBuyerBudgetBodySchema.safeParse(json);
+  if (!parsed.success) {
+    return badRequest(
+      "Request body failed validation.",
+      "validation_error",
+      zodIssuesToFields(parsed.error),
+    );
+  }
+  const body = parsed.data;
 
   const input: UpdateResearchBuyerBudgetInput = {
-    id: recordId,
+    id: body.id,
     business_id: id,
-    ...(body.buyer !== undefined && { buyer: body.buyer as string }),
-    ...(body.budget_owner !== undefined && { budget_owner: body.budget_owner as string | null }),
-    ...(body.existing_spend !== undefined && { existing_spend: body.existing_spend as string | null }),
-    ...(body.willingness_to_pay !== undefined && { willingness_to_pay: body.willingness_to_pay as string | null }),
-    ...(body.value_driver !== undefined && { value_driver: body.value_driver as string | null }),
-    ...(body.pricing_signal !== undefined && { pricing_signal: body.pricing_signal as string | null }),
-    ...(rawConfidence !== undefined &&
-      VALID_CONFIDENCES.has(rawConfidence as ResearchConfidence) && {
-        confidence: rawConfidence as ResearchConfidence,
-      }),
-    ...(rawPriority !== undefined &&
-      VALID_PRIORITIES.has(rawPriority as ResearchPriority) && {
-        priority: rawPriority as ResearchPriority,
-      }),
+    ...(body.buyer !== undefined && { buyer: body.buyer }),
+    ...(body.budget_owner !== undefined && { budget_owner: body.budget_owner }),
+    ...(body.existing_spend !== undefined && { existing_spend: body.existing_spend }),
+    ...(body.willingness_to_pay !== undefined && { willingness_to_pay: body.willingness_to_pay }),
+    ...(body.value_driver !== undefined && { value_driver: body.value_driver }),
+    ...(body.pricing_signal !== undefined && { pricing_signal: body.pricing_signal }),
+    ...(body.confidence !== undefined && { confidence: body.confidence }),
+    ...(body.priority !== undefined && { priority: body.priority }),
   };
 
   const result = await updateResearchBuyerBudget(input);
 
   if (result.error || !result.data) {
     const code = result.code ?? "research_update_failed";
-    return errorResponse(result.error ?? "Could not update buyer budget record.", code,
+    return apiError(result.error ?? "Could not update buyer budget record.", code,
       code === "research_schema_missing" ? 503 : 500);
   }
 

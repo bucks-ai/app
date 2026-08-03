@@ -1,15 +1,15 @@
 import { NextRequest } from "next/server";
 import { hasSupabaseEnv } from "@/lib/supabase/env";
-import { getCurrentUser, getBusinessById } from "@/lib/projects";
+import { getBusinessById } from "@/lib/projects";
+import { requireUser } from "@/lib/api-auth";
 import {
   getToolPermissionsForBusiness,
   seedToolPermissionsForBusiness,
   createToolPermissionActivityLog,
 } from "@/lib/tool-permissions";
-
-function errorResponse(error: string, code: string, status: number) {
-  return Response.json({ ok: false, error, code }, { status });
-}
+import { apiError, badRequest, notFound, zodIssuesToFields } from "@/lib/api-error";
+import { seedToolPermissionsBodySchema } from "@/lib/schemas/infra";
+import { limit, tooManyRequests, RATE_LIMITS } from "@/lib/rate-limit";
 
 // ---------------------------------------------------------------------------
 // GET /api/tool-permissions?businessId=...
@@ -19,7 +19,7 @@ function errorResponse(error: string, code: string, status: number) {
 
 export async function GET(request: NextRequest) {
   if (!hasSupabaseEnv()) {
-    return errorResponse(
+    return apiError(
       "Supabase is not configured.",
       "missing_supabase_env",
       503
@@ -30,28 +30,24 @@ export async function GET(request: NextRequest) {
   const businessId = searchParams.get("businessId");
 
   if (!businessId) {
-    return errorResponse("businessId query parameter is required.", "invalid_input", 400);
+    return badRequest("businessId query parameter is required.", "invalid_input");
   }
 
-  const userResult = await getCurrentUser();
-  if (userResult.error || !userResult.data) {
-    return errorResponse("Authentication required.", "unauthenticated", 401);
-  }
-
-  const user = userResult.data;
+  const { user, response } = await requireUser();
+  if (!user) return response;
 
   // Verify ownership
   const businessResult = await getBusinessById(businessId);
   if (businessResult.error || !businessResult.data) {
-    return errorResponse("Business not found.", "not_found", 404);
+    return notFound("Business not found.", "not_found");
   }
   if (businessResult.data.user_id !== user.id) {
-    return errorResponse("Access denied.", "forbidden", 403);
+    return apiError("Access denied.", "forbidden", 403);
   }
 
   const result = await getToolPermissionsForBusiness(businessId);
   if (result.error) {
-    return errorResponse(result.error, "not_found", 500);
+    return apiError(result.error, "not_found", 500);
   }
 
   const permissions = result.data ?? [];
@@ -72,44 +68,49 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   if (!hasSupabaseEnv()) {
-    return errorResponse(
+    return apiError(
       "Supabase is not configured.",
       "missing_supabase_env",
       503
     );
   }
 
-  let body: { businessId?: string };
+  let json: unknown;
   try {
-    body = (await request.json()) as { businessId?: string };
+    json = await request.json();
   } catch {
-    return errorResponse("Request body must be valid JSON.", "invalid_input", 400);
+    return badRequest("Request body must be valid JSON.", "invalid_json");
   }
 
-  const { businessId } = body;
-  if (!businessId || typeof businessId !== "string") {
-    return errorResponse("businessId is required in the request body.", "invalid_input", 400);
+  const parsed = seedToolPermissionsBodySchema.safeParse(json);
+  if (!parsed.success) {
+    return badRequest(
+      "Request body failed validation.",
+      "validation_error",
+      zodIssuesToFields(parsed.error),
+    );
   }
 
-  const userResult = await getCurrentUser();
-  if (userResult.error || !userResult.data) {
-    return errorResponse("Authentication required.", "unauthenticated", 401);
-  }
+  const { businessId } = parsed.data;
 
-  const user = userResult.data;
+  const { user, response } = await requireUser();
+  if (!user) return response;
+
+  const rateLimitResult = await limit(`${user.id}:tool-permissions-seed`, RATE_LIMITS.mutationDefault);
+  if (!rateLimitResult.allowed) return tooManyRequests();
 
   // Verify ownership
   const businessResult = await getBusinessById(businessId);
   if (businessResult.error || !businessResult.data) {
-    return errorResponse("Business not found.", "not_found", 404);
+    return notFound("Business not found.", "not_found");
   }
   if (businessResult.data.user_id !== user.id) {
-    return errorResponse("Access denied.", "forbidden", 403);
+    return apiError("Access denied.", "forbidden", 403);
   }
 
   const seedResult = await seedToolPermissionsForBusiness(businessId, user.id);
   if (seedResult.error || !seedResult.data) {
-    return errorResponse(
+    return apiError(
       seedResult.error ?? "Seed failed.",
       "seed_failed",
       500

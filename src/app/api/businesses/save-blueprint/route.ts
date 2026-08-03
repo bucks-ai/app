@@ -3,7 +3,6 @@ import {
   createAgentActivityLog,
   createBusiness,
   createHumanRequiredActionsFromBlueprint,
-  getCurrentUser,
   saveBusinessBlueprint,
 } from "@/lib/projects";
 import {
@@ -11,86 +10,44 @@ import {
   createToolPermissionActivityLog,
 } from "@/lib/tool-permissions";
 import { hasSupabaseEnv } from "@/lib/supabase/env";
-import type { BusinessBlueprint, StartupIdea } from "@/types/startup";
-
-type SaveBlueprintBody = {
-  startupIdea?: StartupIdea;
-  blueprint?: BusinessBlueprint;
-};
-
-const REQUIRED_STARTUP_FIELDS: (keyof StartupIdea)[] = [
-  "ideaName",
-  "oneLineIdea",
-  "primaryGoal",
-  "budget",
-  "timeline",
-];
-
-function errorResponse(error: string, code: string, status: number) {
-  return Response.json({ ok: false, error, code }, { status });
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isValidStartupIdea(value: unknown): value is StartupIdea {
-  if (!isRecord(value)) return false;
-
-  return REQUIRED_STARTUP_FIELDS.every((field) => {
-    const fieldValue = value[field];
-    return typeof fieldValue === "string" && fieldValue.trim().length > 0;
-  });
-}
-
-function isValidBlueprint(value: unknown): value is BusinessBlueprint {
-  return isRecord(value) && typeof value.businessSummary === "string";
-}
+import { requireUser } from "@/lib/api-auth";
+import { apiError, badRequest, zodIssuesToFields } from "@/lib/api-error";
+import { saveBlueprintBodySchema } from "@/lib/schemas/save-blueprint";
+import { limit, tooManyRequests, RATE_LIMITS } from "@/lib/rate-limit";
+import { capture } from "@/lib/analytics/server";
 
 export async function POST(request: NextRequest) {
   if (!hasSupabaseEnv()) {
-    return errorResponse(
+    return apiError(
       "Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local.",
       "supabase_not_configured",
       503
     );
   }
 
-  let body: SaveBlueprintBody;
+  const { user, response } = await requireUser();
+  if (!user) return response;
+
+  const rateLimitResult = await limit(`${user.id}:save-blueprint`, RATE_LIMITS.mutationDefault);
+  if (!rateLimitResult.allowed) return tooManyRequests();
+
+  let json: unknown;
   try {
-    body = (await request.json()) as SaveBlueprintBody;
+    json = await request.json();
   } catch {
-    return errorResponse("Request body must be valid JSON.", "invalid_json", 400);
+    return badRequest("Request body must be valid JSON.", "invalid_json");
   }
 
-  if (!isRecord(body)) {
-    return errorResponse("Request body must be a JSON object.", "invalid_payload", 400);
-  }
-
-  if (!isValidStartupIdea(body.startupIdea)) {
-    return errorResponse(
-      "Missing or invalid startupIdea. Required fields: ideaName, oneLineIdea, primaryGoal, budget, timeline.",
-      "invalid_startup_idea",
-      400
+  const parsed = saveBlueprintBodySchema.safeParse(json);
+  if (!parsed.success) {
+    return badRequest(
+      "Request body failed validation.",
+      "validation_error",
+      zodIssuesToFields(parsed.error),
     );
   }
 
-  if (!isValidBlueprint(body.blueprint)) {
-    return errorResponse(
-      "Missing or invalid blueprint. Expected a generated BusinessBlueprint object.",
-      "invalid_blueprint",
-      400
-    );
-  }
-
-  const userResult = await getCurrentUser();
-  if (userResult.error || !userResult.data) {
-    return errorResponse("You must be signed in to save a blueprint.", "not_authenticated", 401);
-  }
-
-  const user = userResult.data;
-  const startupIdea = body.startupIdea;
-  const blueprint = body.blueprint;
+  const { startupIdea, blueprint } = parsed.data;
 
   const businessResult = await createBusiness({
     user_id: user.id,
@@ -113,7 +70,7 @@ export async function POST(request: NextRequest) {
   });
 
   if (businessResult.error || !businessResult.data) {
-    return errorResponse(
+    return apiError(
       businessResult.error ?? "Failed to create business.",
       "business_create_failed",
       500
@@ -128,7 +85,7 @@ export async function POST(request: NextRequest) {
   });
 
   if (blueprintResult.error || !blueprintResult.data) {
-    return errorResponse(
+    return apiError(
       blueprintResult.error ?? "Failed to save blueprint.",
       "blueprint_save_failed",
       500
@@ -142,7 +99,7 @@ export async function POST(request: NextRequest) {
   );
 
   if (actionsResult.error || !actionsResult.data) {
-    return errorResponse(
+    return apiError(
       actionsResult.error ?? "Failed to create human-required actions.",
       "human_actions_create_failed",
       500
@@ -161,7 +118,7 @@ export async function POST(request: NextRequest) {
   });
 
   if (activityResult.error || !activityResult.data) {
-    return errorResponse(
+    return apiError(
       activityResult.error ?? "Failed to create activity log.",
       "activity_log_create_failed",
       500
@@ -185,6 +142,8 @@ export async function POST(request: NextRequest) {
       },
     });
   }
+
+  capture("BLUEPRINT_SAVED", user, { business_id: business.id });
 
   return Response.json(
     {

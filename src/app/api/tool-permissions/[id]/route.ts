@@ -1,30 +1,15 @@
 import { NextRequest } from "next/server";
 import { hasSupabaseEnv } from "@/lib/supabase/env";
-import { getCurrentUser } from "@/lib/projects";
+import { requireUser } from "@/lib/api-auth";
 import {
   getToolPermissionById,
   updateToolPermissionStatus,
   createToolPermissionActivityLog,
 } from "@/lib/tool-permissions";
-import type { ToolPermissionAction } from "@/types/tool-permissions";
-
-function errorResponse(error: string, code: string, status: number) {
-  return Response.json({ ok: false, error, code }, { status });
-}
-
-const VALID_ACTIONS: ToolPermissionAction[] = [
-  "request_approval",
-  "approve",
-  "mark_human_required",
-  "mark_connected_demo",
-  "reject",
-  "block",
-  "reset",
-];
-
-function isValidAction(value: unknown): value is ToolPermissionAction {
-  return typeof value === "string" && (VALID_ACTIONS as string[]).includes(value);
-}
+import { apiError, badRequest, notFound, zodIssuesToFields } from "@/lib/api-error";
+import { updateToolPermissionBodySchema } from "@/lib/schemas/infra";
+import { limit, tooManyRequests, RATE_LIMITS } from "@/lib/rate-limit";
+import { capture } from "@/lib/analytics/server";
 
 // ---------------------------------------------------------------------------
 // PATCH /api/tool-permissions/[id]
@@ -36,7 +21,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   if (!hasSupabaseEnv()) {
-    return errorResponse(
+    return apiError(
       "Supabase is not configured.",
       "missing_supabase_env",
       503
@@ -45,42 +30,42 @@ export async function PATCH(
 
   const { id } = await params;
   if (!id) {
-    return errorResponse("Permission id is required.", "invalid_input", 400);
+    return badRequest("Permission id is required.", "invalid_input");
   }
 
-  const userResult = await getCurrentUser();
-  if (userResult.error || !userResult.data) {
-    return errorResponse("Authentication required.", "unauthenticated", 401);
-  }
+  const { user, response } = await requireUser();
+  if (!user) return response;
 
-  const user = userResult.data;
+  const rateLimitResult = await limit(`${user.id}:tool-permissions-update`, RATE_LIMITS.mutationDefault);
+  if (!rateLimitResult.allowed) return tooManyRequests();
 
-  let body: { action?: unknown };
+  let json: unknown;
   try {
-    body = (await request.json()) as { action?: unknown };
+    json = await request.json();
   } catch {
-    return errorResponse("Request body must be valid JSON.", "invalid_input", 400);
+    return badRequest("Request body must be valid JSON.", "invalid_json");
   }
 
-  if (!isValidAction(body.action)) {
-    return errorResponse(
-      `action must be one of: ${VALID_ACTIONS.join(", ")}.`,
-      "invalid_input",
-      400
+  const parsed = updateToolPermissionBodySchema.safeParse(json);
+  if (!parsed.success) {
+    return badRequest(
+      "Request body failed validation.",
+      "validation_error",
+      zodIssuesToFields(parsed.error),
     );
   }
 
-  const action = body.action;
+  const { action } = parsed.data;
 
   // Fetch the record so we know the business_id for the activity log
   const fetchResult = await getToolPermissionById(id);
   if (fetchResult.error || !fetchResult.data) {
-    return errorResponse("Tool permission not found.", "not_found", 404);
+    return notFound("Tool permission not found.", "not_found");
   }
 
   const existing = fetchResult.data;
   if (existing.user_id !== user.id) {
-    return errorResponse("Access denied.", "forbidden", 403);
+    return apiError("Access denied.", "forbidden", 403);
   }
 
   const updateResult = await updateToolPermissionStatus({
@@ -90,7 +75,7 @@ export async function PATCH(
   });
 
   if (updateResult.error || !updateResult.data) {
-    return errorResponse(
+    return apiError(
       updateResult.error ?? "Update failed.",
       "update_failed",
       500
@@ -114,6 +99,12 @@ export async function PATCH(
         action,
       },
     }).catch(() => undefined);
+
+    if (action === "approve") {
+      capture("TOOL_APPROVED", user, { business_id: existing.business_id });
+    } else if (action === "request_approval") {
+      capture("TOOL_APPROVAL_REQUESTED", user, { business_id: existing.business_id });
+    }
   }
 
   return Response.json({ ok: true, data: updated });

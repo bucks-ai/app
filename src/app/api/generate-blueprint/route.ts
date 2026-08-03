@@ -1,59 +1,63 @@
 import { NextRequest } from "next/server";
 import OpenAI from "openai";
-import type { StartupIdea, BusinessBlueprint } from "@/types/startup";
+import type { StartupIdea } from "@/types/startup";
 import { buildBlueprintPrompt } from "@/lib/blueprint-prompt";
-
-const REQUIRED_FIELDS: (keyof StartupIdea)[] = [
-  "ideaName",
-  "oneLineIdea",
-  "primaryGoal",
-  "budget",
-  "timeline",
-];
+import { requireUser } from "@/lib/api-auth";
+import { aiOutputInvalid, apiError, badRequest, zodIssuesToFields } from "@/lib/api-error";
+import { generateBlueprintBodySchema } from "@/lib/schemas/generate-blueprint";
+import { businessBlueprintOutputSchema } from "@/lib/schemas/blueprint-output";
+import { limit, tooManyRequests, RATE_LIMITS } from "@/lib/rate-limit";
+import { buildFakeBlueprint, isFakeAiEnabled } from "@/lib/e2e-fake-ai";
+import { capture } from "@/lib/analytics/server";
 
 export async function POST(request: NextRequest) {
-  if (!process.env.OPENAI_API_KEY) {
-    return Response.json(
-      {
-        error: "missing_api_key",
-        message:
-          "OPENAI_API_KEY is not set. Add it to .env.local to enable real blueprint generation.",
-      },
-      { status: 503 },
+  const { user, response } = await requireUser();
+  if (!user) return response;
+
+  const rateLimitResult = await limit(`${user.id}:generate-blueprint`, RATE_LIMITS.blueprintGenerate);
+  if (!rateLimitResult.allowed) return tooManyRequests();
+
+  const fakeAi = isFakeAiEnabled();
+
+  if (!fakeAi && !process.env.OPENAI_API_KEY) {
+    return apiError(
+      "OPENAI_API_KEY is not set. Add it to .env.local to enable real blueprint generation.",
+      "missing_api_key",
+      503,
     );
   }
 
-  let body: unknown;
+  let json: unknown;
   try {
-    body = await request.json();
+    json = await request.json();
   } catch {
-    return Response.json(
-      { error: "invalid_json", message: "Request body must be valid JSON." },
-      { status: 400 },
+    return badRequest("Request body must be valid JSON.", "invalid_json");
+  }
+
+  const parsed = generateBlueprintBodySchema.safeParse(json);
+  if (!parsed.success) {
+    return badRequest(
+      "Request body failed validation.",
+      "validation_error",
+      zodIssuesToFields(parsed.error),
     );
   }
 
-  if (!body || typeof body !== "object") {
-    return Response.json(
-      { error: "invalid_payload", message: "Request body must be a JSON object." },
-      { status: 400 },
-    );
-  }
+  const idea = parsed.data;
 
-  const idea = body as Partial<StartupIdea>;
-  const missing = REQUIRED_FIELDS.filter(
-    (field) => !idea[field] || String(idea[field]).trim() === "",
-  );
-
-  if (missing.length > 0) {
-    return Response.json(
-      {
-        error: "validation_error",
-        message: `Missing required fields: ${missing.join(", ")}.`,
-        fields: missing,
-      },
-      { status: 400 },
-    );
+  if (fakeAi) {
+    const fixture = buildFakeBlueprint(idea);
+    const parsedFixture = businessBlueprintOutputSchema.safeParse(fixture);
+    if (!parsedFixture.success) {
+      console.error(
+        "generate-blueprint: E2E_FAKE_AI fixture failed schema validation.",
+        JSON.stringify(fixture),
+        parsedFixture.error.issues,
+      );
+      return aiOutputInvalid("The AI returned a blueprint that failed validation.");
+    }
+    capture("BLUEPRINT_GENERATED", user, {});
+    return Response.json({ blueprint: parsedFixture.data }, { status: 200 });
   }
 
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -73,24 +77,30 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unknown OpenAI API error.";
-    return Response.json(
-      { error: "model_error", message: `Blueprint generation failed: ${message}` },
-      { status: 500 },
-    );
+    return apiError(`Blueprint generation failed: ${message}`, "model_error", 500);
   }
 
-  let blueprint: BusinessBlueprint;
+  let rawBlueprint: unknown;
   try {
-    blueprint = JSON.parse(rawContent) as BusinessBlueprint;
+    rawBlueprint = JSON.parse(rawContent);
   } catch {
-    return Response.json(
-      {
-        error: "parse_error",
-        message: "The AI returned a response that could not be parsed as JSON.",
-      },
-      { status: 500 },
+    return apiError(
+      "The AI returned a response that could not be parsed as JSON.",
+      "parse_error",
+      500,
     );
   }
 
-  return Response.json({ blueprint }, { status: 200 });
+  const parsedBlueprint = businessBlueprintOutputSchema.safeParse(rawBlueprint);
+  if (!parsedBlueprint.success) {
+    console.error(
+      "generate-blueprint: AI output failed schema validation.",
+      rawContent,
+      parsedBlueprint.error.issues,
+    );
+    return aiOutputInvalid("The AI returned a blueprint that failed validation.");
+  }
+
+  capture("BLUEPRINT_GENERATED", user, {});
+  return Response.json({ blueprint: parsedBlueprint.data }, { status: 200 });
 }

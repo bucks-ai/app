@@ -2,15 +2,15 @@
 // POST /api/businesses/[id]/validation   — seed workspace from blueprint
 
 import { hasSupabaseEnv } from "@/lib/supabase/env";
-import { getCurrentUser, getBusinessById } from "@/lib/projects";
+import { getBusinessById } from "@/lib/projects";
+import { requireUser } from "@/lib/api-auth";
 import {
   getValidationWorkspace,
   seedValidationWorkspaceFromBlueprint,
 } from "@/lib/validation";
-
-function errorResponse(error: string, code: string, status: number) {
-  return Response.json({ ok: false, error, code }, { status });
-}
+import { apiError, badRequest, notFound, zodIssuesToFields } from "@/lib/api-error";
+import { seedValidationBodySchema } from "@/lib/schemas/validation";
+import { limit, tooManyRequests, RATE_LIMITS } from "@/lib/rate-limit";
 
 // ---------------------------------------------------------------------------
 // GET /api/businesses/[id]/validation
@@ -21,24 +21,22 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   if (!hasSupabaseEnv()) {
-    return errorResponse("Supabase is not configured.", "missing_supabase_env", 503);
+    return apiError("Supabase is not configured.", "missing_supabase_env", 503);
   }
 
   const { id } = await params;
-  if (!id) return errorResponse("Business id is required.", "invalid_input", 400);
+  if (!id) return badRequest("Business id is required.", "invalid_input");
 
-  const userResult = await getCurrentUser();
-  if (userResult.error || !userResult.data) {
-    return errorResponse("Authentication required.", "unauthenticated", 401);
-  }
+  const { user, response } = await requireUser();
+  if (!user) return response;
 
   const businessResult = await getBusinessById(id);
   if (businessResult.error || !businessResult.data) {
-    return errorResponse("Business not found.", "business_not_found", 404);
+    return notFound("Business not found.", "business_not_found");
   }
 
-  if (businessResult.data.user_id !== userResult.data.id) {
-    return errorResponse("Access denied.", "forbidden", 403);
+  if (businessResult.data.user_id !== user.id) {
+    return apiError("Access denied.", "forbidden", 403);
   }
 
   const result = await getValidationWorkspace(id);
@@ -46,7 +44,7 @@ export async function GET(
   if (result.error || !result.data) {
     const code = result.code ?? "validation_error";
     const httpStatus = code === "validation_schema_missing" ? 503 : 500;
-    return errorResponse(
+    return apiError(
       result.error ?? "Could not load validation workspace.",
       code,
       httpStatus
@@ -66,38 +64,40 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   if (!hasSupabaseEnv()) {
-    return errorResponse("Supabase is not configured.", "missing_supabase_env", 503);
+    return apiError("Supabase is not configured.", "missing_supabase_env", 503);
   }
 
   const { id } = await params;
-  if (!id) return errorResponse("Business id is required.", "invalid_input", 400);
+  if (!id) return badRequest("Business id is required.", "invalid_input");
 
-  const userResult = await getCurrentUser();
-  if (userResult.error || !userResult.data) {
-    return errorResponse("Authentication required.", "unauthenticated", 401);
-  }
+  const { user, response } = await requireUser();
+  if (!user) return response;
+
+  const rateLimitResult = await limit(`${user.id}:validation-seed`, RATE_LIMITS.mutationDefault);
+  if (!rateLimitResult.allowed) return tooManyRequests();
 
   const businessResult = await getBusinessById(id);
   if (businessResult.error || !businessResult.data) {
-    return errorResponse("Business not found.", "business_not_found", 404);
+    return notFound("Business not found.", "business_not_found");
   }
 
-  if (businessResult.data.user_id !== userResult.data.id) {
-    return errorResponse("Access denied.", "forbidden", 403);
+  if (businessResult.data.user_id !== user.id) {
+    return apiError("Access denied.", "forbidden", 403);
   }
 
-  let body: Record<string, unknown> = {};
+  let json: unknown;
   try {
-    body = (await request.json()) as Record<string, unknown>;
+    json = await request.json();
   } catch {
-    return errorResponse("Invalid JSON body.", "invalid_input", 400);
+    return badRequest("Request body must be valid JSON.", "invalid_json");
   }
 
-  if (body.action !== "seed") {
-    return errorResponse(
-      'Unknown action. Supported actions: "seed".',
-      "invalid_input",
-      400
+  const parsed = seedValidationBodySchema.safeParse(json);
+  if (!parsed.success) {
+    return badRequest(
+      "Request body failed validation.",
+      "validation_error",
+      zodIssuesToFields(parsed.error),
     );
   }
 
@@ -106,7 +106,7 @@ export async function POST(
   if (result.error || !result.data) {
     const code = result.code ?? "seed_failed";
     const httpStatus = code === "validation_schema_missing" ? 503 : 500;
-    return errorResponse(
+    return apiError(
       result.error ?? "Could not seed validation workspace.",
       code,
       httpStatus

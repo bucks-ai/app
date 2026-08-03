@@ -1,8 +1,10 @@
 import { NextRequest } from "next/server";
 import { hasSupabaseEnv } from "@/lib/supabase/env";
 import { hasVercelEnv } from "@/lib/vercel/env";
-import { getCurrentUser, getBusinessById } from "@/lib/projects";
+import { getBusinessById } from "@/lib/projects";
+import { requireUser } from "@/lib/api-auth";
 import { getLatestVercelProjectForBusiness } from "@/lib/vercel/project-metadata";
+import { apiError, badRequest, notFound } from "@/lib/api-error";
 import {
   getLatestVercelDeploymentForProject,
   normalizeVercelDeploymentStatus,
@@ -10,17 +12,13 @@ import {
   extractDeploymentUrl,
 } from "@/lib/vercel/deployment-status";
 
-function errorResponse(error: string, code: string, status: number) {
-  return Response.json({ ok: false, error, code }, { status });
-}
-
 // ---------------------------------------------------------------------------
 // GET /api/vercel/project-status?businessId=...
 // ---------------------------------------------------------------------------
 
 export async function GET(request: NextRequest) {
   if (!hasSupabaseEnv()) {
-    return errorResponse(
+    return apiError(
       "Supabase is not configured.",
       "missing_supabase_env",
       503
@@ -30,24 +28,21 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const businessId = searchParams.get("businessId");
   if (!businessId) {
-    return errorResponse("businessId query param is required.", "invalid_input", 400);
+    return badRequest("businessId query param is required.", "invalid_input");
   }
 
   // Auth
-  const userResult = await getCurrentUser();
-  if (userResult.error || !userResult.data) {
-    return errorResponse("Authentication required.", "unauthenticated", 401);
-  }
-  const user = userResult.data;
+  const { user, response } = await requireUser();
+  if (!user) return response;
 
   // Business ownership
   const businessResult = await getBusinessById(businessId);
   if (businessResult.error || !businessResult.data) {
-    return errorResponse("Business not found.", "business_not_found", 404);
+    return notFound("Business not found.", "business_not_found");
   }
   const business = businessResult.data;
   if (business.user_id !== user.id) {
-    return errorResponse("Access denied.", "forbidden", 403);
+    return apiError("Access denied.", "forbidden", 403);
   }
 
   // Read stored Vercel project metadata

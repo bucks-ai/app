@@ -1,4 +1,5 @@
 import type { DashboardBusiness } from "@/components/dashboard/mock-data";
+import { SandboxStatusPanel } from "@/components/workspace/SandboxStatusPanel";
 
 type SettingsTabProps = {
   business: DashboardBusiness;
@@ -99,6 +100,9 @@ export function SettingsTab({ business }: SettingsTabProps) {
           ))}
         </div>
       </div>
+
+      {/* Sandbox configuration */}
+      <SandboxStatusPanel businessId={business.id} />
     </div>
   );
 }

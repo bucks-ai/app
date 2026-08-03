@@ -32,13 +32,28 @@ export function formatAgentTime(value?: string | null): string {
   });
 }
 
+export function getAgentRunTimestamp(run: AgentRunRecord): number {
+  const value = run.completed_at ?? run.started_at ?? run.updated_at ?? run.created_at;
+  const timestamp = new Date(value).getTime();
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
+export function formatAgentRunWindow(run: AgentRunRecord): string {
+  const started = formatAgentTime(run.started_at ?? run.created_at);
+  const completed = run.completed_at ? formatAgentTime(run.completed_at) : null;
+
+  if (completed) return `Started ${started} / Completed ${completed}`;
+  return `Started ${started} / Not completed`;
+}
+
 export function latestRunByAgent(
   runs: AgentRunRecord[]
 ): Partial<Record<AgentTemplateId, AgentRunRecord>> {
   const latest: Partial<Record<AgentTemplateId, AgentRunRecord>> = {};
 
   for (const run of runs) {
-    if (!latest[run.agent_id]) {
+    const current = latest[run.agent_id];
+    if (!current || getAgentRunTimestamp(run) > getAgentRunTimestamp(current)) {
       latest[run.agent_id] = run;
     }
   }

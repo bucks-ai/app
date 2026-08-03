@@ -2,28 +2,24 @@
 // PATCH /api/businesses/[id]/validation/personas   — update persona (body must include id)
 
 import { hasSupabaseEnv } from "@/lib/supabase/env";
-import { getCurrentUser, getBusinessById } from "@/lib/projects";
+import { getBusinessById } from "@/lib/projects";
+import { requireUser } from "@/lib/api-auth";
 import { createValidationPersona, updateValidationPersona } from "@/lib/validation";
 import type {
   NewValidationPersonaInput,
   UpdateValidationPersonaInput,
-  ValidationPriority,
 } from "@/types/validation";
+import { apiError, badRequest, notFound, zodIssuesToFields } from "@/lib/api-error";
+import {
+  createValidationPersonaBodySchema,
+  updateValidationPersonaBodySchema,
+} from "@/lib/schemas/validation";
+import { limit, tooManyRequests, RATE_LIMITS } from "@/lib/rate-limit";
 
-const VALID_PRIORITIES = new Set<ValidationPriority>(["high", "medium", "low"]);
-
-function errorResponse(error: string, code: string, status: number) {
-  return Response.json({ ok: false, error, code }, { status });
-}
-
-async function resolveAuth(id: string) {
-  const userResult = await getCurrentUser();
-  if (userResult.error || !userResult.data) return { user: null, business: null };
-
+async function resolveBusiness(id: string) {
   const businessResult = await getBusinessById(id);
-  if (businessResult.error || !businessResult.data) return { user: userResult.data, business: null };
-
-  return { user: userResult.data, business: businessResult.data };
+  if (businessResult.error || !businessResult.data) return null;
+  return businessResult.data;
 }
 
 // ---------------------------------------------------------------------------
@@ -35,52 +31,58 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   if (!hasSupabaseEnv()) {
-    return errorResponse("Supabase is not configured.", "missing_supabase_env", 503);
+    return apiError("Supabase is not configured.", "missing_supabase_env", 503);
   }
 
   const { id } = await params;
-  if (!id) return errorResponse("Business id is required.", "invalid_input", 400);
+  if (!id) return badRequest("Business id is required.", "invalid_input");
 
-  const { user, business } = await resolveAuth(id);
-  if (!user) return errorResponse("Authentication required.", "unauthenticated", 401);
-  if (!business) return errorResponse("Business not found.", "business_not_found", 404);
-  if (business.user_id !== user.id) return errorResponse("Access denied.", "forbidden", 403);
+  const { user, response } = await requireUser();
+  if (!user) return response;
 
-  let body: Record<string, unknown> = {};
+  const rateLimitResult = await limit(`${user.id}:validation-personas`, RATE_LIMITS.mutationDefault);
+  if (!rateLimitResult.allowed) return tooManyRequests();
+
+  const business = await resolveBusiness(id);
+  if (!business) return notFound("Business not found.", "business_not_found");
+  if (business.user_id !== user.id) return apiError("Access denied.", "forbidden", 403);
+
+  let json: unknown;
   try {
-    body = (await request.json()) as Record<string, unknown>;
+    json = await request.json();
   } catch {
-    return errorResponse("Invalid JSON body.", "invalid_input", 400);
+    return badRequest("Request body must be valid JSON.", "invalid_json");
   }
 
-  const name = typeof body.name === "string" ? body.name.trim() : "";
-  if (!name) return errorResponse("name is required.", "invalid_input", 400);
-
-  const rawPriority = body.priority as string | undefined;
+  const parsed = createValidationPersonaBodySchema.safeParse(json);
+  if (!parsed.success) {
+    return badRequest(
+      "Request body failed validation.",
+      "validation_error",
+      zodIssuesToFields(parsed.error),
+    );
+  }
+  const body = parsed.data;
 
   const input: NewValidationPersonaInput = {
     business_id: id,
     user_id: user.id,
-    name,
-    segment: (body.segment as string | null) ?? null,
-    description: (body.description as string | null) ?? null,
-    pain_points: Array.isArray(body.pain_points) ? (body.pain_points as string[]) : null,
-    desired_outcomes: Array.isArray(body.desired_outcomes)
-      ? (body.desired_outcomes as string[])
-      : null,
-    channels: Array.isArray(body.channels) ? (body.channels as string[]) : null,
-    willingness_to_pay: (body.willingness_to_pay as string | null) ?? null,
-    priority: VALID_PRIORITIES.has(rawPriority as ValidationPriority)
-      ? (rawPriority as ValidationPriority)
-      : "medium",
-    status: typeof body.status === "string" ? body.status : "active",
+    name: body.name,
+    segment: body.segment ?? null,
+    description: body.description ?? null,
+    pain_points: body.pain_points ?? null,
+    desired_outcomes: body.desired_outcomes ?? null,
+    channels: body.channels ?? null,
+    willingness_to_pay: body.willingness_to_pay ?? null,
+    priority: body.priority ?? "medium",
+    status: body.status ?? "active",
   };
 
   const result = await createValidationPersona(input);
 
   if (result.error || !result.data) {
     const code = result.code ?? "validation_create_failed";
-    return errorResponse(result.error ?? "Could not create persona.", code,
+    return apiError(result.error ?? "Could not create persona.", code,
       code === "validation_schema_missing" ? 503 : 500);
   }
 
@@ -97,61 +99,58 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   if (!hasSupabaseEnv()) {
-    return errorResponse("Supabase is not configured.", "missing_supabase_env", 503);
+    return apiError("Supabase is not configured.", "missing_supabase_env", 503);
   }
 
   const { id } = await params;
-  if (!id) return errorResponse("Business id is required.", "invalid_input", 400);
+  if (!id) return badRequest("Business id is required.", "invalid_input");
 
-  const { user, business } = await resolveAuth(id);
-  if (!user) return errorResponse("Authentication required.", "unauthenticated", 401);
-  if (!business) return errorResponse("Business not found.", "business_not_found", 404);
-  if (business.user_id !== user.id) return errorResponse("Access denied.", "forbidden", 403);
+  const { user, response } = await requireUser();
+  if (!user) return response;
 
-  let body: Record<string, unknown> = {};
+  const rateLimitResult = await limit(`${user.id}:validation-personas`, RATE_LIMITS.mutationDefault);
+  if (!rateLimitResult.allowed) return tooManyRequests();
+
+  const business = await resolveBusiness(id);
+  if (!business) return notFound("Business not found.", "business_not_found");
+  if (business.user_id !== user.id) return apiError("Access denied.", "forbidden", 403);
+
+  let json: unknown;
   try {
-    body = (await request.json()) as Record<string, unknown>;
+    json = await request.json();
   } catch {
-    return errorResponse("Invalid JSON body.", "invalid_input", 400);
+    return badRequest("Request body must be valid JSON.", "invalid_json");
   }
 
-  const personaId = typeof body.id === "string" ? body.id.trim() : "";
-  if (!personaId) return errorResponse("id (persona uuid) is required.", "invalid_input", 400);
-
-  const rawPriority = body.priority as string | undefined;
+  const parsed = updateValidationPersonaBodySchema.safeParse(json);
+  if (!parsed.success) {
+    return badRequest(
+      "Request body failed validation.",
+      "validation_error",
+      zodIssuesToFields(parsed.error),
+    );
+  }
+  const body = parsed.data;
 
   const input: UpdateValidationPersonaInput = {
-    id: personaId,
+    id: body.id,
     business_id: id,
-    ...(body.name !== undefined && { name: body.name as string }),
-    ...(body.segment !== undefined && { segment: body.segment as string | null }),
-    ...(body.description !== undefined && { description: body.description as string | null }),
-    ...(body.pain_points !== undefined && {
-      pain_points: Array.isArray(body.pain_points) ? (body.pain_points as string[]) : null,
-    }),
-    ...(body.desired_outcomes !== undefined && {
-      desired_outcomes: Array.isArray(body.desired_outcomes)
-        ? (body.desired_outcomes as string[])
-        : null,
-    }),
-    ...(body.channels !== undefined && {
-      channels: Array.isArray(body.channels) ? (body.channels as string[]) : null,
-    }),
-    ...(body.willingness_to_pay !== undefined && {
-      willingness_to_pay: body.willingness_to_pay as string | null,
-    }),
-    ...(rawPriority !== undefined &&
-      VALID_PRIORITIES.has(rawPriority as ValidationPriority) && {
-        priority: rawPriority as ValidationPriority,
-      }),
-    ...(body.status !== undefined && { status: body.status as string }),
+    ...(body.name !== undefined && { name: body.name }),
+    ...(body.segment !== undefined && { segment: body.segment }),
+    ...(body.description !== undefined && { description: body.description }),
+    ...(body.pain_points !== undefined && { pain_points: body.pain_points }),
+    ...(body.desired_outcomes !== undefined && { desired_outcomes: body.desired_outcomes }),
+    ...(body.channels !== undefined && { channels: body.channels }),
+    ...(body.willingness_to_pay !== undefined && { willingness_to_pay: body.willingness_to_pay }),
+    ...(body.priority !== undefined && { priority: body.priority }),
+    ...(body.status !== undefined && { status: body.status }),
   };
 
   const result = await updateValidationPersona(input);
 
   if (result.error || !result.data) {
     const code = result.code ?? "validation_update_failed";
-    return errorResponse(result.error ?? "Could not update persona.", code,
+    return apiError(result.error ?? "Could not update persona.", code,
       code === "validation_schema_missing" ? 503 : 500);
   }
 

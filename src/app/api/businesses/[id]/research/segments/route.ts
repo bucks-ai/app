@@ -10,18 +10,13 @@ import {
 import type {
   NewResearchCustomerSegmentInput,
   UpdateResearchCustomerSegmentInput,
-  ResearchConfidence,
-  ResearchPriority,
 } from "@/types/research";
-
-const VALID_CONFIDENCES = new Set<ResearchConfidence>([
-  "assumption", "weak_signal", "medium_signal", "strong_signal", "validated", "invalidated",
-]);
-const VALID_PRIORITIES = new Set<ResearchPriority>(["high", "medium", "low"]);
-
-function errorResponse(error: string, code: string, status: number) {
-  return Response.json({ ok: false, error, code }, { status });
-}
+import { apiError, unauthorized, badRequest, notFound, zodIssuesToFields } from "@/lib/api-error";
+import {
+  createResearchSegmentBodySchema,
+  updateResearchSegmentBodySchema,
+} from "@/lib/schemas/research";
+import { limit, tooManyRequests, RATE_LIMITS } from "@/lib/rate-limit";
 
 async function resolveAuth(id: string) {
   const userResult = await getCurrentUser();
@@ -40,63 +35,58 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   if (!hasSupabaseEnv()) {
-    return errorResponse("Supabase is not configured.", "missing_supabase_env", 503);
+    return apiError("Supabase is not configured.", "missing_supabase_env", 503);
   }
 
   const { id } = await params;
-  if (!id) return errorResponse("Business id is required.", "invalid_input", 400);
+  if (!id) return badRequest("Business id is required.", "invalid_input");
 
   const { user, business } = await resolveAuth(id);
-  if (!user) return errorResponse("Authentication required.", "unauthenticated", 401);
-  if (!business) return errorResponse("Business not found.", "business_not_found", 404);
-  if (business.user_id !== user.id) return errorResponse("Access denied.", "forbidden", 403);
+  if (!user) return unauthorized();
 
-  let body: Record<string, unknown> = {};
+  const rateLimitResult = await limit(`${user.id}:research-segments`, RATE_LIMITS.mutationDefault);
+  if (!rateLimitResult.allowed) return tooManyRequests();
+
+  if (!business) return notFound("Business not found.", "business_not_found");
+  if (business.user_id !== user.id) return apiError("Access denied.", "forbidden", 403);
+
+  let json: unknown;
   try {
-    body = (await request.json()) as Record<string, unknown>;
+    json = await request.json();
   } catch {
-    return errorResponse("Invalid JSON body.", "invalid_input", 400);
+    return badRequest("Request body must be valid JSON.", "invalid_json");
   }
 
-  const name = typeof body.name === "string" ? body.name.trim() : "";
-  if (!name) return errorResponse("name is required.", "invalid_input", 400);
-
-  const rawConfidence = body.confidence as string | undefined;
-  const rawPriority = body.priority as string | undefined;
+  const parsed = createResearchSegmentBodySchema.safeParse(json);
+  if (!parsed.success) {
+    return badRequest(
+      "Request body failed validation.",
+      "validation_error",
+      zodIssuesToFields(parsed.error),
+    );
+  }
+  const body = parsed.data;
 
   const input: NewResearchCustomerSegmentInput = {
     business_id: id,
     user_id: user.id,
-    name,
-    description: (body.description as string | null) ?? null,
-    pain_level:
-      typeof body.pain_level === "number" && body.pain_level >= 0 && body.pain_level <= 10
-        ? body.pain_level
-        : null,
-    ability_to_pay:
-      typeof body.ability_to_pay === "number" && body.ability_to_pay >= 0 && body.ability_to_pay <= 10
-        ? body.ability_to_pay
-        : null,
-    reachability:
-      typeof body.reachability === "number" && body.reachability >= 0 && body.reachability <= 10
-        ? body.reachability
-        : null,
-    market_size_guess: (body.market_size_guess as string | null) ?? null,
-    channels: Array.isArray(body.channels) ? (body.channels as string[]) : null,
-    evidence_summary: (body.evidence_summary as string | null) ?? null,
-    confidence: VALID_CONFIDENCES.has(rawConfidence as ResearchConfidence)
-      ? (rawConfidence as ResearchConfidence)
-      : null,
-    priority: VALID_PRIORITIES.has(rawPriority as ResearchPriority)
-      ? (rawPriority as ResearchPriority)
-      : "medium",
+    name: body.name,
+    description: body.description ?? null,
+    pain_level: body.pain_level ?? null,
+    ability_to_pay: body.ability_to_pay ?? null,
+    reachability: body.reachability ?? null,
+    market_size_guess: body.market_size_guess ?? null,
+    channels: body.channels ?? null,
+    evidence_summary: body.evidence_summary ?? null,
+    confidence: body.confidence ?? null,
+    priority: body.priority ?? "medium",
   };
 
   const result = await createResearchCustomerSegment(input);
 
   if (result.error || !result.data) {
     const code = result.code ?? "research_create_failed";
-    return errorResponse(result.error ?? "Could not create segment.", code,
+    return apiError(result.error ?? "Could not create segment.", code,
       code === "research_schema_missing" ? 503 : 500);
   }
 
@@ -112,73 +102,58 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   if (!hasSupabaseEnv()) {
-    return errorResponse("Supabase is not configured.", "missing_supabase_env", 503);
+    return apiError("Supabase is not configured.", "missing_supabase_env", 503);
   }
 
   const { id } = await params;
-  if (!id) return errorResponse("Business id is required.", "invalid_input", 400);
+  if (!id) return badRequest("Business id is required.", "invalid_input");
 
   const { user, business } = await resolveAuth(id);
-  if (!user) return errorResponse("Authentication required.", "unauthenticated", 401);
-  if (!business) return errorResponse("Business not found.", "business_not_found", 404);
-  if (business.user_id !== user.id) return errorResponse("Access denied.", "forbidden", 403);
+  if (!user) return unauthorized();
 
-  let body: Record<string, unknown> = {};
+  const rateLimitResult = await limit(`${user.id}:research-segments`, RATE_LIMITS.mutationDefault);
+  if (!rateLimitResult.allowed) return tooManyRequests();
+
+  if (!business) return notFound("Business not found.", "business_not_found");
+  if (business.user_id !== user.id) return apiError("Access denied.", "forbidden", 403);
+
+  let json: unknown;
   try {
-    body = (await request.json()) as Record<string, unknown>;
+    json = await request.json();
   } catch {
-    return errorResponse("Invalid JSON body.", "invalid_input", 400);
+    return badRequest("Request body must be valid JSON.", "invalid_json");
   }
 
-  const segmentId = typeof body.id === "string" ? body.id.trim() : "";
-  if (!segmentId) return errorResponse("id (segment uuid) is required.", "invalid_input", 400);
-
-  const rawConfidence = body.confidence as string | undefined;
-  const rawPriority = body.priority as string | undefined;
+  const parsed = updateResearchSegmentBodySchema.safeParse(json);
+  if (!parsed.success) {
+    return badRequest(
+      "Request body failed validation.",
+      "validation_error",
+      zodIssuesToFields(parsed.error),
+    );
+  }
+  const body = parsed.data;
 
   const input: UpdateResearchCustomerSegmentInput = {
-    id: segmentId,
+    id: body.id,
     business_id: id,
-    ...(body.name !== undefined && { name: body.name as string }),
-    ...(body.description !== undefined && { description: body.description as string | null }),
-    ...(body.pain_level !== undefined && {
-      pain_level:
-        typeof body.pain_level === "number" && body.pain_level >= 0 && body.pain_level <= 10
-          ? body.pain_level
-          : null,
-    }),
-    ...(body.ability_to_pay !== undefined && {
-      ability_to_pay:
-        typeof body.ability_to_pay === "number" && body.ability_to_pay >= 0 && body.ability_to_pay <= 10
-          ? body.ability_to_pay
-          : null,
-    }),
-    ...(body.reachability !== undefined && {
-      reachability:
-        typeof body.reachability === "number" && body.reachability >= 0 && body.reachability <= 10
-          ? body.reachability
-          : null,
-    }),
-    ...(body.market_size_guess !== undefined && { market_size_guess: body.market_size_guess as string | null }),
-    ...(body.channels !== undefined && {
-      channels: Array.isArray(body.channels) ? (body.channels as string[]) : null,
-    }),
-    ...(body.evidence_summary !== undefined && { evidence_summary: body.evidence_summary as string | null }),
-    ...(rawConfidence !== undefined &&
-      VALID_CONFIDENCES.has(rawConfidence as ResearchConfidence) && {
-        confidence: rawConfidence as ResearchConfidence,
-      }),
-    ...(rawPriority !== undefined &&
-      VALID_PRIORITIES.has(rawPriority as ResearchPriority) && {
-        priority: rawPriority as ResearchPriority,
-      }),
+    ...(body.name !== undefined && { name: body.name }),
+    ...(body.description !== undefined && { description: body.description }),
+    ...(body.pain_level !== undefined && { pain_level: body.pain_level }),
+    ...(body.ability_to_pay !== undefined && { ability_to_pay: body.ability_to_pay }),
+    ...(body.reachability !== undefined && { reachability: body.reachability }),
+    ...(body.market_size_guess !== undefined && { market_size_guess: body.market_size_guess }),
+    ...(body.channels !== undefined && { channels: body.channels }),
+    ...(body.evidence_summary !== undefined && { evidence_summary: body.evidence_summary }),
+    ...(body.confidence !== undefined && { confidence: body.confidence }),
+    ...(body.priority !== undefined && { priority: body.priority }),
   };
 
   const result = await updateResearchCustomerSegment(input);
 
   if (result.error || !result.data) {
     const code = result.code ?? "research_update_failed";
-    return errorResponse(result.error ?? "Could not update segment.", code,
+    return apiError(result.error ?? "Could not update segment.", code,
       code === "research_schema_missing" ? 503 : 500);
   }
 

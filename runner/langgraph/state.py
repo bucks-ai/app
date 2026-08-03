@@ -26,6 +26,8 @@ class WorkerResult(BaseModel):
     prompt_written: bool = False
     prompt_path: Optional[str] = None
     response_path: Optional[str] = None
+    api_cost: Optional[float] = None
+    tokens_used: Optional[int] = None
 
 
 class ToolResult(BaseModel):
@@ -56,7 +58,10 @@ class RunnerState(BaseModel):
     current_branch: Optional[str] = None
     last_completed_step: Optional[str] = None
     last_commit: Optional[str] = None
+    pr_number: Optional[int] = None                  # GitHub PR number opened for the current task's branch (MERGE_VIA_PR)
+    pr_url: Optional[str] = None                     # HTML URL of that PR
     loop_count: int = 0
+    consecutive_failures: int = 0
     started_at: Optional[str] = None
     updated_at: Optional[str] = None
     error: Optional[str] = None
@@ -65,7 +70,50 @@ class RunnerState(BaseModel):
     current_task: Optional[dict] = None
     worker_result: Optional[dict] = None
     worker_summary: Optional[dict] = None
+    worker_summary_digest: Optional[str] = None
+    context_compression: Optional[dict] = None
     check_passed: Optional[bool] = None
+    deploy_result: Optional[dict] = None
+    deploy_ready: Optional[bool] = None
+    rollback_revert_status: Optional[str] = None
+    rollback_revert_plan: Optional[dict] = None
     sql_scan: Optional[dict] = None
+    sql_approval_status: Optional[str] = None  # pending | approved | rejected | None
+    resource_request_status: Optional[str] = None  # pending | fulfilled | None
+    gate_skipped_task_count: int = 0  # tasks set aside by a task-scoped gate block this session (M4c.0)
+    retry_pending: Optional[bool] = None  # a failed task was requeued for retry this loop
+    error_history: list[dict] = Field(default_factory=list)  # recent {error, task_id} records
+    task_attempt_counts: dict = Field(default_factory=dict)   # task_id → run count this session
+    worker_elapsed_seconds: Optional[float] = None  # wall-clock seconds of the last dispatch
+    worker_timeout_count: int = 0                   # cumulative timeouts this session
+    codex_usage_limit_count: int = 0               # cumulative Codex usage-limit errors this session
+    session_cost: float = 0.0                       # cumulative API cost ($) this session
     messages: list[dict] = Field(default_factory=list)
     stop_reason: Optional[str] = None
+    strategic_gate_status: Optional[str] = None     # pending | None
+    strategic_tasks_since_gate: int = 0             # task loops since last strategic gate
+    strategic_gate_at_loop: Optional[int] = None    # loop_count when the gate last triggered
+    resolved_model: Optional[str] = None            # model resolved by model_routing_policy
+    mission_name: Optional[str] = None              # name of the compiled mission, if any
+    mission_compiled: Optional[bool] = None         # True when a mission was compiled this session
+    acceptance_criteria_status: Optional[str] = None  # passed | warned | failed | None
+    definition_of_done_status: Optional[str] = None  # passed | warned | failed | None
+    code_review_status: Optional[str] = None  # passed | warned | failed | None
+    high_risk_review_status: Optional[str] = None  # passed | warned | skipped | failed | None
+    codex_escalation_status: Optional[str] = None  # attempted | succeeded | failed | skipped | None
+    auto_repair_attempt: int = 0                   # repair attempts made this task loop
+    auto_repair_status: Optional[str] = None       # attempted | succeeded | failed | None
+    check_output: Optional[str] = None             # last check.sh stdout (used by auto_repair_if_needed)
+    merge_approval_status: Optional[str] = None   # approved | pending | skipped | None
+    merge_risk_level: Optional[str] = None         # low | medium | high | None
+    e2e_result: Optional[dict] = None              # result dict from playwright_harness.run_e2e_suite
+    ui_flow_result: Optional[dict] = None          # result dict from ui_flow_validator.run_ui_flow_validation
+    product_eval_result: Optional[dict] = None     # result dict from product_eval_harness.run_product_eval_suite
+    launch_readiness_result: Optional[dict] = None  # result dict from launch_readiness_scorecard
+    last_task_completed_at: Optional[str] = None    # ISO-8601 UTC timestamp of the last completed task loop
+    stale_run_warning_sent: bool = False             # True once the stale-run Slack warning has fired this episode
+    live_batch_validation_result: Optional[dict] = None  # result dict from live_batch_validation_report
+    claude_subscription_cooldown_until: Optional[str] = None  # ISO-8601 UTC resume timestamp; set when Claude rate-limits in subscription mode
+    claude_subscription_cooldown_count: int = 0      # cumulative cooldown events this session
+    cooldown_wait_seconds_total: float = 0.0         # cumulative wall-clock seconds slept on cooldown waits this session; excluded from the MAX_RUNTIME_MINUTES budget
+    current_agent_run_id: Optional[str] = None       # Supabase agent_runs.id for the in-flight seeded-mission task, if any

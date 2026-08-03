@@ -6,12 +6,17 @@ from pathlib import Path
 
 _runner_dir = Path(__file__).parent.parent
 _logs_path = _runner_dir / "logs" / "runs.jsonl"
-_state_path = _runner_dir / "state.json"
+_state_path = _runner_dir / ".runtime" / "state.local.json"
+_state_path_legacy = _runner_dir / "state.json"
 
 
 def _ensure_dirs():
     _logs_path.parent.mkdir(parents=True, exist_ok=True)
     _state_path.parent.mkdir(parents=True, exist_ok=True)
+    # Migrate legacy state.json → .runtime/state.local.json on first run
+    if not _state_path.exists() and _state_path_legacy.exists():
+        import shutil
+        shutil.copy2(_state_path_legacy, _state_path)
 
 
 def new_event(event_type: str, payload: dict, task_id: str = None) -> dict:
@@ -57,7 +62,30 @@ def read_logs(tail: int = 50) -> list[dict]:
     return events
 
 
+def _maybe_notify_slack(event_type: str, payload: dict, task_id: str = None):
+    """Fan the event out to Slack. Imported lazily and fully guarded so a
+    notification failure can never break the flight recorder."""
+    try:
+        from tools.slack_tools import notify_event
+        # Never fan out to the REAL Slack channel from inside the test suite:
+        # mocked failures ("simulated db error", "connection refused", ...)
+        # logged by code under test would otherwise ping the team channel on
+        # every check.sh / pytest run. config's load_dotenv() resurrects .env
+        # values, so env-stripping in conftest.py alone is not sufficient.
+        # A test-provided stub (monkeypatched onto slack_tools) has a
+        # different __module__, so tests that assert the fan-out still work.
+        if (
+            os.environ.get("PYTEST_CURRENT_TEST")
+            and getattr(notify_event, "__module__", "") == "tools.slack_tools"
+        ):
+            return
+        notify_event(event_type, payload, task_id)
+    except Exception:
+        pass
+
+
 def log_event(event_type: str, payload: dict, task_id: str = None):
     event = new_event(event_type, payload, task_id)
     append_jsonl_event(event)
+    _maybe_notify_slack(event_type, payload, task_id)
     return event

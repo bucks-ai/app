@@ -10,19 +10,13 @@ import {
 import type {
   NewResearchCompetitorInput,
   UpdateResearchCompetitorInput,
-  ResearchConfidence,
-  ResearchPriority,
 } from "@/types/research";
-
-const VALID_CONFIDENCES = new Set<ResearchConfidence>([
-  "assumption", "weak_signal", "medium_signal", "strong_signal", "validated", "invalidated",
-]);
-const VALID_PRIORITIES = new Set<ResearchPriority>(["high", "medium", "low"]);
-const VALID_CATEGORIES = new Set(["direct", "indirect", "substitute", "emerging"]);
-
-function errorResponse(error: string, code: string, status: number) {
-  return Response.json({ ok: false, error, code }, { status });
-}
+import { apiError, unauthorized, badRequest, notFound, zodIssuesToFields } from "@/lib/api-error";
+import {
+  createResearchCompetitorBodySchema,
+  updateResearchCompetitorBodySchema,
+} from "@/lib/schemas/research";
+import { limit, tooManyRequests, RATE_LIMITS } from "@/lib/rate-limit";
 
 async function resolveAuth(id: string) {
   const userResult = await getCurrentUser();
@@ -41,55 +35,58 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   if (!hasSupabaseEnv()) {
-    return errorResponse("Supabase is not configured.", "missing_supabase_env", 503);
+    return apiError("Supabase is not configured.", "missing_supabase_env", 503);
   }
 
   const { id } = await params;
-  if (!id) return errorResponse("Business id is required.", "invalid_input", 400);
+  if (!id) return badRequest("Business id is required.", "invalid_input");
 
   const { user, business } = await resolveAuth(id);
-  if (!user) return errorResponse("Authentication required.", "unauthenticated", 401);
-  if (!business) return errorResponse("Business not found.", "business_not_found", 404);
-  if (business.user_id !== user.id) return errorResponse("Access denied.", "forbidden", 403);
+  if (!user) return unauthorized();
 
-  let body: Record<string, unknown> = {};
+  const rateLimitResult = await limit(`${user.id}:research-competitors`, RATE_LIMITS.mutationDefault);
+  if (!rateLimitResult.allowed) return tooManyRequests();
+
+  if (!business) return notFound("Business not found.", "business_not_found");
+  if (business.user_id !== user.id) return apiError("Access denied.", "forbidden", 403);
+
+  let json: unknown;
   try {
-    body = (await request.json()) as Record<string, unknown>;
+    json = await request.json();
   } catch {
-    return errorResponse("Invalid JSON body.", "invalid_input", 400);
+    return badRequest("Request body must be valid JSON.", "invalid_json");
   }
 
-  const name = typeof body.name === "string" ? body.name.trim() : "";
-  if (!name) return errorResponse("name is required.", "invalid_input", 400);
-
-  const rawCategory = body.category as string | undefined;
-  const rawConfidence = body.confidence as string | undefined;
-  const rawPriority = body.priority as string | undefined;
+  const parsed = createResearchCompetitorBodySchema.safeParse(json);
+  if (!parsed.success) {
+    return badRequest(
+      "Request body failed validation.",
+      "validation_error",
+      zodIssuesToFields(parsed.error),
+    );
+  }
+  const body = parsed.data;
 
   const input: NewResearchCompetitorInput = {
     business_id: id,
     user_id: user.id,
-    name,
-    url: (body.url as string | null) ?? null,
-    category: rawCategory && VALID_CATEGORIES.has(rawCategory) ? rawCategory : null,
-    positioning: (body.positioning as string | null) ?? null,
-    pricing_summary: (body.pricing_summary as string | null) ?? null,
-    strengths: Array.isArray(body.strengths) ? (body.strengths as string[]) : null,
-    weaknesses: Array.isArray(body.weaknesses) ? (body.weaknesses as string[]) : null,
-    wedge_opportunity: (body.wedge_opportunity as string | null) ?? null,
-    confidence: VALID_CONFIDENCES.has(rawConfidence as ResearchConfidence)
-      ? (rawConfidence as ResearchConfidence)
-      : null,
-    priority: VALID_PRIORITIES.has(rawPriority as ResearchPriority)
-      ? (rawPriority as ResearchPriority)
-      : "medium",
+    name: body.name,
+    url: body.url ?? null,
+    category: body.category ?? null,
+    positioning: body.positioning ?? null,
+    pricing_summary: body.pricing_summary ?? null,
+    strengths: body.strengths ?? null,
+    weaknesses: body.weaknesses ?? null,
+    wedge_opportunity: body.wedge_opportunity ?? null,
+    confidence: body.confidence ?? null,
+    priority: body.priority ?? "medium",
   };
 
   const result = await createResearchCompetitor(input);
 
   if (result.error || !result.data) {
     const code = result.code ?? "research_create_failed";
-    return errorResponse(result.error ?? "Could not create competitor.", code,
+    return apiError(result.error ?? "Could not create competitor.", code,
       code === "research_schema_missing" ? 503 : 500);
   }
 
@@ -105,63 +102,58 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   if (!hasSupabaseEnv()) {
-    return errorResponse("Supabase is not configured.", "missing_supabase_env", 503);
+    return apiError("Supabase is not configured.", "missing_supabase_env", 503);
   }
 
   const { id } = await params;
-  if (!id) return errorResponse("Business id is required.", "invalid_input", 400);
+  if (!id) return badRequest("Business id is required.", "invalid_input");
 
   const { user, business } = await resolveAuth(id);
-  if (!user) return errorResponse("Authentication required.", "unauthenticated", 401);
-  if (!business) return errorResponse("Business not found.", "business_not_found", 404);
-  if (business.user_id !== user.id) return errorResponse("Access denied.", "forbidden", 403);
+  if (!user) return unauthorized();
 
-  let body: Record<string, unknown> = {};
+  const rateLimitResult = await limit(`${user.id}:research-competitors`, RATE_LIMITS.mutationDefault);
+  if (!rateLimitResult.allowed) return tooManyRequests();
+
+  if (!business) return notFound("Business not found.", "business_not_found");
+  if (business.user_id !== user.id) return apiError("Access denied.", "forbidden", 403);
+
+  let json: unknown;
   try {
-    body = (await request.json()) as Record<string, unknown>;
+    json = await request.json();
   } catch {
-    return errorResponse("Invalid JSON body.", "invalid_input", 400);
+    return badRequest("Request body must be valid JSON.", "invalid_json");
   }
 
-  const competitorId = typeof body.id === "string" ? body.id.trim() : "";
-  if (!competitorId) return errorResponse("id (competitor uuid) is required.", "invalid_input", 400);
-
-  const rawCategory = body.category as string | undefined;
-  const rawConfidence = body.confidence as string | undefined;
-  const rawPriority = body.priority as string | undefined;
+  const parsed = updateResearchCompetitorBodySchema.safeParse(json);
+  if (!parsed.success) {
+    return badRequest(
+      "Request body failed validation.",
+      "validation_error",
+      zodIssuesToFields(parsed.error),
+    );
+  }
+  const body = parsed.data;
 
   const input: UpdateResearchCompetitorInput = {
-    id: competitorId,
+    id: body.id,
     business_id: id,
-    ...(body.name !== undefined && { name: body.name as string }),
-    ...(body.url !== undefined && { url: body.url as string | null }),
-    ...(rawCategory !== undefined && {
-      category: VALID_CATEGORIES.has(rawCategory) ? rawCategory : null,
-    }),
-    ...(body.positioning !== undefined && { positioning: body.positioning as string | null }),
-    ...(body.pricing_summary !== undefined && { pricing_summary: body.pricing_summary as string | null }),
-    ...(body.strengths !== undefined && {
-      strengths: Array.isArray(body.strengths) ? (body.strengths as string[]) : null,
-    }),
-    ...(body.weaknesses !== undefined && {
-      weaknesses: Array.isArray(body.weaknesses) ? (body.weaknesses as string[]) : null,
-    }),
-    ...(body.wedge_opportunity !== undefined && { wedge_opportunity: body.wedge_opportunity as string | null }),
-    ...(rawConfidence !== undefined &&
-      VALID_CONFIDENCES.has(rawConfidence as ResearchConfidence) && {
-        confidence: rawConfidence as ResearchConfidence,
-      }),
-    ...(rawPriority !== undefined &&
-      VALID_PRIORITIES.has(rawPriority as ResearchPriority) && {
-        priority: rawPriority as ResearchPriority,
-      }),
+    ...(body.name !== undefined && { name: body.name }),
+    ...(body.url !== undefined && { url: body.url }),
+    ...(body.category !== undefined && { category: body.category }),
+    ...(body.positioning !== undefined && { positioning: body.positioning }),
+    ...(body.pricing_summary !== undefined && { pricing_summary: body.pricing_summary }),
+    ...(body.strengths !== undefined && { strengths: body.strengths }),
+    ...(body.weaknesses !== undefined && { weaknesses: body.weaknesses }),
+    ...(body.wedge_opportunity !== undefined && { wedge_opportunity: body.wedge_opportunity }),
+    ...(body.confidence !== undefined && { confidence: body.confidence }),
+    ...(body.priority !== undefined && { priority: body.priority }),
   };
 
   const result = await updateResearchCompetitor(input);
 
   if (result.error || !result.data) {
     const code = result.code ?? "research_update_failed";
-    return errorResponse(result.error ?? "Could not update competitor.", code,
+    return apiError(result.error ?? "Could not update competitor.", code,
       code === "research_schema_missing" ? 503 : 500);
   }
 

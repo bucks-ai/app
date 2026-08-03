@@ -4,22 +4,10 @@
 import { hasSupabaseEnv } from "@/lib/supabase/env";
 import { getCurrentUser, getBusinessById } from "@/lib/projects";
 import { createResearchEvidence } from "@/lib/research";
-import type {
-  NewResearchEvidenceInput,
-  ResearchConfidence,
-} from "@/types/research";
-
-const VALID_CONFIDENCES = new Set<ResearchConfidence>([
-  "assumption", "weak_signal", "medium_signal", "strong_signal", "validated", "invalidated",
-]);
-const VALID_EVIDENCE_TYPES = new Set([
-  "data_point", "quote", "case_study", "trend",
-  "competitor_signal", "customer_signal", "market_report",
-]);
-
-function errorResponse(error: string, code: string, status: number) {
-  return Response.json({ ok: false, error, code }, { status });
-}
+import type { NewResearchEvidenceInput } from "@/types/research";
+import { apiError, unauthorized, badRequest, notFound, zodIssuesToFields } from "@/lib/api-error";
+import { createResearchEvidenceBodySchema } from "@/lib/schemas/research";
+import { limit, tooManyRequests, RATE_LIMITS } from "@/lib/rate-limit";
 
 // ---------------------------------------------------------------------------
 // POST /api/businesses/[id]/research/evidence
@@ -30,58 +18,62 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   if (!hasSupabaseEnv()) {
-    return errorResponse("Supabase is not configured.", "missing_supabase_env", 503);
+    return apiError("Supabase is not configured.", "missing_supabase_env", 503);
   }
 
   const { id } = await params;
-  if (!id) return errorResponse("Business id is required.", "invalid_input", 400);
+  if (!id) return badRequest("Business id is required.", "invalid_input");
 
   const userResult = await getCurrentUser();
   if (userResult.error || !userResult.data) {
-    return errorResponse("Authentication required.", "unauthenticated", 401);
+    return unauthorized();
   }
+
+  const rateLimitResult = await limit(`${userResult.data.id}:research-evidence`, RATE_LIMITS.mutationDefault);
+  if (!rateLimitResult.allowed) return tooManyRequests();
 
   const businessResult = await getBusinessById(id);
   if (businessResult.error || !businessResult.data) {
-    return errorResponse("Business not found.", "business_not_found", 404);
+    return notFound("Business not found.", "business_not_found");
   }
 
   if (businessResult.data.user_id !== userResult.data.id) {
-    return errorResponse("Access denied.", "forbidden", 403);
+    return apiError("Access denied.", "forbidden", 403);
   }
 
-  let body: Record<string, unknown> = {};
+  let json: unknown;
   try {
-    body = (await request.json()) as Record<string, unknown>;
+    json = await request.json();
   } catch {
-    return errorResponse("Invalid JSON body.", "invalid_input", 400);
+    return badRequest("Request body must be valid JSON.", "invalid_json");
   }
 
-  const claim = typeof body.claim === "string" ? body.claim.trim() : "";
-  if (!claim) return errorResponse("claim is required.", "invalid_input", 400);
-
-  const rawEvidenceType = body.evidence_type as string | undefined;
-  const rawConfidence = body.confidence as string | undefined;
+  const parsed = createResearchEvidenceBodySchema.safeParse(json);
+  if (!parsed.success) {
+    return badRequest(
+      "Request body failed validation.",
+      "validation_error",
+      zodIssuesToFields(parsed.error),
+    );
+  }
+  const body = parsed.data;
 
   const input: NewResearchEvidenceInput = {
     business_id: id,
     user_id: userResult.data.id,
-    claim,
-    source: (body.source as string | null) ?? null,
-    source_url: (body.source_url as string | null) ?? null,
-    evidence_type:
-      rawEvidenceType && VALID_EVIDENCE_TYPES.has(rawEvidenceType) ? rawEvidenceType : null,
-    confidence: VALID_CONFIDENCES.has(rawConfidence as ResearchConfidence)
-      ? (rawConfidence as ResearchConfidence)
-      : null,
-    notes: (body.notes as string | null) ?? null,
+    claim: body.claim,
+    source: body.source ?? null,
+    source_url: body.source_url ?? null,
+    evidence_type: body.evidence_type ?? null,
+    confidence: body.confidence ?? null,
+    notes: body.notes ?? null,
   };
 
   const result = await createResearchEvidence(input);
 
   if (result.error || !result.data) {
     const code = result.code ?? "research_create_failed";
-    return errorResponse(result.error ?? "Could not create evidence record.", code,
+    return apiError(result.error ?? "Could not create evidence record.", code,
       code === "research_schema_missing" ? 503 : 500);
   }
 

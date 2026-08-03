@@ -2,34 +2,24 @@
 // PATCH /api/businesses/[id]/validation/leads   — update lead (body must include id)
 
 import { hasSupabaseEnv } from "@/lib/supabase/env";
-import { getCurrentUser, getBusinessById } from "@/lib/projects";
+import { getBusinessById } from "@/lib/projects";
+import { requireUser } from "@/lib/api-auth";
 import { createValidationLead, updateValidationLead } from "@/lib/validation";
 import type {
   NewValidationLeadInput,
   UpdateValidationLeadInput,
-  ValidationLeadStatus,
-  ValidationSource,
-  ValidationPriority,
 } from "@/types/validation";
+import { apiError, badRequest, notFound, zodIssuesToFields } from "@/lib/api-error";
+import {
+  createValidationLeadBodySchema,
+  updateValidationLeadBodySchema,
+} from "@/lib/schemas/validation";
+import { limit, tooManyRequests, RATE_LIMITS } from "@/lib/rate-limit";
 
-const VALID_STATUSES = new Set<ValidationLeadStatus>([
-  "identified", "contacted", "replied", "scheduled", "interviewed", "not_interested",
-]);
-const VALID_SOURCES = new Set<ValidationSource>([
-  "manual", "blueprint", "linkedin", "twitter", "email", "referral", "other",
-]);
-const VALID_PRIORITIES = new Set<ValidationPriority>(["high", "medium", "low"]);
-
-function errorResponse(error: string, code: string, status: number) {
-  return Response.json({ ok: false, error, code }, { status });
-}
-
-async function resolveAuth(id: string) {
-  const userResult = await getCurrentUser();
-  if (userResult.error || !userResult.data) return { user: null, business: null };
+async function resolveBusiness(id: string) {
   const businessResult = await getBusinessById(id);
-  if (businessResult.error || !businessResult.data) return { user: userResult.data, business: null };
-  return { user: userResult.data, business: businessResult.data };
+  if (businessResult.error || !businessResult.data) return null;
+  return businessResult.data;
 }
 
 // ---------------------------------------------------------------------------
@@ -41,57 +31,59 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   if (!hasSupabaseEnv()) {
-    return errorResponse("Supabase is not configured.", "missing_supabase_env", 503);
+    return apiError("Supabase is not configured.", "missing_supabase_env", 503);
   }
 
   const { id } = await params;
-  if (!id) return errorResponse("Business id is required.", "invalid_input", 400);
+  if (!id) return badRequest("Business id is required.", "invalid_input");
 
-  const { user, business } = await resolveAuth(id);
-  if (!user) return errorResponse("Authentication required.", "unauthenticated", 401);
-  if (!business) return errorResponse("Business not found.", "business_not_found", 404);
-  if (business.user_id !== user.id) return errorResponse("Access denied.", "forbidden", 403);
+  const { user, response } = await requireUser();
+  if (!user) return response;
 
-  let body: Record<string, unknown> = {};
+  const rateLimitResult = await limit(`${user.id}:validation-leads`, RATE_LIMITS.mutationDefault);
+  if (!rateLimitResult.allowed) return tooManyRequests();
+
+  const business = await resolveBusiness(id);
+  if (!business) return notFound("Business not found.", "business_not_found");
+  if (business.user_id !== user.id) return apiError("Access denied.", "forbidden", 403);
+
+  let json: unknown;
   try {
-    body = (await request.json()) as Record<string, unknown>;
+    json = await request.json();
   } catch {
-    return errorResponse("Invalid JSON body.", "invalid_input", 400);
+    return badRequest("Request body must be valid JSON.", "invalid_json");
   }
 
-  const name = typeof body.name === "string" ? body.name.trim() : "";
-  if (!name) return errorResponse("name is required.", "invalid_input", 400);
-
-  const rawStatus = body.status as string | undefined;
-  const rawSource = body.source as string | undefined;
-  const rawPriority = body.priority as string | undefined;
+  const parsed = createValidationLeadBodySchema.safeParse(json);
+  if (!parsed.success) {
+    return badRequest(
+      "Request body failed validation.",
+      "validation_error",
+      zodIssuesToFields(parsed.error),
+    );
+  }
+  const body = parsed.data;
 
   const input: NewValidationLeadInput = {
     business_id: id,
     user_id: user.id,
-    name,
-    company: (body.company as string | null) ?? null,
-    role: (body.role as string | null) ?? null,
-    segment: (body.segment as string | null) ?? null,
-    source: VALID_SOURCES.has(rawSource as ValidationSource)
-      ? (rawSource as ValidationSource)
-      : "manual",
-    contact_url: (body.contact_url as string | null) ?? null,
-    email: (body.email as string | null) ?? null,
-    status: VALID_STATUSES.has(rawStatus as ValidationLeadStatus)
-      ? (rawStatus as ValidationLeadStatus)
-      : "identified",
-    notes: (body.notes as string | null) ?? null,
-    priority: VALID_PRIORITIES.has(rawPriority as ValidationPriority)
-      ? (rawPriority as ValidationPriority)
-      : "medium",
+    name: body.name,
+    company: body.company ?? null,
+    role: body.role ?? null,
+    segment: body.segment ?? null,
+    source: body.source ?? "manual",
+    contact_url: body.contact_url ?? null,
+    email: body.email ?? null,
+    status: body.status ?? "identified",
+    notes: body.notes ?? null,
+    priority: body.priority ?? "medium",
   };
 
   const result = await createValidationLead(input);
 
   if (result.error || !result.data) {
     const code = result.code ?? "validation_create_failed";
-    return errorResponse(result.error ?? "Could not create lead.", code,
+    return apiError(result.error ?? "Could not create lead.", code,
       code === "validation_schema_missing" ? 503 : 500);
   }
 
@@ -107,60 +99,59 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   if (!hasSupabaseEnv()) {
-    return errorResponse("Supabase is not configured.", "missing_supabase_env", 503);
+    return apiError("Supabase is not configured.", "missing_supabase_env", 503);
   }
 
   const { id } = await params;
-  if (!id) return errorResponse("Business id is required.", "invalid_input", 400);
+  if (!id) return badRequest("Business id is required.", "invalid_input");
 
-  const { user, business } = await resolveAuth(id);
-  if (!user) return errorResponse("Authentication required.", "unauthenticated", 401);
-  if (!business) return errorResponse("Business not found.", "business_not_found", 404);
-  if (business.user_id !== user.id) return errorResponse("Access denied.", "forbidden", 403);
+  const { user, response } = await requireUser();
+  if (!user) return response;
 
-  let body: Record<string, unknown> = {};
+  const rateLimitResult = await limit(`${user.id}:validation-leads`, RATE_LIMITS.mutationDefault);
+  if (!rateLimitResult.allowed) return tooManyRequests();
+
+  const business = await resolveBusiness(id);
+  if (!business) return notFound("Business not found.", "business_not_found");
+  if (business.user_id !== user.id) return apiError("Access denied.", "forbidden", 403);
+
+  let json: unknown;
   try {
-    body = (await request.json()) as Record<string, unknown>;
+    json = await request.json();
   } catch {
-    return errorResponse("Invalid JSON body.", "invalid_input", 400);
+    return badRequest("Request body must be valid JSON.", "invalid_json");
   }
 
-  const leadId = typeof body.id === "string" ? body.id.trim() : "";
-  if (!leadId) return errorResponse("id (lead uuid) is required.", "invalid_input", 400);
-
-  const rawStatus = body.status as string | undefined;
-  const rawSource = body.source as string | undefined;
-  const rawPriority = body.priority as string | undefined;
+  const parsed = updateValidationLeadBodySchema.safeParse(json);
+  if (!parsed.success) {
+    return badRequest(
+      "Request body failed validation.",
+      "validation_error",
+      zodIssuesToFields(parsed.error),
+    );
+  }
+  const body = parsed.data;
 
   const input: UpdateValidationLeadInput = {
-    id: leadId,
+    id: body.id,
     business_id: id,
-    ...(body.name !== undefined && { name: body.name as string }),
-    ...(body.company !== undefined && { company: body.company as string | null }),
-    ...(body.role !== undefined && { role: body.role as string | null }),
-    ...(body.segment !== undefined && { segment: body.segment as string | null }),
-    ...(rawSource !== undefined &&
-      VALID_SOURCES.has(rawSource as ValidationSource) && {
-        source: rawSource as ValidationSource,
-      }),
-    ...(body.contact_url !== undefined && { contact_url: body.contact_url as string | null }),
-    ...(body.email !== undefined && { email: body.email as string | null }),
-    ...(rawStatus !== undefined &&
-      VALID_STATUSES.has(rawStatus as ValidationLeadStatus) && {
-        status: rawStatus as ValidationLeadStatus,
-      }),
-    ...(body.notes !== undefined && { notes: body.notes as string | null }),
-    ...(rawPriority !== undefined &&
-      VALID_PRIORITIES.has(rawPriority as ValidationPriority) && {
-        priority: rawPriority as ValidationPriority,
-      }),
+    ...(body.name !== undefined && { name: body.name }),
+    ...(body.company !== undefined && { company: body.company }),
+    ...(body.role !== undefined && { role: body.role }),
+    ...(body.segment !== undefined && { segment: body.segment }),
+    ...(body.source !== undefined && { source: body.source }),
+    ...(body.contact_url !== undefined && { contact_url: body.contact_url }),
+    ...(body.email !== undefined && { email: body.email }),
+    ...(body.status !== undefined && { status: body.status }),
+    ...(body.notes !== undefined && { notes: body.notes }),
+    ...(body.priority !== undefined && { priority: body.priority }),
   };
 
   const result = await updateValidationLead(input);
 
   if (result.error || !result.data) {
     const code = result.code ?? "validation_update_failed";
-    return errorResponse(result.error ?? "Could not update lead.", code,
+    return apiError(result.error ?? "Could not update lead.", code,
       code === "validation_schema_missing" ? 503 : 500);
   }
 

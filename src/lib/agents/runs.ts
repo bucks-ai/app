@@ -315,6 +315,9 @@ export async function getAgentRunsForBusiness(
     .from("agent_runs")
     .select("*")
     .eq("business_id", businessId)
+    .order("updated_at", { ascending: false, nullsFirst: false })
+    .order("completed_at", { ascending: false, nullsFirst: false })
+    .order("started_at", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: false });
 
   if (error) {
