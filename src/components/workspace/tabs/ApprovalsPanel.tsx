@@ -75,12 +75,12 @@ export function ApprovalsPanel() {
   }
 
   return (
-    <div className="mb-4 space-y-2">
+    <div className="mb-5 space-y-3">
       <p className="font-mono text-xs uppercase tracking-[0.24em] text-muted-foreground">
         Approvals
       </p>
       {error ? (
-        <div className="rounded-lg border border-error/20 bg-surface p-4 text-xs text-error">
+        <div className="rounded-xl bg-error/10 p-4 text-xs leading-5 text-error">
           {error}
         </div>
       ) : null}
@@ -88,11 +88,14 @@ export function ApprovalsPanel() {
         <ApprovalsEmptyStateNotice state={emptyState} sqlFile={sqlFile} />
       ) : null}
       {approvals.map((approval) => (
-        <div key={approval.id} className="rounded-lg border border-warning/20 bg-surface p-4">
+        <div
+          key={approval.id}
+          className="rounded-r-xl border-l-2 border-status-pending/50 bg-status-pending/[0.07] py-4 pl-5 pr-4"
+        >
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded border border-warning/30 bg-warning/10 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-widest text-warning">
+                <span className="rounded-full bg-warning/12 px-2.5 py-1 font-mono text-[11px] uppercase tracking-[0.18em] text-warning">
                   {REQUEST_TYPE_LABEL[approval.request_type] ?? approval.request_type}
                 </span>
                 <h3 className="text-sm font-medium text-foreground">{approval.title}</h3>
@@ -109,7 +112,7 @@ export function ApprovalsPanel() {
                 type="button"
                 onClick={() => handleDecision(approval.id, "approve")}
                 disabled={pendingActionId === approval.id}
-                className="rounded border border-accent/30 bg-accent/10 px-2 py-1 font-mono text-[11px] uppercase tracking-widest text-accent disabled:opacity-50"
+                className="min-h-11 rounded-xl bg-accent/12 px-3.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.18em] text-accent-on-tint transition-colors hover:bg-accent/20 disabled:opacity-50"
               >
                 Approve
               </button>
@@ -117,7 +120,7 @@ export function ApprovalsPanel() {
                 type="button"
                 onClick={() => handleDecision(approval.id, "reject")}
                 disabled={pendingActionId === approval.id}
-                className="rounded border border-error/30 bg-error/10 px-2 py-1 font-mono text-[11px] uppercase tracking-widest text-error disabled:opacity-50"
+                className="min-h-11 rounded-xl bg-error/12 px-3.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.18em] text-error transition-colors hover:bg-error/20 disabled:opacity-50"
               >
                 Reject
               </button>
@@ -138,7 +141,7 @@ export function ApprovalsEmptyStateNotice({
 }) {
   if (state === "approvals_schema_missing") {
     return (
-      <div className="rounded-lg border border-warning/30 bg-warning/10 p-4 text-left">
+      <div className="rounded-r-xl border-l-2 border-status-pending/50 bg-status-pending/[0.07] py-4 pl-5 pr-4 text-left">
         <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-warning">
           Human setup required
         </p>
@@ -154,7 +157,7 @@ export function ApprovalsEmptyStateNotice({
   }
 
   return (
-    <div className="rounded-lg border border-border bg-surface p-4 text-sm text-muted-foreground">
+    <div className="flow-well p-4 text-sm text-muted-foreground">
       No approvals pending
     </div>
   );

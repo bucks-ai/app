@@ -114,7 +114,7 @@ export function SandboxStatusPanel({ businessId }: SandboxStatusPanelProps) {
   }
 
   return (
-    <div className="rounded-lg border border-border bg-surface p-4">
+    <div className="solid-surface rounded-card p-5">
       <div className="flex items-center justify-between gap-3">
         <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">
           Sandbox configuration
@@ -151,7 +151,7 @@ export function SandboxStatusPanel({ businessId }: SandboxStatusPanelProps) {
           {fields.map((field) => (
             <div
               key={field.field}
-              className="rounded border border-border bg-background px-3 py-3"
+              className="flow-well px-4 py-3.5"
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
@@ -175,7 +175,7 @@ export function SandboxStatusPanel({ businessId }: SandboxStatusPanelProps) {
                   <button
                     type="button"
                     onClick={() => startEditing(field.field, field.value)}
-                    className="shrink-0 rounded border border-border bg-elevated px-2 py-0.5 text-[11px] font-medium text-foreground-secondary hover:border-accent"
+                    className="min-h-11 shrink-0 rounded-lg bg-muted px-2.5 py-1 text-[11px] font-medium text-foreground-secondary transition-colors hover:bg-accent/12 hover:text-accent-on-tint"
                   >
                     Change
                   </button>
@@ -189,14 +189,14 @@ export function SandboxStatusPanel({ businessId }: SandboxStatusPanelProps) {
                       setDrafts((prev) => ({ ...prev, [field.field]: event.target.value }))
                     }
                     placeholder={`Set ${field.label.toLowerCase()}`}
-                    className="w-full rounded border border-border bg-surface px-2 py-1 text-xs text-foreground-secondary outline-none focus:border-accent"
+                    className="min-h-11 w-full rounded-lg border border-[var(--input-border)] bg-muted px-3 py-1.5 text-xs text-foreground outline-none transition-all duration-200 focus:border-accent/60 focus:shadow-[0_0_0_3px_var(--accent-soft)]"
                     autoFocus={field.configured}
                   />
                   <button
                     type="button"
                     onClick={() => handleSave(field.field)}
                     disabled={savingField === field.field || !drafts[field.field]?.trim()}
-                    className="shrink-0 rounded border border-border bg-elevated px-3 py-1 text-xs font-medium text-foreground-secondary disabled:opacity-50"
+                    className="min-h-11 shrink-0 rounded-lg bg-accent/12 px-3.5 py-1.5 text-xs font-medium text-accent-on-tint transition-colors hover:bg-accent/20 disabled:opacity-50"
                   >
                     {savingField === field.field ? "Saving…" : "Save"}
                   </button>
@@ -205,7 +205,7 @@ export function SandboxStatusPanel({ businessId }: SandboxStatusPanelProps) {
                       type="button"
                       onClick={() => cancelEditing(field.field)}
                       disabled={savingField === field.field}
-                      className="shrink-0 rounded border border-border px-2 py-1 text-xs text-muted-foreground disabled:opacity-50"
+                      className="min-h-11 shrink-0 rounded-lg px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
                     >
                       Cancel
                     </button>

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { executeBusiness, fetchLatestMission } from "@/lib/execute-client";
+import { StatusPill } from "@/components/ui/StatusPill";
 import type { MissionRecord } from "@/types/database";
 
 type ExecutePanelProps = {
@@ -16,12 +17,18 @@ const STATUS_LABEL: Record<string, string> = {
   cancelled: "Cancelled",
 };
 
-const STATUS_TONE: Record<string, string> = {
-  queued: "border-warning/30 bg-warning/10 text-warning",
-  running: "border-accent/30 bg-accent/10 text-accent",
-  completed: "border-success/30 bg-success/10 text-success",
-  failed: "border-error/30 bg-error/10 text-error",
-  cancelled: "border-border bg-background text-muted-foreground",
+/* Mission status maps onto the shared chip vocabulary rather than a local
+   set of outline+fill classes, so it matches every other status in the
+   workspace. */
+const STATUS_VARIANT: Record<
+  string,
+  "accent" | "success" | "warning" | "danger" | "neutral"
+> = {
+  queued: "warning",
+  running: "accent",
+  completed: "success",
+  failed: "danger",
+  cancelled: "neutral",
 };
 
 export function ExecutePanel({ businessId }: ExecutePanelProps) {
@@ -75,32 +82,34 @@ export function ExecutePanel({ businessId }: ExecutePanelProps) {
   if (loading) return null;
 
   const statusLabel = mission ? (STATUS_LABEL[mission.status] ?? mission.status) : null;
-  const statusTone = mission ? (STATUS_TONE[mission.status] ?? STATUS_TONE.queued) : null;
+  const statusVariant = mission
+    ? (STATUS_VARIANT[mission.status] ?? "warning")
+    : "neutral";
 
   return (
-    <div className="flex w-full min-w-[16rem] shrink-0 flex-col gap-2 sm:w-auto lg:items-end">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="flex w-full min-w-[16rem] shrink-0 flex-col gap-2.5 sm:w-auto lg:items-end">
+      <div className="flex flex-wrap items-center gap-2.5">
         <button
           type="button"
           aria-label="Execute"
           onClick={handleExecute}
           disabled={executing}
-          className="rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-accent-contrast shadow-[var(--shadow-soft)] transition-colors hover:bg-accent-hover disabled:opacity-50"
+          className="min-h-11 rounded-xl bg-accent bg-[image:var(--cta-gradient)] px-4 py-2.5 text-sm font-semibold text-accent-contrast shadow-[var(--shadow-cta)] transition-transform duration-200 hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0"
         >
-          {executing ? "Executing..." : "Execute"}
+          {executing ? "Executing…" : "Execute"}
         </button>
         {statusLabel ? (
-          <span
-            className={`rounded border px-2.5 py-1 text-xs font-semibold ${statusTone}`}
-          >
-            {statusLabel}
-          </span>
+          <StatusPill label={statusLabel} variant={statusVariant} />
         ) : null}
       </div>
       <p className="max-w-xs text-xs leading-5 text-muted-foreground lg:text-right">
         Execute queues the runner to turn this business plan into shipped work.
       </p>
-      {error ? <p className="max-w-xs text-right text-xs text-error">{error}</p> : null}
+      {error ? (
+        <p role="alert" className="max-w-xs text-right text-xs text-error">
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }
