@@ -1251,6 +1251,95 @@ The validator runs in the `run_ui_flow_validation_if_needed` node, immediately a
 
 ---
 
+## Loop Stop Diagnostics (M4c.0)
+
+A bare stop reason (`stale_run`, `chatgpt_no_task`, `awaiting_resources`) says
+which guard fired, not what happened or what to do next — recovering that meant
+grepping `logs/runs.jsonl` and reading `graph.py`, and twice it produced the
+wrong answer: `chatgpt_no_task` read as a broken planner when the queue was
+strict-mode exhausted, and `stale_run` read as a hang when the watchdog was
+measuring against a 4106-minute-old timestamp from a previous session.
+
+`tools/stop_diagnostics.py` closes that gap. Whenever the loop stops, the
+terminal node `report_loop_stop_diagnostics` writes **one** structured record to
+`outbox/loop_stop_report.txt` and fires **one** Slack message (the
+`loop_stop_report` event), each containing:
+
+- the stop reason and the **EXPECTED / ANOMALOUS** classification;
+- the triggering task — id, title, status, type, branch, worker, error;
+- the **5 events immediately before the stop**, with their payloads;
+- the config that produced the stop, printed as `ENV_NAME = value` next to the
+  observed value that crossed it (`stale_minutes` vs `MAX_STALE_TASK_MINUTES`,
+  both labelled — when a guard's payload repeats a configured threshold the
+  config value wins, so one variable never shows two numbers);
+- a plain-language **CAUSE** sentence;
+- a **RECOMMENDED ACTION** naming the exact command or config change that
+  resolves it.
+
+**Classification.** EXPECTED means the run ended the way it was configured to:
+`seeded_queue_exhausted`, `max_loop_tasks`, `claude_subscription_cooldown`, and
+the two empty-queue finishes (`no_more_tasks`, `no_queued_tasks`). Everything
+else — including any reason nobody has registered — is ANOMALOUS. This is the
+field m4c-06's watchdog reads to decide whether to auto-restart, so an unknown
+stop is deliberately treated as "wake a human".
+
+**Every stop reason must have a handler.** `STOP_HANDLERS` maps each reason to
+its cause/action text, and `tests/test_stop_diagnostics.py` scans `graph.py` and
+`tools/*.py` for stop reasons and fails on any that is missing. A new stop
+reason cannot ship without diagnostics. Adding one means:
+
+1. add a `StopHandler(reason=..., headline=..., cause=..., action=...)` to
+   `STOP_HANDLERS`, with the `config_keys` that govern it and the
+   `evidence_events` that carry its observed numbers;
+2. add it to `EXPECTED_STOP_REASONS` only if it is a normal finish;
+3. if its env var is not simply the upper-cased config key, add it to
+   `_ENV_NAME_OVERRIDES` (a test asserts every name is really read by
+   `config.py`).
+
+Config values are read from `cfg.report()`, and any key that looks like a
+credential is rendered `[redacted]` — the report is a file and a Slack message,
+so the rule is enforced in code rather than trusted to the handler table.
+
+Reporting a stop never changes how the run ended: a formatting or write failure
+is swallowed and recorded as `stop_diagnostics_degraded`, and a failed file
+write still sends the Slack message.
+
+| Stop reason | Class | In one line |
+|---|---|---|
+| `no_queued_tasks` | EXPECTED | Queue empty and nothing (compiler / seeded queue / planner) refilled it |
+| `no_more_tasks` | EXPECTED | Planner had no follow-up and the queue was empty |
+| `seeded_queue_exhausted` | EXPECTED | Strict seeded mode; no `queued` mission left in Supabase |
+| `max_loop_tasks` | EXPECTED | The batch ran its full `MAX_LOOP_TASKS` budget |
+| `claude_subscription_cooldown` | EXPECTED | Claude rate-limited and the session's cooldown waits are used up |
+| `chatgpt_no_task` | ANOMALOUS | Planner returned nothing usable — check the queue before the planner |
+| `max_runtime` | ANOMALOUS | Wall-clock passed `MAX_RUNTIME_MINUTES` (cooldowns excluded) |
+| `stale_run` | ANOMALOUS | No task completed inside `MAX_STALE_TASK_MINUTES` |
+| `consecutive_failures` | ANOMALOUS | The failure circuit breaker opened |
+| `repeated_errors` | ANOMALOUS | The same error repeated inside the error window |
+| `repeated_task` | ANOMALOUS | One task hit `MAX_TASK_ATTEMPTS` this session |
+| `worker_timeouts` | ANOMALOUS | Too many dispatches past `WORKER_TIMEOUT_THRESHOLD` |
+| `worker_health_probe_failed` | ANOMALOUS | The worker CLI is missing / unauthenticated on this host |
+| `codex_usage_limit` | ANOMALOUS | Codex usage limit hit `MAX_CODEX_USAGE_LIMIT_ERRORS` times |
+| `cost_budget_exceeded` | ANOMALOUS | Session spend reached the cost cap |
+| `awaiting_resources` | ANOMALOUS | A task needs a credential/resource only a human can provide |
+| `awaiting_merge_approval` | ANOMALOUS | A merge needs human approval under `MERGE_APPROVAL_POLICY` |
+| `awaiting_strategic_review` | ANOMALOUS | The strategic gate paused for a direction decision |
+| `missing_acceptance_criteria` | ANOMALOUS | Task had no acceptance criteria in strict mode |
+| `definition_of_done_not_met` | ANOMALOUS | Worker output missed the definition of done in strict mode |
+| `code_review_rejected` | ANOMALOUS | Independent diff review rejected the change in strict mode |
+| `high_risk_review_rejected` | ANOMALOUS | High-risk Claude review rejected the change in strict mode |
+| `product_eval_failed` | ANOMALOUS | Post-deploy product evals failed with `PRODUCT_EVAL_STRICT=true` |
+| `deploy_failed` | ANOMALOUS | Vercel reached a terminal failure state |
+| `deploy_timed_out` | ANOMALOUS | Polling gave up after `VERCEL_POLL_TIMEOUT` |
+| `preflight_unsafe` | ANOMALOUS | Startup preflight refused: dirty tree / wrong branch |
+| `launch_readiness_failed` | ANOMALOUS | Readiness scorecard below threshold in strict mode |
+| `business_not_found` | ANOMALOUS | Task targets a business row that does not exist |
+| `business_repo_remote_mismatch` | ANOMALOUS | Sandbox workspace origin is not the business's repo |
+| `business_repo_forbidden` | ANOMALOUS | A business sandbox resolves to the bucks-ai repo itself |
+| `unspecified` | ANOMALOUS | The loop stopped without recording a reason (a node bug) |
+
+---
+
 ## Slack Notifications
 
 The runner can push **notable** lifecycle events to a Slack channel via an
@@ -1266,7 +1355,12 @@ off the flight recorder: every call to `log_event(...)` is offered to
   default curated set is: `task_completed`, `error`, `loop_stopped`,
   `loop_blocked_on_deploy`, `deploy_poll_failed`, `deploy_poll_timeout`,
   `rollback_revert_policy_required`, `sql_scan_blocked`, `sql_approval_pending`,
-  `resource_request_pending`, `check_failed`.
+  `resource_request_pending`, `check_failed`, `loop_stop_report` (see
+  `_DEFAULT_SLACK_EVENTS` in `config.py` for the full list).
+- `loop_stopped` and `loop_stop_report` are a pair: the first is the alert that
+  the loop stopped, the second is the diagnosis of why and what to do about it
+  (see **Loop Stop Diagnostics (M4c.0)**). Its message is composed by
+  `tools/stop_diagnostics.py` and passed through verbatim.
 - Reaching Slack failing (network error, non-2xx) **never** interrupts the
   runner — the failure is swallowed and recorded as a `slack_degraded` event, so
   the flight recorder keeps the full trail. `slack_degraded` is intentionally not
@@ -1414,6 +1508,8 @@ Allowed with warnings: `DROP TABLE IF EXISTS`, `DROP POLICY IF EXISTS`, `DROP TR
 14. `update_logs_and_state` — mark task complete/failed, log
 15. `ask_chatgpt_next_task` — send summary back to ChatGPT
 16. `decide_continue_or_stop` — check loop limits, decide to continue or stop
+17. `generate_live_batch_validation_report` — once the loop decides to stop, summarise the batch (task outcomes, session health) to `outbox/live_batch_validation_report.txt`
+18. `report_loop_stop_diagnostics` — terminal node: write the one stop record to `outbox/loop_stop_report.txt` and fire the one Slack message naming the cause, the fix, and whether the stop was EXPECTED or ANOMALOUS (see **Loop Stop Diagnostics (M4c.0)**)
 
 ---
 
