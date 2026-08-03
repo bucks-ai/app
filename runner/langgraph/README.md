@@ -380,6 +380,8 @@ Copy `.env.example` to `.env` and fill in:
 | `FAILURE_RETRY_BACKOFF_MULTIPLIER` | Exponential multiplier applied per retry attempt (default: 2.0) |
 | `FAILURE_RETRY_BACKOFF_MAX_S` | Maximum backoff delay cap in seconds; the worst case `WORKER_TIMEOUT_THRESHOLD + this * (MAX_TASK_ATTEMPTS - 1)` must fit inside the stale-run window (default: 300.0) |
 | `LOOP_START_PREFLIGHT` | Refuse `run-loop` when the runner repo is on a non-main branch or has a dirty working tree; workers inherit that tree and cannot tell intended state from in-flight edits. Set false only for deliberate local experiments (default: true) |
+| `STARTUP_PREFLIGHT` | Verify production assumptions once at loop start, before any task is claimed: pending migrations vs the `_runner_migrations` ledger, deployed production SHA vs `origin/main`, Vercel project reachable and git-connected, `GITHUB_REPO` reachable, required tables present, and every credential the config names resolvable. Emits one `preflight_report` event with per-check status. **Reports, does not halt** — the only halting condition is a dirty tree / wrong branch (`LOOP_START_PREFLIGHT`) (default: true) |
+| `PREFLIGHT_REQUIRED_TABLES` | Comma-separated tables `STARTUP_PREFLIGHT` verifies exist; empty (default) uses the built-in set: `missions`, `mission_tasks`, `agent_runs`, `businesses`, `business_sandbox` |
 | `WORKER_HEALTH_PROBE` | Check that the chosen worker's CLI binary and credentials are available before each dispatch; halts the loop immediately if the worker cannot start (default: true) |
 | `WORKER_HEALTH_LIVE_PING` | After the static binary/credential check passes, run the worker CLI with `--version` in a subprocess to confirm it actually starts; adds ~100–500 ms per dispatch; default off — enable when diagnosing flaky worker startups (default: false) |
 | `WORKER_HEALTH_LIVE_PING_TIMEOUT_S` | Seconds before the live-ping subprocess is forcibly killed; applies only when `WORKER_HEALTH_LIVE_PING=true` (default: 10.0) |
@@ -681,6 +683,42 @@ without merge rights will see the same 405/409 rejections a human would.
 Set `MERGE_VIA_PR=false` to fall back to the old direct-merge path
 (`merge_feature.sh`, local `git merge` + push to `main`) unchanged — an
 escape hatch for lab/sandbox repos that don't have branch protection.
+
+---
+
+## Startup Preflight
+
+The recurring failure shape this exists for: the runner assumes something about
+the world that is only true on the founder's laptop, then discovers it 40
+minutes into a task, or never. `run_startup_preflight_if_needed` runs **once per
+session**, immediately after hook installation and before any task is claimed,
+and emits a single consolidated PASS/WARN/FAIL summary. Every check is a real
+incident:
+
+| Check | Verifies | Incident |
+|---|---|---|
+| `git_state` | Clean tree, on `main` | Workers inherit the runner's tree (m4c-01) |
+| `pending_migrations` | `supabase/migrations/*.sql` all recorded in the `_runner_migrations` ledger | Three merged additive files were never applied to production; Execute 500'd for a whole mission (M4a) |
+| `production_sha` | Deployed production commit == `origin/main` | `main` merged for hours while production served stale code (M4b) |
+| `vercel_project` | Project reachable **and git-connected** | An unlinked project deploys nothing on merge and reports no error (M4b) |
+| `github_repo` | `GET /repos/{owner}/{repo}` succeeds | `testflow` vs `testflow-demo` burned a full run before failing at clone |
+| `required_tables` | `PREFLIGHT_REQUIRED_TABLES` exist | Same assumption class, one layer down |
+| `credentials` | Every credential the config *names* resolves | Reported by env-var **name** only, never value |
+
+**It reports, it does not halt.** The sole exception is `git_state` (dirty tree
+/ wrong branch), the one condition under which work is actively unsafe. A repo
+that doesn't exist or a Vercel project that isn't git-connected is a loud Slack
+warning and the loop continues — a preflight that blocked would just become a
+new source of stops, which is exactly what this mission exists to reduce.
+
+Per-check status vocabulary: `pass` (verified true), `fail` (verified FALSE),
+`warn` (could *not* verify — an unreachable API is worth saying out loud too),
+`skip` (integration not configured, so there is nothing to check; does not
+affect the verdict). The overall verdict is the worst per-check status.
+
+The `preflight_report` event carries every check's status, so a failure hours
+later can be traced back to a warning that was already visible at startup. The
+rendered report is also written to `outbox/startup_preflight.txt`.
 
 ---
 
@@ -1281,6 +1319,7 @@ Allowed with warnings: `DROP TABLE IF EXISTS`, `DROP POLICY IF EXISTS`, `DROP TR
 
 ## LangGraph Nodes
 
+0a. `run_startup_preflight_if_needed` — verifies production assumptions once per session, before any task is claimed: pending migrations vs the ledger, deployed production SHA vs `origin/main`, Vercel reachable and git-connected, `GITHUB_REPO` reachable, required tables present, credentials resolvable. Emits one `preflight_report` event and writes `outbox/startup_preflight.txt`. Reports and continues — it halts only on the dirty-tree / wrong-branch condition, because workers inherit the runner's tree (see **Startup Preflight**)
 0b. `check_launch_readiness_if_needed` — scores the runner system across four dimensions (config completeness, credentials available, safety gates active, operational health) immediately after hook installation; writes a human-readable report to `outbox/launch_readiness_scorecard.txt`; in strict mode a failing score halts the loop before any task is dispatched
 0c. `check_pending_migrations_if_needed` — compares `supabase/migrations/` against the `_runner_migrations` ledger and loudly alerts on any un-applied files; auto-applies additive-only ones when `AUTO_APPLY_MIGRATIONS=true` (see **Startup Migration Check**)
 1. `load_next_task` — fetch next queued task from `.runtime/tasks.local.json`; rewrites protected branch names to `feature/<task-id>` and persists the rewritten branch back to the task queue before dispatch

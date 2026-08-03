@@ -31,6 +31,7 @@ _EVENT_EMOJI = {
     "sql_approval_pending": ":hourglass_flowing_sand:",
     "check_failed": ":warning:",
     "stale_run_warning": ":sleeping:",
+    "preflight_report": ":airplane_departure:",
 }
 
 
@@ -68,6 +69,15 @@ def _detail_for(event_type: str, payload: dict) -> str:
         return str(p.get("message") or p.get("review_path") or "SQL awaiting approval")
     if event_type == "check_failed":
         return str(p.get("error") or "checks failed")
+    if event_type == "preflight_report":
+        # The generic fallback below drops list values, and for this event the
+        # list IS the message — surface every check that isn't passing.
+        checks = p.get("checks") or []
+        head = f"{p.get('status', 'PASS')} — {len(checks)} check(s)"
+        notable = [c for c in checks if c.get("status") in ("fail", "warn")]
+        if not notable:
+            return head
+        return "\n".join([head] + [f"• {c['name']}: {c['detail']}" for c in notable])
     if event_type == "stale_run_warning":
         bits = [f"idle: {p.get('stale_minutes', '?')} min"]
         if p.get("warn_threshold_minutes") is not None:

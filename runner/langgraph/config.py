@@ -56,6 +56,7 @@ _DEFAULT_SLACK_EVENTS = frozenset({
     "migration_applied",
     "gate_blocked",
     "config_invariant_violated",
+    "preflight_report",
 })
 
 
@@ -448,6 +449,18 @@ class RunnerConfig:
     loop_start_preflight_enabled: bool = field(
         default_factory=lambda: os.getenv("LOOP_START_PREFLIGHT", "true").lower() == "true"
     )
+    # M4c.0: verify production assumptions once, at loop start, before any task
+    # is claimed. Reports only — it never halts on its own (the one halting
+    # condition, dirty tree / wrong branch, belongs to LOOP_START_PREFLIGHT
+    # above and is re-reported here for a single consolidated summary).
+    startup_preflight_enabled: bool = field(
+        default_factory=lambda: os.getenv("STARTUP_PREFLIGHT", "true").lower() == "true"
+    )
+    preflight_required_tables: tuple = field(
+        default_factory=lambda: tuple(
+            t.strip() for t in os.getenv("PREFLIGHT_REQUIRED_TABLES", "").split(",") if t.strip()
+        )
+    )
     worker_health_probe_enabled: bool = field(
         default_factory=lambda: os.getenv("WORKER_HEALTH_PROBE", "true").lower() == "true"
     )
@@ -673,6 +686,8 @@ class RunnerConfig:
             "fast_engineering_mode_enabled": self.fast_engineering_mode_enabled,
             "runner_dry_run": self.runner_dry_run,
             "loop_start_preflight_enabled": self.loop_start_preflight_enabled,
+            "startup_preflight_enabled": self.startup_preflight_enabled,
+            "preflight_required_tables": self.preflight_required_tables,
             "worker_health_probe_enabled": self.worker_health_probe_enabled,
             "worker_health_live_ping_enabled": self.worker_health_live_ping_enabled,
             "worker_health_live_ping_timeout_s": self.worker_health_live_ping_timeout_s,

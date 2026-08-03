@@ -104,6 +104,7 @@ from tools.strategic_decision_gate import (
 )
 from tools.model_routing_policy import evaluate_model_routing_policy
 from tools.launch_readiness_scorecard import guard_launch_readiness
+from tools.startup_preflight import guard_startup_preflight
 from tools.live_batch_validation_report import generate_live_batch_report
 from tools.mission_compiler import (
     parse_mission_file,
@@ -369,6 +370,49 @@ def install_hooks(state: RunnerState) -> RunnerState:
         "merged": result["merged"],
     })
     return _persist(state, "install_hooks")
+
+
+def run_startup_preflight_if_needed(state: RunnerState) -> RunnerState:
+    """M4c.0 startup preflight — verify production assumptions ONCE, loudly,
+    before any task is claimed.
+
+    Runs a single consolidated pass over the assumptions that have historically
+    only been true on the founder's laptop (pending migrations, deployed
+    production SHA vs origin/main, Vercel git-connection, GitHub repo
+    reachability, required tables, resolvable credentials) and emits one
+    ``preflight_report`` event carrying every check's status — so a failure 40
+    minutes later can be traced back to a warning that was already visible at
+    startup.
+
+    It REPORTS, it does not halt. The sole exception is the halting condition
+    owned by m4c-01 (dirty tree / wrong branch), under which workers would
+    inherit an unsafe tree. Anything else — a repo that doesn't exist, a Vercel
+    project that isn't git-connected — is a loud Slack warning and the loop
+    continues: a preflight that blocked would just become a new source of
+    stops, which is what this mission exists to reduce.
+
+    Guarded to once per session by ``session_started_at``, so a multi-loop run
+    pays for these network round-trips exactly once.
+    """
+    if not cfg.startup_preflight_enabled:
+        return state
+
+    previous = state.preflight_report or {}
+    if previous.get("session_started_at") and previous["session_started_at"] == state.started_at:
+        return state
+
+    summary = guard_startup_preflight(cfg)
+    summary["session_started_at"] = state.started_at
+    state.preflight_report = summary
+
+    report_path = _RUNNER_DIR / "outbox" / "startup_preflight.txt"
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(summary["report"])
+
+    if summary["unsafe"]:
+        state.stop_reason = "preflight_unsafe"
+
+    return _persist(state, "run_startup_preflight_if_needed")
 
 
 def check_launch_readiness_if_needed(state: RunnerState) -> RunnerState:
@@ -3153,6 +3197,7 @@ def build_graph():
     builder = StateGraph(RunnerState)
 
     builder.add_node("install_hooks", install_hooks)
+    builder.add_node("run_startup_preflight_if_needed", run_startup_preflight_if_needed)
     builder.add_node("check_launch_readiness_if_needed", check_launch_readiness_if_needed)
     builder.add_node("check_pending_migrations_if_needed", check_pending_migrations_if_needed)
     builder.add_node("load_next_task", load_next_task)
@@ -3189,7 +3234,19 @@ def build_graph():
     builder.add_node("generate_live_batch_validation_report", generate_live_batch_validation_report)
 
     builder.set_entry_point("install_hooks")
-    builder.add_edge("install_hooks", "check_launch_readiness_if_needed")
+    builder.add_edge("install_hooks", "run_startup_preflight_if_needed")
+    # The preflight reports and continues. The single exception is a halting
+    # check (dirty tree / wrong branch, m4c-01) — routed to the normal stop
+    # path rather than raising, so the run ends the same way every other guard
+    # ends one.
+    builder.add_conditional_edges(
+        "run_startup_preflight_if_needed",
+        lambda s: "decide_continue_or_stop" if s.stop_reason == "preflight_unsafe" else "check_launch_readiness_if_needed",
+        {
+            "check_launch_readiness_if_needed": "check_launch_readiness_if_needed",
+            "decide_continue_or_stop": "decide_continue_or_stop",
+        },
+    )
     builder.add_conditional_edges(
         "check_launch_readiness_if_needed",
         lambda s: "decide_continue_or_stop" if s.stop_reason == "launch_readiness_failed" else "check_pending_migrations_if_needed",
