@@ -1276,6 +1276,14 @@ terminal node `report_loop_stop_diagnostics` writes **one** structured record to
 - a **RECOMMENDED ACTION** naming the exact command or config change that
   resolves it.
 
+**Suspect stops.** Where the arithmetic can be checked, it is. A `stop_reason`
+left in `.runtime/state.local.json` by a previous session reproduces a real stop
+exactly — `run-loop` clears it on start (`start_fresh_session`), `run-once` and
+`dry-run` do not — so a stop whose own numbers do not support it (e.g.
+`max_loop_tasks` at `loop_count=0` with `MAX_LOOP_TASKS=2`) gets a **SUSPECT —
+READ THIS FIRST** block above the cause, naming `python main.py reset-state` as
+the fix.
+
 **Classification.** EXPECTED means the run ended the way it was configured to:
 `seeded_queue_exhausted`, `max_loop_tasks`, `claude_subscription_cooldown`, and
 the two empty-queue finishes (`no_more_tasks`, `no_queued_tasks`). Everything

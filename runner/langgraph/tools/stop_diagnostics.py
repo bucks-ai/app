@@ -906,6 +906,67 @@ def collect_config_values(config_report: dict, handler: Optional[StopHandler]) -
 # Rendering helpers
 # ---------------------------------------------------------------------------
 
+def consistency_warnings(
+    reason: str,
+    session_state: dict,
+    config_values: dict,
+) -> list[str]:
+    """Flag stops whose own numbers do not support them.
+
+    A stop reason inherited from a previous session reproduces a real stop
+    exactly — ``run-loop`` clears state on start (``start_fresh_session``),
+    ``run-once`` and ``dry-run`` do not. Without this check the report narrates
+    the budget stop it was told about ("completed 0 task loop(s), reaching
+    MAX_LOOP_TASKS (2)") in the same confident voice as a true one, which is the
+    misdiagnosis this module exists to end — so where the arithmetic can be
+    checked, it is.
+    """
+    warnings: list[str] = []
+    stale_state_fix = (
+        "A stop_reason left in .runtime/state.local.json by a previous session "
+        "reproduces this exactly: `python main.py run-loop` clears it on start, "
+        "`run-once` and `dry-run` do not. Run `python main.py reset-state`, then "
+        "re-read this report."
+    )
+
+    loop_count = session_state.get("loop_count")
+    max_loop = config_values.get("max_loop_tasks")
+    if (
+        reason == "max_loop_tasks"
+        and isinstance(loop_count, int) and isinstance(max_loop, int)
+        and max_loop > 0 and loop_count < max_loop
+    ):
+        warnings.append(
+            f"The numbers do not support this stop: {loop_count} task loop(s) ran "
+            f"but MAX_LOOP_TASKS is {max_loop}. {stale_state_fix}"
+        )
+
+    max_runtime = config_values.get("max_runtime_minutes")
+    elapsed = _elapsed_minutes(session_state.get("started_at"))
+    if (
+        reason == "max_runtime"
+        and elapsed is not None
+        and isinstance(max_runtime, (int, float)) and max_runtime > 0
+        and elapsed < max_runtime
+    ):
+        warnings.append(
+            f"The numbers do not support this stop: the session has run "
+            f"{elapsed:.1f} min but MAX_RUNTIME_MINUTES is {max_runtime}. "
+            f"{stale_state_fix}"
+        )
+
+    return warnings
+
+
+def _elapsed_minutes(started_at: Optional[str]) -> Optional[float]:
+    if not started_at:
+        return None
+    try:
+        return (datetime.utcnow() - datetime.fromisoformat(started_at)).total_seconds() / 60
+    except (ValueError, TypeError):
+        return None
+
+
 class _SafeContext(dict):
     """format_map source that renders unknown placeholders as ``unknown``."""
 
@@ -1052,6 +1113,7 @@ def build_stop_diagnostics(
         "headline": handler.headline if handler else "No diagnostics handler for this stop",
         "cause": cause,
         "action": action,
+        "warnings": consistency_warnings(reason, session_state, config_values),
         "task": task_view,
         "config_values": config_values,
         "evidence": observed,
@@ -1135,10 +1197,13 @@ def format_stop_report(diagnostics: dict) -> str:
         f"  Branch : {_fmt_value(task.get('branch'))}",
         f"  Worker : {_fmt_value(task.get('worker'))}",
         f"  Error  : {_fmt_value(task.get('error'), 300)}",
-        "",
-        "CAUSE",
-        _THIN,
     ]
+
+    for warning in diagnostics.get("warnings") or []:
+        lines.extend(["", "SUSPECT — READ THIS FIRST", _THIN])
+        lines.extend(_wrap(warning, indent="  "))
+
+    lines.extend(["", "CAUSE", _THIN])
     lines.extend(_wrap(diagnostics.get("cause", ""), indent="  "))
     lines.extend(["", "RECOMMENDED ACTION", _THIN])
     lines.extend(_wrap(diagnostics.get("action", ""), indent="  "))
@@ -1188,6 +1253,9 @@ def format_slack_message(diagnostics: dict) -> str:
         f"{marker} *{classification}* — loop stopped: `{reason}`",
         f"_{diagnostics.get('headline', '')}_",
     ]
+
+    for warning in diagnostics.get("warnings") or []:
+        lines.append(f":warning: *SUSPECT*: {warning}")
 
     task_id = task.get("id")
     if task_id:
@@ -1287,6 +1355,7 @@ def report_loop_stop(
         "handler_found": diagnostics["handler_found"],
         "headline": diagnostics["headline"],
         "cause": diagnostics["cause"],
+        "warnings": diagnostics["warnings"],
         "recommended_action": diagnostics["action"],
         "task": diagnostics["task"],
         "config_values": diagnostics["config_values"],

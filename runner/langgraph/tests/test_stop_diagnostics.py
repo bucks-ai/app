@@ -481,6 +481,80 @@ class TestBuildStopDiagnostics:
         assert diag["classification"] == EXPECTED
 
 
+class TestConsistencyWarnings:
+    """A stop_reason inherited from a previous session reproduces a real stop
+    exactly — observed on a dry-run that reported max_loop_tasks at loop_count 0
+    with MAX_LOOP_TASKS=2. Narrating that in the same confident voice as a true
+    budget stop is the misdiagnosis this module exists to end."""
+
+    def test_max_loop_tasks_below_its_own_budget_is_flagged(self):
+        diag = build_stop_diagnostics(
+            stop_reason="max_loop_tasks",
+            session_state=_state(loop_count=0),
+            config_report={"max_loop_tasks": 2, "max_runtime_minutes": 480},
+            events=[],
+        )
+        assert diag["warnings"]
+        assert "reset-state" in diag["warnings"][0]
+        assert "SUSPECT — READ THIS FIRST" in diag["report"]
+        assert ":warning: *SUSPECT*" in diag["slack_message"]
+
+    def test_a_genuine_budget_stop_is_not_flagged(self):
+        diag = build_stop_diagnostics(
+            stop_reason="max_loop_tasks",
+            session_state=_state(loop_count=10),
+            config_report={"max_loop_tasks": 10, "max_runtime_minutes": 480},
+            events=[],
+        )
+        assert diag["warnings"] == []
+        assert "SUSPECT" not in diag["report"]
+
+    def test_max_runtime_well_inside_its_window_is_flagged(self):
+        from datetime import datetime, timedelta
+
+        started = (datetime.utcnow() - timedelta(minutes=3)).isoformat()
+        diag = build_stop_diagnostics(
+            stop_reason="max_runtime",
+            session_state=_state(started_at=started),
+            config_report={**_CONFIG, "max_runtime_minutes": 480},
+            events=[],
+        )
+        assert diag["warnings"]
+
+    def test_a_genuine_runtime_stop_is_not_flagged(self):
+        from datetime import datetime, timedelta
+
+        started = (datetime.utcnow() - timedelta(minutes=500)).isoformat()
+        diag = build_stop_diagnostics(
+            stop_reason="max_runtime",
+            session_state=_state(started_at=started),
+            config_report={**_CONFIG, "max_runtime_minutes": 480},
+            events=[],
+        )
+        assert diag["warnings"] == []
+
+    def test_unparseable_or_missing_numbers_never_raise(self):
+        for state_kwargs, config in (
+            ({"loop_count": None}, {"max_loop_tasks": 2}),
+            ({"started_at": "not-a-timestamp"}, {"max_runtime_minutes": 10}),
+            ({}, {}),
+        ):
+            diag = build_stop_diagnostics(
+                stop_reason="max_loop_tasks",
+                session_state=_state(**state_kwargs),
+                config_report=config,
+                events=[],
+            )
+            assert isinstance(diag["warnings"], list)
+
+    def test_other_stop_reasons_are_left_alone(self):
+        diag = build_stop_diagnostics(
+            stop_reason="stale_run", session_state=_state(loop_count=0),
+            config_report=_CONFIG, events=[],
+        )
+        assert diag["warnings"] == []
+
+
 class TestSlackMessage:
     def test_classification_leads_the_message(self):
         diag = build_stop_diagnostics(
