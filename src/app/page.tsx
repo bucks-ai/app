@@ -1,6 +1,7 @@
 import { Navbar } from "@/components/shared/Navbar";
 import { Footer } from "@/components/shared/Footer";
 import { PageField } from "@/components/ui/PageField";
+import { FloatingWordmark } from "@/components/landing/FloatingWordmark";
 import { HomeHero } from "@/components/landing/HomeHero";
 import { WorkflowSteps } from "@/components/landing/WorkflowSteps";
 import { ExecutionLoop } from "@/components/landing/ExecutionLoop";
@@ -15,7 +16,8 @@ export default function LandingPage() {
       {/* One atmosphere for the entire route. Sections below contribute
           spacing and type, never their own background band. */}
       <PageField />
-      <main id="main-content">
+      <FloatingWordmark />
+      <main id="main-content" className="relative">
         <HomeHero />
         <WorkflowSteps />
         <ExecutionLoop />

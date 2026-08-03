@@ -1220,3 +1220,145 @@ h6 {
     @apply font-sans;
   }
 }
+
+/* ── Cloud canvas ─────────────────────────────────────────────────────────
+   Soft node-graph surfaces for the Mission Canvas dashboard. Everything
+   animated here moves on transform/opacity only. */
+
+.canvas-viewport {
+  touch-action: none;
+  overscroll-behavior: contain;
+  cursor: grab;
+  user-select: none;
+}
+.canvas-viewport.is-panning {
+  cursor: grabbing;
+}
+.canvas-world {
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+/* Pill node: the collapsed state of every branch. */
+.cloud-node {
+  border-radius: 999px;
+  border: 1px solid var(--edge-strong);
+  background: var(--surface-raised);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.06) inset,
+    0 8px 24px rgba(0, 0, 0, 0.28),
+    0 0 0 1px rgba(0, 0, 0, 0.12);
+  transition: box-shadow 220ms ease, border-color 220ms ease,
+    transform 220ms ease;
+}
+.cloud-node:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--edge-strong));
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.08) inset,
+    0 12px 32px rgba(0, 0, 0, 0.32),
+    0 0 24px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+/* Expanded panel: generous radius, no sharp corners anywhere. */
+.cloud-panel {
+  border-radius: 1.75rem;
+  border: 1px solid var(--edge);
+  background: var(--surface-glass, var(--surface-raised));
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.05) inset,
+    0 18px 48px rgba(0, 0, 0, 0.34);
+}
+
+/* Hub: an organic blob rather than a circle. */
+.cloud-hub {
+  border-radius: 46% 54% 52% 48% / 52% 46% 54% 48%;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--edge-strong));
+  background:
+    radial-gradient(
+      120% 120% at 30% 25%,
+      color-mix(in srgb, var(--accent) 16%, transparent),
+      transparent 60%
+    ),
+    var(--surface-raised);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.07) inset,
+    0 20px 56px rgba(0, 0, 0, 0.38),
+    0 0 48px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+@keyframes cloud-bob {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, -6px, 0);
+  }
+}
+@keyframes wordmark-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(-2deg);
+  }
+  50% {
+    transform: translate3d(3%, -4%, 0) rotate(1deg);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .cloud-bob {
+    animation: cloud-bob 7s ease-in-out infinite;
+  }
+  .cloud-bob-late {
+    animation: cloud-bob 9s ease-in-out infinite;
+    animation-delay: -3.5s;
+  }
+  .wordmark-drift {
+    animation: wordmark-drift 46s ease-in-out infinite;
+  }
+  .wordmark-drift-alt {
+    animation: wordmark-drift 62s ease-in-out infinite reverse;
+  }
+}
+
+/* The ambient green wordmark behind the homepage. Low opacity by design:
+   it is atmosphere, not content, and is aria-hidden in markup. */
+.wordmark-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  will-change: transform;
+}
+.wordmark-glyph {
+  position: absolute;
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: var(--success);
+  /* Bright mint over near-black reads at far lower opacity than the deep
+     green does over paper — each theme gets its own base, and secondary
+     glyphs dim via --wm-scale. */
+  opacity: calc(0.03 * var(--wm-scale, 1));
+  white-space: nowrap;
+  will-change: transform;
+}
+:root[data-theme="light"] .wordmark-glyph {
+  opacity: calc(0.05 * var(--wm-scale, 1));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cloud-bob,
+  .cloud-bob-late,
+  .wordmark-drift,
+  .wordmark-drift-alt {
+    animation: none;
+  }
+  .wordmark-layer {
+    transform: none !important;
+  }
+}

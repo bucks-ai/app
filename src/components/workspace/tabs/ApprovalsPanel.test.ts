@@ -24,7 +24,7 @@ describe("ApprovalsEmptyStateNotice", () => {
     expect(html).toContain("Human setup required");
     expect(html).toContain("Approvals schema missing");
     expect(html).toContain("supabase/m4a-approvals-queue.sql");
-    expect(html).toContain("border-warning/30");
-    expect(html).toContain("bg-warning/10");
+    expect(html).toContain("border-status-pending/50");
+    expect(html).toContain("bg-status-pending/[0.07]");
   });
 });
