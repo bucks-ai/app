@@ -158,10 +158,47 @@ def start_fresh_session(init):
     return init
 
 
+def preflight_or_exit(command: str):
+    """M4c: refuse to start an unattended loop from an unclean starting point.
+
+    Workers operate on the runner's own working tree. Starting from a feature
+    branch with uncommitted changes (observed 2026-08-02: the loop was launched
+    from ``fix/sandbox-config-edit`` mid-edit) hands them a tree where intended
+    state and in-flight work are indistinguishable — which is exactly what
+    caused three M4b workers to stop and ask for clarification instead of
+    executing. Exits the process rather than raising: this is an operator
+    error to fix before starting, not a task failure to record.
+    """
+    from config import get_config
+    from tools.dispatch_preflight import evaluate_loop_start
+    from tools.log_tools import log_event
+
+    cfg = get_config()
+    if not cfg.loop_start_preflight_enabled:
+        return
+
+    verdict = evaluate_loop_start(cfg.repo_path)
+    if verdict["ok"]:
+        return
+
+    log_event("loop_start_refused", {
+        "command": command,
+        "reason": verdict["reason"],
+        "branch": verdict["branch"],
+        "dirty": verdict["dirty"],
+        "repo_path": cfg.repo_path,
+    })
+    print(f"✗ {verdict['message']}")
+    print("  (override for local experiments only: LOOP_START_PREFLIGHT=false)")
+    sys.exit(1)
+
+
 def cmd_run_loop(args):
     from graph import graph
     from state import RunnerState
     from tools.log_tools import read_state, update_state
+
+    preflight_or_exit("run-loop")
 
     saved = read_state()
     init = RunnerState(**{k: v for k, v in saved.items() if k in RunnerState.model_fields})

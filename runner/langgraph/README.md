@@ -312,6 +312,7 @@ Copy `.env.example` to `.env` and fill in:
 | `PR_CHECKS_TIMEOUT_S` | Max seconds to poll a PR's check runs before giving up (default: 900) |
 | `PR_CHECKS_POLL_INTERVAL_S` | Seconds between check-run polls (default: 20) |
 | `PR_CHECKS_EMPTY_GRACE_S` | Seconds to wait with zero check runs scheduled before attempting recovery (querying mergeable state and refreshing the branch); a further wait of the same length with still-zero runs fails fast with `pr_checks_no_runs` (default: 180) |
+| `PR_CHECKS_NON_BLOCKING` | Comma-separated, case-insensitive substrings; any check run whose **name** contains one is advisory — its conclusion is logged (`pr_checks_advisory_failed`) but never blocks a merge (default: `[informational]`). Branch protection remains the authority on what actually gates merges |
 | `AUTO_DEPLOY` | Auto-trigger Vercel (default: true) |
 | `AUTO_DEPLOY_POLL` | Poll the triggered deployment until it finishes (default: true) |
 | `BLOCK_ON_DEPLOY_FAILURE` | Stop the loop when a polled deploy fails or times out (default: true) |
@@ -373,6 +374,7 @@ Copy `.env.example` to `.env` and fill in:
 | `FAILURE_RETRY_BACKOFF_BASE_S` | Base backoff delay in seconds for the first degraded retry (default: 30.0) |
 | `FAILURE_RETRY_BACKOFF_MULTIPLIER` | Exponential multiplier applied per retry attempt (default: 2.0) |
 | `FAILURE_RETRY_BACKOFF_MAX_S` | Maximum backoff delay cap in seconds (default: 300.0) |
+| `LOOP_START_PREFLIGHT` | Refuse `run-loop` when the runner repo is on a non-main branch or has a dirty working tree; workers inherit that tree and cannot tell intended state from in-flight edits. Set false only for deliberate local experiments (default: true) |
 | `WORKER_HEALTH_PROBE` | Check that the chosen worker's CLI binary and credentials are available before each dispatch; halts the loop immediately if the worker cannot start (default: true) |
 | `WORKER_HEALTH_LIVE_PING` | After the static binary/credential check passes, run the worker CLI with `--version` in a subprocess to confirm it actually starts; adds ~100–500 ms per dispatch; default off — enable when diagnosing flaky worker startups (default: false) |
 | `WORKER_HEALTH_LIVE_PING_TIMEOUT_S` | Seconds before the live-ping subprocess is forcibly killed; applies only when `WORKER_HEALTH_LIVE_PING=true` (default: 10.0) |

@@ -123,6 +123,7 @@ from tools.foreign_repo_workspace import (
     prepare_business_repo,
     resolve_scoped_github_token,
 )
+from tools.dispatch_preflight import verify_origin_remote
 from workers.chatgpt_worker import ChatGPTWorker
 from workers.claude_worker import ClaudeWorker
 from workers.codex_worker import CodexWorker
@@ -740,6 +741,31 @@ def resolve_business_repo_if_needed(state: RunnerState) -> RunnerState:
     result = prepare_business_repo(task, business)
 
     if result["success"]:
+        # M4c: before any work runs against this workspace, assert its origin
+        # really is the business's repo. prepare_business_repo guarantees the
+        # *path* is sandboxed, but a stale workspace directory left over from a
+        # previous business (or a hand-edited remote) would still pass that
+        # check while pointing somewhere else entirely — and every commit, push
+        # and deploy after this point would go to the wrong repo. Only the
+        # parsed owner/name is logged; the origin URL embeds a scoped token.
+        remote = verify_origin_remote(result["repo_path"], result["repo_full_name"])
+        if not remote["ok"]:
+            state.stop_reason = "business_repo_remote_mismatch"
+            detail = (
+                f"workspace origin is '{remote['actual'] or 'unresolved'}' "
+                f"but business repo is '{remote['expected']}' ({remote['reason']})"
+            )
+            mark_task_failed(task_id, f"refused: {detail}")
+            log_event("business_repo_remote_mismatch", {
+                "task_id": task_id,
+                "business_id": business_id,
+                "expected": remote["expected"],
+                "actual": remote["actual"],
+                "reason": remote["reason"],
+                "repo_path": result["repo_path"],
+            }, task_id=task_id)
+            return _persist(state, "resolve_business_repo_if_needed")
+
         task = dict(task)
         task["repo_path"] = result["repo_path"]
         task["business_repo_full_name"] = result["repo_full_name"]

@@ -365,6 +365,7 @@ def test_node_success_overrides_repo_path():
     def body(outbox, inbox, failed, blocked):
         original_fetch = graph.fetch_business_by_id
         original_prepare = graph.prepare_business_repo
+        original_verify = graph.verify_origin_remote
         graph.fetch_business_by_id = lambda bid: {"id": bid}
         graph.prepare_business_repo = lambda task, business: {
             "success": True,
@@ -372,11 +373,18 @@ def test_node_success_overrides_repo_path():
             "repo_full_name": "acme/widgets",
             "github_token_secret_name": "ACME_TOKEN",
         }
+        # M4c: the node now asserts origin before accepting the workspace;
+        # this fixture path is not a real repo, so stub the check green here
+        # (the mismatch path has its own test in test_dispatch_preflight.py).
+        graph.verify_origin_remote = lambda path, expected: {
+            "ok": True, "reason": "", "expected": expected, "actual": expected,
+        }
         try:
             out = graph.resolve_business_repo_if_needed(_state({"id": "t1", "business_id": "biz-x", "runner_target": "business"}))
         finally:
             graph.fetch_business_by_id = original_fetch
             graph.prepare_business_repo = original_prepare
+            graph.verify_origin_remote = original_verify
         assert out.stop_reason is None
         assert out.current_task["repo_path"] == "/tmp/.workspaces/biz-x"
         assert out.current_task["business_repo_full_name"] == "acme/widgets"
@@ -431,6 +439,7 @@ def test_node_missing_secret_fulfilled_retries_successfully():
         (inbox / "t1_resources_provided.txt").write_text("ok")
         original_fetch = graph.fetch_business_by_id
         original_prepare = graph.prepare_business_repo
+        original_verify = graph.verify_origin_remote
         graph.fetch_business_by_id = lambda bid: {"id": bid}
         graph.prepare_business_repo = lambda task, business: {
             "success": True,
@@ -438,11 +447,15 @@ def test_node_missing_secret_fulfilled_retries_successfully():
             "repo_full_name": "acme/widgets",
             "github_token_secret_name": "ACME_GH_TOKEN",
         }
+        graph.verify_origin_remote = lambda path, expected: {
+            "ok": True, "reason": "", "expected": expected, "actual": expected,
+        }
         try:
             out = graph.resolve_business_repo_if_needed(_state({"id": "t1", "business_id": "biz-x", "runner_target": "business"}))
         finally:
             graph.fetch_business_by_id = original_fetch
             graph.prepare_business_repo = original_prepare
+            graph.verify_origin_remote = original_verify
         assert out.stop_reason is None, out.stop_reason
         assert out.current_task["repo_path"] == "/tmp/.workspaces/biz-x"
     _with_temp_runner_dir(body)

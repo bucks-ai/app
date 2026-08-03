@@ -145,6 +145,17 @@ class RunnerConfig:
     pr_checks_empty_grace_s: int = field(
         default_factory=lambda: int(os.getenv("PR_CHECKS_EMPTY_GRACE_S", "180"))
     )
+    # Check runs whose NAME contains any of these (case-insensitive) substrings
+    # are advisory: their conclusion is reported but never blocks a merge.
+    # Branch protection is the authority on what actually blocks; a job that is
+    # informational by design (M2's Vercel-preview E2E) must not gate the runner.
+    pr_checks_non_blocking: list = field(
+        default_factory=lambda: [
+            s.strip().lower()
+            for s in os.getenv("PR_CHECKS_NON_BLOCKING", "[informational]").split(",")
+            if s.strip()
+        ]
+    )
     auto_deploy: bool = field(
         default_factory=lambda: os.getenv("AUTO_DEPLOY", "true").lower() == "true"
     )
@@ -394,6 +405,13 @@ class RunnerConfig:
     runner_dry_run: bool = field(
         default_factory=lambda: os.getenv("RUNNER_DRY_RUN", "false").lower() == "true"
     )
+    # M4c: refuse `run-loop` from a non-main branch or a dirty tree. Workers
+    # inherit the runner's working tree, and a half-finished branch is
+    # indistinguishable to them from intended state. Off only for deliberate
+    # local experiments — never in an unattended run.
+    loop_start_preflight_enabled: bool = field(
+        default_factory=lambda: os.getenv("LOOP_START_PREFLIGHT", "true").lower() == "true"
+    )
     worker_health_probe_enabled: bool = field(
         default_factory=lambda: os.getenv("WORKER_HEALTH_PROBE", "true").lower() == "true"
     )
@@ -523,6 +541,7 @@ class RunnerConfig:
             "pr_checks_timeout_s": self.pr_checks_timeout_s,
             "pr_checks_poll_interval_s": self.pr_checks_poll_interval_s,
             "pr_checks_empty_grace_s": self.pr_checks_empty_grace_s,
+            "pr_checks_non_blocking": self.pr_checks_non_blocking,
             "auto_deploy": self.auto_deploy,
             "auto_deploy_poll": self.auto_deploy_poll,
             "block_on_deploy_failure": self.block_on_deploy_failure,
@@ -605,6 +624,7 @@ class RunnerConfig:
             "launch_readiness_scorecard_pass_threshold": self.launch_readiness_scorecard_pass_threshold,
             "fast_engineering_mode_enabled": self.fast_engineering_mode_enabled,
             "runner_dry_run": self.runner_dry_run,
+            "loop_start_preflight_enabled": self.loop_start_preflight_enabled,
             "worker_health_probe_enabled": self.worker_health_probe_enabled,
             "worker_health_live_ping_enabled": self.worker_health_live_ping_enabled,
             "worker_health_live_ping_timeout_s": self.worker_health_live_ping_timeout_s,
