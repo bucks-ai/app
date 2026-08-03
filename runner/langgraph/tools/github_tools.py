@@ -337,6 +337,21 @@ def _update_pr_branch(repo: str, pr_number: int, token: Optional[str] = None) ->
         return False
 
 
+def _is_non_blocking_check(run: dict, cfg) -> bool:
+    """True when a check run is advisory — reported but never a merge gate.
+
+    Matched by case-insensitive substring against ``PR_CHECKS_NON_BLOCKING``
+    (default ``[informational]``). Rationale (M4c pre-patch, 2026-08-02): PR #94
+    had every required check green and was still failed by the runner because
+    ``E2E (Playwright, Vercel preview) [informational]`` — a job M2 deliberately
+    built as non-blocking — reported failure. GitHub branch protection, not this
+    poller, decides what truly blocks; treating every run as a gate makes the
+    runner stricter than the repo's own policy and strands correct work.
+    """
+    name = (run.get("name") or "").lower()
+    return any(marker in name for marker in getattr(cfg, "pr_checks_non_blocking", []))
+
+
 def poll_pr_checks(
     repo: str,
     sha: str,
@@ -415,10 +430,24 @@ def poll_pr_checks(
         })
 
         if all_complete:
-            ok = all(run.get("conclusion") in ("success", "skipped") for run in runs)
+            blocking = [run for run in runs if not _is_non_blocking_check(run, cfg)]
+            advisory_failures = {
+                run.get("name"): run.get("conclusion")
+                for run in runs
+                if _is_non_blocking_check(run, cfg)
+                and run.get("conclusion") not in ("success", "skipped")
+            }
+            ok = all(run.get("conclusion") in ("success", "skipped") for run in blocking)
+            if advisory_failures:
+                # Reported, never fatal: an advisory job is not a merge gate.
+                log_event("pr_checks_advisory_failed", {
+                    "sha": sha, "conclusions": advisory_failures,
+                    "note": "non-blocking by PR_CHECKS_NON_BLOCKING; merge not gated on these",
+                })
             log_event("pr_checks_completed" if ok else "pr_checks_failed", {
                 "sha": sha, "polls": polls, "elapsed": elapsed,
                 "conclusions": {run.get("name"): run.get("conclusion") for run in runs},
+                "advisory_ignored": sorted(advisory_failures),
             })
             return {"success": ok, "timed_out": False, "runs": runs, "polls": polls, "elapsed": elapsed}
 

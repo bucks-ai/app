@@ -312,6 +312,7 @@ Copy `.env.example` to `.env` and fill in:
 | `PR_CHECKS_TIMEOUT_S` | Max seconds to poll a PR's check runs before giving up (default: 900) |
 | `PR_CHECKS_POLL_INTERVAL_S` | Seconds between check-run polls (default: 20) |
 | `PR_CHECKS_EMPTY_GRACE_S` | Seconds to wait with zero check runs scheduled before attempting recovery (querying mergeable state and refreshing the branch); a further wait of the same length with still-zero runs fails fast with `pr_checks_no_runs` (default: 180) |
+| `PR_CHECKS_NON_BLOCKING` | Comma-separated, case-insensitive substrings; any check run whose **name** contains one is advisory — its conclusion is logged (`pr_checks_advisory_failed`) but never blocks a merge (default: `[informational]`). Branch protection remains the authority on what actually gates merges |
 | `AUTO_DEPLOY` | Auto-trigger Vercel (default: true) |
 | `AUTO_DEPLOY_POLL` | Poll the triggered deployment until it finishes (default: true) |
 | `BLOCK_ON_DEPLOY_FAILURE` | Stop the loop when a polled deploy fails or times out (default: true) |
