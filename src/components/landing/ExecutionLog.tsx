@@ -27,30 +27,35 @@ export function ExecutionLog({
   const reducedMotion = useReducedMotion();
 
   return (
-    <div className="rounded-xl border border-border bg-background/70 p-3">
+    // A log is a list, not a stack of cards. Each row was individually
+    // outlined and filled, which turned five lines of text into five boxes;
+    // rows are now separated by a hairline only.
+    <div className="flow-well p-4">
       <div className="mb-3 flex items-center justify-between gap-3">
-        <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
           Execution log
         </p>
-        <span className="inline-flex items-center gap-2 rounded-full border border-status-running/30 bg-status-running/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-status-running">
+        <span className="inline-flex items-center gap-2 rounded-full bg-status-running/10 px-2.5 py-1 font-mono text-[11px] uppercase tracking-[0.14em] text-running-on-tint">
           <span aria-hidden className="pulse-dot h-1.5 w-1.5 rounded-full bg-status-running" />
           streaming
         </span>
       </div>
-      <div className={compact ? "space-y-2" : "space-y-2.5"}>
+      <div className="divide-y divide-edge">
         {items.map((item, index) => (
           <motion.div
             key={`${item.time}-${item.actor}-${item.event}`}
-            className="grid grid-cols-[3.5rem_minmax(0,1fr)] gap-3 rounded-lg border border-border/70 bg-surface/55 px-3 py-2.5"
+            className={`grid grid-cols-[3.5rem_minmax(0,1fr)] gap-3 ${
+              compact ? "py-2" : "py-2.5"
+            }`}
             initial={false}
             whileInView={reducedMotion ? undefined : { opacity: 1, x: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.32, delay: index * 0.055 }}
           >
-            <span className="font-mono text-[10px] text-muted-foreground">{item.time}</span>
+            <span className="font-mono text-[11px] text-muted-foreground">{item.time}</span>
             <p className="min-w-0 text-sm leading-5 text-foreground-secondary">
               <span
-                className="font-mono text-[10px] uppercase tracking-[0.14em]"
+                className="font-mono text-[11px] uppercase tracking-[0.14em]"
                 style={{ color: toneColor[item.tone ?? "neutral"] }}
               >
                 {item.actor}

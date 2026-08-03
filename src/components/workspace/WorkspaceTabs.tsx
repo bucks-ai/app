@@ -59,7 +59,7 @@ export function WorkspaceTabs({
               {tab.label}
               {count && count > 0 ? (
                 <span
-                  className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                  className={`rounded-full px-1.5 py-0.5 text-[11px] font-bold ${
                     tab.key === "actions"
                       ? "bg-warning/20 text-warning"
                       : "bg-accent/20 text-accent"

@@ -1,9 +1,12 @@
 import { MissionConsole } from "@/components/landing/MissionConsole";
-import { BackgroundAtmosphere } from "@/components/ui/BackgroundAtmosphere";
 import { CTAButton } from "@/components/ui/CTAButton";
 
 const capabilities = ["Strategy", "Research", "Validation", "Build", "Deploy", "Learn"];
-const proofPoints = ["Founder-safe autonomy", "GitHub + Vercel orchestration", "Supabase-backed workspaces"];
+const proofPoints = [
+  "Founder-safe autonomy",
+  "GitHub + Vercel orchestration",
+  "Supabase-backed workspaces",
+];
 const heroStats = [
   ["6", "agent lanes"],
   ["10", "workspace tabs"],
@@ -12,30 +15,38 @@ const heroStats = [
 
 export function HomeHero() {
   return (
-    <section className="noise-backdrop light-field relative overflow-hidden px-6 pb-18 pt-32 sm:pb-24 sm:pt-40">
-      <BackgroundAtmosphere intensity="strong" drift />
-
-      <div className="relative mx-auto grid max-w-6xl items-center gap-12 lg:grid-cols-[minmax(0,0.86fr)_minmax(27rem,1.14fr)]">
+    // No local background or aurora: <PageField /> owns the atmosphere for the
+    // whole route, so the hero dissolves into the page instead of sitting in
+    // its own lit box.
+    <section className="relative px-6 pb-24 pt-36 sm:pb-32 sm:pt-44">
+      <div className="relative mx-auto grid max-w-6xl items-center gap-14 lg:grid-cols-[minmax(0,0.92fr)_minmax(26rem,1.08fr)] lg:gap-16">
         <div className="min-w-0 max-w-2xl">
-          <div className="inline-flex max-w-full items-center gap-2 rounded-full border border-accent/25 bg-accent/10 px-3 py-1.5 font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-accent-bright shadow-[var(--shadow-soft)]">
-            <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-accent-bright" />
+          <div className="inline-flex max-w-full items-center gap-2 rounded-full border border-accent/20 bg-accent/[0.07] px-3.5 py-1.5 font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-accent-bright">
+            <span
+              aria-hidden
+              className="pulse-dot h-1.5 w-1.5 rounded-full bg-accent-bright"
+            />
             <span className="hidden truncate sm:inline">
               AI-native execution control plane
             </span>
             <span className="truncate sm:hidden">AI execution control plane</span>
           </div>
 
-          <h1 className="text-balance mt-7 text-5xl font-semibold leading-[0.98] tracking-tight text-foreground sm:text-6xl lg:text-7xl">
-            AI Mission Control for founder-led MVPs.
+          <h1 className="display-xl text-balance mt-8 text-6xl text-foreground sm:text-7xl lg:text-[4.75rem]">
+            Mission control for{" "}
+            {/* nowrap: the hyphen in "founder-led" is a legal break point and
+                the serif split it across two lines. */}
+            <span className="display-accent whitespace-nowrap">founder-led</span>{" "}
+            MVPs.
           </h1>
 
-          <p className="mt-6 max-w-xl text-lg leading-8 text-foreground-secondary">
+          <p className="mt-7 max-w-lg text-lg leading-9 text-foreground-secondary">
             bucks.ai turns a software-business idea into a controlled operating
             loop: agents research, validate, build, deploy, and stop for human
             approval before anything risky leaves the workspace.
           </p>
 
-          <div className="mt-9 flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
+          <div className="mt-10 flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
             <CTAButton href="/dashboard" arrow className="w-full sm:w-auto">
               Enter the console
             </CTAButton>
@@ -48,30 +59,30 @@ export function HomeHero() {
             </CTAButton>
           </div>
 
-          <div className="mt-6 flex flex-wrap gap-2">
-            {proofPoints.map((point) => (
-              <span
-                key={point}
-                className="rounded-full border border-border bg-surface/70 px-3 py-1.5 text-xs font-medium text-foreground-secondary shadow-[var(--shadow-soft)]"
-              >
-                {point}
-              </span>
-            ))}
-          </div>
-
-          <div className="mt-10 grid max-w-xl grid-cols-3 gap-2">
+          {/* Stats were three bordered tiles; boxes inside a hero are exactly
+              the rigidity being removed. Same information, carried by type
+              hierarchy and a single hairline instead. */}
+          <div className="mt-12 flex flex-wrap items-start gap-x-10 gap-y-6">
             {heroStats.map(([value, label]) => (
-              <div
-                key={label}
-                className="rounded-lg border border-border bg-surface/70 px-3 py-3 shadow-[var(--shadow-soft)]"
-              >
-                <p className="font-mono text-2xl font-semibold text-foreground">
+              <div key={label}>
+                <p className="font-mono text-3xl font-semibold text-foreground">
                   {value}
                 </p>
-                <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                <p className="mt-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
                   {label}
                 </p>
               </div>
+            ))}
+          </div>
+
+          <div className="mt-10 flex flex-wrap gap-2">
+            {proofPoints.map((point) => (
+              <span
+                key={point}
+                className="rounded-full bg-muted px-3.5 py-1.5 text-xs font-medium text-foreground-secondary"
+              >
+                {point}
+              </span>
             ))}
           </div>
 
@@ -79,7 +90,7 @@ export function HomeHero() {
             {capabilities.map((capability, index) => (
               <span key={capability} className="inline-flex items-center">
                 {index > 0 ? (
-                  <span aria-hidden className="mx-3 h-px w-4 bg-border-strong" />
+                  <span aria-hidden className="mx-3 h-px w-4 bg-edge-strong" />
                 ) : null}
                 {capability}
               </span>
@@ -88,30 +99,20 @@ export function HomeHero() {
         </div>
 
         <div className="relative min-w-0 lg:translate-y-4">
+          {/* -inset-8 made this 16px wider than its column, which pushed the
+              document 8px past a 320px viewport and introduced horizontal
+              scroll. Only the vertical bleed is needed for the glow. */}
           <div
             aria-hidden
-            className="absolute -inset-6 rounded-[2rem] border border-accent/15 bg-[radial-gradient(circle_at_20%_0%,var(--accent-soft),transparent_55%),linear-gradient(135deg,rgba(255,255,255,0.05),transparent)] blur-sm"
+            className="absolute -inset-y-8 inset-x-0 rounded-[2.5rem] bg-[radial-gradient(circle_at_30%_0%,var(--accent-soft),transparent_60%)] blur-2xl"
           />
-          <div
-            aria-hidden
-            className="absolute -right-5 top-8 hidden rounded-xl border border-accent-blue/25 bg-background/75 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-accent-blue shadow-[var(--shadow-glass)] backdrop-blur md:block"
-          >
-            preview ready
-          </div>
-          <div
-            aria-hidden
-            className="absolute -left-4 bottom-10 hidden rounded-xl border border-warning/25 bg-background/75 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-warning shadow-[var(--shadow-glass)] backdrop-blur md:block"
-          >
-            approval gated
-          </div>
+          {/* Two floating "preview ready" / "approval gated" chips used to sit
+              here. The console behind them already shows both as tile labels,
+              so they were duplicate decoration — and once surfaces became
+              opaque they rendered clipped behind it anyway. */}
           <MissionConsole compact />
         </div>
       </div>
-
-      <div
-        aria-hidden
-        className="premium-divider relative mx-auto mt-16 h-px max-w-6xl"
-      />
     </section>
   );
 }

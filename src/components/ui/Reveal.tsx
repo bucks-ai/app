@@ -39,20 +39,46 @@ export function Reveal({
       return;
     }
 
+    // Anything at or above the fold on mount is already "arrived" — deep
+    // links, a restored scroll position, or a fast flick would otherwise
+    // leave it stuck at opacity 0 forever, because it never intersects on
+    // the way in.
+    if (node.getBoundingClientRect().top < window.innerHeight) {
+      node.classList.add("is-visible");
+      return;
+    }
+
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
+          // threshold 0 + a negative bottom margin: fires as soon as any part
+          // crosses into the lower tenth of the viewport. A 0.1 area
+          // threshold never resolved for panels taller than the screen.
           if (entry.isIntersecting) {
             node.classList.add("is-visible");
             observer.disconnect();
+            window.clearTimeout(failsafe);
           }
         }
       },
-      { rootMargin: "0px 0px -10% 0px", threshold: 0.1 }
+      { rootMargin: "0px 0px -8% 0px", threshold: 0 }
     );
 
     observer.observe(node);
-    return () => observer.disconnect();
+
+    // Content that starts at opacity 0 must never be able to stay there. A
+    // hidden document (opened in a background tab, prerendered) does not
+    // deliver intersections at all, so if nothing has arrived by the time
+    // the entrance would have finished anyway, just show it.
+    const failsafe = window.setTimeout(() => {
+      node.classList.add("is-visible");
+      observer.disconnect();
+    }, 2500);
+
+    return () => {
+      observer.disconnect();
+      window.clearTimeout(failsafe);
+    };
   }, []);
 
   const Tag = as as ElementType;

@@ -25,10 +25,10 @@ function TextList({
   tone?: "neutral" | "warning" | "danger" | "accent";
 }) {
   const toneClasses = {
-    neutral: "border-[#1C1C1C] bg-[#080808] text-[#D4D4D4]",
-    warning: "border-[#F59E0B]/25 bg-[#F59E0B]/10 text-[#FDE68A]",
-    danger: "border-[#EF4444]/30 bg-[#EF4444]/10 text-[#FECACA]",
-    accent: "border-[#4F46E5]/30 bg-[#4F46E5]/10 text-[#C7D2FE]",
+    neutral: "border-edge bg-background text-foreground-secondary",
+    warning: "border-warning/25 bg-warning/10 text-warning",
+    danger: "border-error/30 bg-error/10 text-error",
+    accent: "border-accent/30 bg-accent/10 text-accent-bright",
   };
 
   return (
@@ -57,15 +57,15 @@ function QueueItem({
   tone?: "accent" | "warning";
 }) {
   return (
-    <div className="rounded-md border border-[#1C1C1C] bg-[#080808] p-4">
+    <div className="rounded-md border border-edge bg-background p-4">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-[#F0F0F0]">{title}</h3>
+        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
         <StatusPill
           label={label}
           variant={tone === "warning" ? "warning" : "accent"}
         />
       </div>
-      <p className="text-sm leading-6 text-[#888888]">{detail}</p>
+      <p className="text-sm leading-6 text-muted-foreground">{detail}</p>
     </div>
   );
 }
@@ -84,10 +84,10 @@ export function BlueprintPreview({
         <div className="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
             <SectionLabel>Blueprint Ready</SectionLabel>
-            <h1 className="mt-5 text-4xl font-semibold tracking-tight text-[#F0F0F0] sm:text-5xl">
+            <h1 className="mt-5 text-4xl font-semibold tracking-tight text-foreground sm:text-5xl">
               {idea.ideaName || "Untitled startup"} Mission Control
             </h1>
-            <p className="mt-4 max-w-2xl text-base leading-7 text-[#888888] sm:text-lg">
+            <p className="mt-4 max-w-2xl text-base leading-7 text-muted-foreground sm:text-lg">
               {blueprint.businessSummary}
             </p>
           </div>
@@ -96,7 +96,7 @@ export function BlueprintPreview({
             <button
               type="button"
               onClick={onEditIdea}
-              className="rounded-md border border-[#1C1C1C] bg-[#141414] px-5 py-2.5 text-sm font-medium text-[#F0F0F0] transition-colors hover:border-[#2A2A2A] hover:bg-[#191919]"
+              className="rounded-md border border-edge bg-muted px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:border-edge-strong hover:bg-muted"
             >
               Edit Idea
             </button>
@@ -111,27 +111,29 @@ export function BlueprintPreview({
 
         {saveStatus !== "idle" ? (
           <div
+            role="status"
+            aria-live="polite"
             className={`mt-8 rounded-lg border p-4 ${
               saveStatus === "saved"
-                ? "border-[#22C55E]/25 bg-[#22C55E]/10"
+                ? "border-success/25 bg-success/10"
                 : saveStatus === "error"
-                  ? "border-[#F59E0B]/35 bg-[#F59E0B]/10"
+                  ? "border-warning/35 bg-warning/10"
                   : saveStatus === "unauthenticated"
-                    ? "border-[#4F46E5]/35 bg-[#4F46E5]/10"
-                    : "border-[#1C1C1C] bg-[#080808]"
+                    ? "border-accent/35 bg-accent/10"
+                    : "border-edge bg-background"
             }`}
           >
             {saveStatus === "saved" && savedBusinessId ? (
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <StatusPill label="Saved to Mission Control" variant="success" />
-                  <p className="mt-3 text-sm leading-6 text-[#D4D4D4]">
+                  <p className="mt-3 text-sm leading-6 text-foreground-secondary">
                     This blueprint is now attached to a saved business project.
                   </p>
                 </div>
                 <Link
                   href={`/dashboard/businesses/${savedBusinessId}`}
-                  className="rounded-md bg-[#4F46E5] px-4 py-2.5 text-center text-sm font-semibold text-[#F0F0F0] transition-colors hover:bg-[#6366F1]"
+                  className="rounded-md bg-accent px-4 py-2.5 text-center text-sm font-semibold text-foreground transition-colors hover:bg-accent-hover"
                 >
                   Open in dashboard -&gt;
                 </Link>
@@ -142,13 +144,13 @@ export function BlueprintPreview({
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <StatusPill label="Not saved" variant="accent" />
-                  <p className="mt-3 text-sm leading-6 text-[#C7D2FE]">
+                  <p className="mt-3 text-sm leading-6 text-accent-bright">
                     Create an account to save this build.
                   </p>
                 </div>
                 <Link
                   href="/signup"
-                  className="rounded-md border border-[#4F46E5]/45 bg-[#4F46E5]/10 px-4 py-2.5 text-center text-sm font-semibold text-[#C7D2FE] transition-colors hover:bg-[#4F46E5]/15"
+                  className="rounded-md border border-accent/45 bg-accent/10 px-4 py-2.5 text-center text-sm font-semibold text-accent-bright transition-colors hover:bg-accent/15"
                 >
                   Create account -&gt;
                 </Link>
@@ -157,8 +159,8 @@ export function BlueprintPreview({
 
             {saveStatus === "checking" || saveStatus === "saving" ? (
               <div className="flex items-center gap-3">
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#A5B4FC] border-t-transparent" />
-                <p className="text-sm font-medium text-[#A5B4FC]">
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+                <p className="text-sm font-medium text-accent">
                   {saveStatus === "checking"
                     ? "Checking Mission Control session..."
                     : "Saving blueprint to Mission Control..."}
@@ -169,7 +171,7 @@ export function BlueprintPreview({
             {saveStatus === "error" ? (
               <div>
                 <StatusPill label="Save warning" variant="warning" />
-                <p className="mt-3 text-sm leading-6 text-[#FDE68A]">
+                <p className="mt-3 text-sm leading-6 text-warning">
                   {saveError ?? "Blueprint generated, but saving failed."}
                 </p>
               </div>
@@ -221,13 +223,13 @@ export function BlueprintPreview({
             <div className="space-y-5">
               <div>
                 <SectionLabel tone="muted">Summary</SectionLabel>
-                <p className="mt-2 text-sm leading-7 text-[#D4D4D4]">
+                <p className="mt-2 text-sm leading-7 text-foreground-secondary">
                   {blueprint.businessSummary}
                 </p>
               </div>
               <div>
                 <SectionLabel tone="muted">Pain hypothesis</SectionLabel>
-                <p className="mt-2 text-sm leading-7 text-[#D4D4D4]">
+                <p className="mt-2 text-sm leading-7 text-foreground-secondary">
                   {blueprint.painHypothesis}
                 </p>
               </div>
@@ -255,15 +257,15 @@ export function BlueprintPreview({
               {blueprint.requiredTools.map((tool) => (
                 <div
                   key={`${tool.name}-${tool.category}`}
-                  className="rounded-md border border-[#1C1C1C] bg-[#080808] p-4"
+                  className="rounded-md border border-edge bg-background p-4"
                 >
                   <div className="mb-3 flex items-center justify-between gap-3">
-                    <h3 className="text-sm font-semibold text-[#F0F0F0]">
+                    <h3 className="text-sm font-semibold text-foreground">
                       {tool.name}
                     </h3>
                     <StatusPill label={tool.category} />
                   </div>
-                  <p className="text-sm leading-6 text-[#888888]">
+                  <p className="text-sm leading-6 text-muted-foreground">
                     {tool.purpose}
                   </p>
                 </div>
@@ -280,7 +282,7 @@ export function BlueprintPreview({
             <div className="space-y-5">
               <div>
                 <SectionLabel tone="muted">GTM motion</SectionLabel>
-                <p className="mt-2 text-sm leading-7 text-[#D4D4D4]">
+                <p className="mt-2 text-sm leading-7 text-foreground-secondary">
                   {blueprint.goToMarketMotion}
                 </p>
               </div>
@@ -309,7 +311,7 @@ export function BlueprintPreview({
 
           <BlueprintSection title="Sales / Outreach Plan">
             <div className="space-y-5">
-              <p className="text-sm leading-7 text-[#D4D4D4]">
+              <p className="text-sm leading-7 text-foreground-secondary">
                 {blueprint.salesPlan.motion}
               </p>
               <div>

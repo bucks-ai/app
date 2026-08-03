@@ -19,7 +19,7 @@ export function AgentNodeGroup({ node, latestRuns }: AgentNodeGroupProps) {
     <section id={`agents-${node.nodeId}`} className="rounded-lg border border-border bg-background p-3 sm:p-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
-          <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
+          <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">
             {node.nodeLabel}
           </p>
           <p className="mt-2 max-w-3xl break-words text-sm leading-6 text-foreground-secondary">
@@ -28,19 +28,19 @@ export function AgentNodeGroup({ node, latestRuns }: AgentNodeGroupProps) {
         </div>
         <div className="grid grid-cols-3 gap-2 text-center sm:flex sm:shrink-0 sm:flex-wrap sm:justify-end">
           <span className="rounded border border-accent/20 bg-accent/8 px-2 py-1.5">
-            <span className="block font-mono text-[10px] uppercase tracking-widest text-accent">
+            <span className="block font-mono text-[11px] uppercase tracking-widest text-accent">
               Ready
             </span>
             <span className="text-sm font-semibold text-foreground">{node.readyCount}</span>
           </span>
           <span className="rounded border border-success/20 bg-success/8 px-2 py-1.5">
-            <span className="block font-mono text-[10px] uppercase tracking-widest text-success">
+            <span className="block font-mono text-[11px] uppercase tracking-widest text-success">
               Done
             </span>
             <span className="text-sm font-semibold text-foreground">{node.completedCount}</span>
           </span>
           <span className="rounded border border-error/20 bg-error/8 px-2 py-1.5">
-            <span className="block font-mono text-[10px] uppercase tracking-widest text-error">
+            <span className="block font-mono text-[11px] uppercase tracking-widest text-error">
               Held
             </span>
             <span className="text-sm font-semibold text-foreground">

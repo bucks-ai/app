@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Footer } from "@/components/shared/Footer";
 import { Navbar } from "@/components/shared/Navbar";
+import { PageField } from "@/components/ui/PageField";
 import { AutonomyConstitutionPanel } from "@/components/tools/AutonomyConstitutionPanel";
 import { BusinessPermissionSelector } from "@/components/tools/BusinessPermissionSelector";
 import { PermissionControlRoom } from "@/components/tools/PermissionControlRoom";
@@ -122,10 +123,12 @@ export function ToolRegistryPage({
   return (
     <>
       <Navbar />
-      <main className="relative min-h-screen overflow-hidden bg-background px-5 pb-20 pt-28 sm:px-6">
-        <div aria-hidden className="grid-backdrop pointer-events-none absolute inset-0" />
+      {/* Was `bg-background` plus its own full-bleed grid layer, which made
+          this route the one place the shared atmosphere stopped. */}
+      <PageField />
+      <main id="main-content" className="relative min-h-screen px-5 pb-24 pt-32 sm:px-6">
         <div className="relative mx-auto max-w-7xl space-y-10">
-          <OperatorPanel className="overflow-hidden p-6 shadow-[0_30px_140px_rgba(0,0,0,0.38)] sm:p-10">
+          <OperatorPanel className="overflow-hidden p-6 shadow-[var(--shadow-float)] sm:p-10">
             <div className="max-w-4xl">
               <div className="flex flex-wrap items-center gap-3">
                 <SectionLabel>Permission Layer</SectionLabel>

@@ -57,16 +57,16 @@ export function ApprovalCheckpoint({
       <p className="mt-2.5 text-sm leading-6 text-foreground-secondary">{checkpoint.body}</p>
 
       <div className="mt-auto grid gap-2.5 pt-5">
-        <div className="rounded-lg border border-border bg-background/72 px-3 py-2.5">
-          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+        <div className="flow-well px-3.5 py-2.5">
+          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
             Permission prompt
           </p>
           <p className="mt-1.5 font-mono text-xs leading-5 text-foreground-secondary">
             {checkpoint.permissionPrompt}
           </p>
         </div>
-        <div className="rounded-lg border border-border bg-background/72 px-3 py-2.5">
-          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+        <div className="flow-well px-3.5 py-2.5">
+          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
             Rollback path
           </p>
           <p className="mt-1.5 text-xs leading-5 text-foreground-secondary">

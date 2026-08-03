@@ -40,30 +40,30 @@ export function SettingsTab({ business }: SettingsTabProps) {
     <div className="space-y-5">
       {/* Business info */}
       <div className="rounded-lg border border-border bg-surface p-4">
-        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
+        <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">
           Business
         </p>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           <div>
-            <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+            <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
               Name
             </p>
             <p className="mt-1 text-sm text-foreground-secondary">{business.name}</p>
           </div>
           <div>
-            <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+            <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
               Type
             </p>
             <p className="mt-1 text-sm text-foreground-secondary">{business.businessType}</p>
           </div>
           <div>
-            <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+            <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
               Goal
             </p>
             <p className="mt-1 text-sm text-foreground-secondary">{business.goal}</p>
           </div>
           <div>
-            <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+            <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
               Created
             </p>
             <p className="mt-1 text-sm text-foreground-secondary">{business.created}</p>
@@ -73,7 +73,7 @@ export function SettingsTab({ business }: SettingsTabProps) {
 
       {/* Autonomy boundaries */}
       <div className="rounded-lg border border-border bg-surface p-4">
-        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
+        <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">
           Safety boundaries
         </p>
         <p className="mt-2 text-xs text-muted-foreground">

@@ -21,9 +21,12 @@ dashboard without using generic AI imagery.
 
 ## Palette
 
-Dark surfaces sit in the `#050506` / `#080808` range. Electric indigo/violet
-owns command, focus, telemetry, and CTAs. Cyan/green are system-state colors,
-not decoration. Amber and rose indicate checkpoints and risk.
+Dark surfaces sit in the `#050506` / `#080808` range. **One teal family** owns
+command, focus, telemetry, and CTAs — nothing else may introduce a second
+brand hue. Cyan/green are system-state colors, not decoration. Amber and rose
+indicate checkpoints and risk. `--accent-blue`, `--accent-violet`, and
+`--accent-gold` are *data* hues: charts and category encoding only, never
+backgrounds, glows, CTAs, links, or focus rings.
 
 | Token | Dark value | Role |
 | --- | --- | --- |
@@ -34,29 +37,58 @@ not decoration. Amber and rose indicate checkpoints and risk.
 | `--foreground` | `#f4f7fb` | primary text |
 | `--text-secondary` | `#aeb4c4` | body/supporting text |
 | `--text-muted` | `#747b8d` | metadata |
-| `--accent` | `#6d5dfc` | CTA/focus/telemetry |
-| `--accent-hover` | `#8378ff` | active CTA |
-| `--accent-bright` | `#a6b4ff` | glow/line accent |
+| `--accent` | `#14a08f` | CTA/focus/telemetry |
+| `--accent-hover` | `#17b8a4` | active CTA |
+| `--accent-bright` | `#4fd1bd` | glow/line accent |
+| `--accent-deep` | `#0b5f57` | gradient shadow stop |
 
 Status tokens: `done #38e8a7`, `running #22d3ee`, `queued #8b97aa`,
-`blocked #fb7185`, `pending #fbbf24`.
+`blocked #fb7185`, `pending #fbbf24`. `running` is deliberately cyan so the
+live state cannot be confused with the teal accent.
+
+Light mode is not a tint of dark mode — it carries its own elevation ramp
+(`--background #f2f4f1` → `--surface #fafbf9` → `--surface-elevated #ffffff`),
+with pure white reserved for the most elevated surface. Every status and body
+token is re-declared for light; none may be left to inherit, or a dark-mode
+value lands on paper.
+
+## The page field
+
+One atmosphere per route, rendered once by `<PageField />` at the top of the
+tree. It is `position: fixed`, so content scrolls *through* the light. Sections
+must not paint their own background, aurora, or `border-y` — that banding is
+what makes a long page read as choppy. Sections separate by whitespace and
+type weight; where a division is genuinely needed, use `.flow-divider`.
 
 Risk tokens: `low #34d399`, `medium #fbbf24`, `high #fb923c`,
 `critical #fb7185`.
 
 ## Typography
 
-`Space Grotesk` for display/headlines, `DM Sans` for UI/body copy, and
-`JetBrains Mono` for status labels, IDs, metrics, and operational metadata.
-The pairing reads technical and modern without becoming sterile.
+Four families, each with one job:
+
+| Family | Token | Role |
+| --- | --- | --- |
+| `EB Garamond` | `--font-serif` | display: h1/h2, section openers, workspace titles |
+| `Space Grotesk` | `--font-display` / `--font-heading` | wordmark, h3-h6, compact UI headings |
+| `DM Sans` | `--font-sans` | UI and body copy |
+| `JetBrains Mono` | `--font-mono` | status labels, IDs, metrics, operational metadata |
+
+The serif carries the headline moments so the product reads considered rather
+than instrument-panel technical; the geometric sans keeps dense UI compact.
+Helper classes `.display-xl`, `.display-lg`, and `.display-serif` set the
+optical sizing, and `.display-accent` sets the serif italic used for the one
+emphasised phrase in a headline.
 
 Type rules:
 - Body starts at 16px where text is paragraph-like; compact labels may be
   11-12px only when uppercase mono metadata.
 - Long text wraps before truncating. Truncation is reserved for secondary
   activity lines and never for primary actions.
-- Letter spacing remains non-negative. Mono labels use positive tracking for
-  scanability.
+- Letter spacing is negative **only** at display sizes (`-0.012em` to
+  `-0.02em`), where a large serif otherwise reads as a book page. Everything
+  below display scale stays non-negative, and mono labels keep positive
+  tracking for scanability.
 
 ## Layout
 
@@ -91,12 +123,26 @@ All motion respects `prefers-reduced-motion`.
 | Tile hover lift | pointer hover/focus | 180-250ms | reveal secondary detail | no transform |
 | Execution loop step | step crosses viewport midline | instant state + 280ms crossfade | scroll position drives loop stage | instant swap, no transforms |
 | Loop stage map | active step change | dash flow 1.2s loop on active segment | which handoff is live | static solid segments |
-| Ambient aurora drift | page load | 14s ease loop | atmosphere, sub-1% contrast shift | static gradient |
+| Field breathe | page load | 14s ease loop, scale only | atmosphere, no contrast shift | static gradient |
+| Field parallax | scroll | 0.12x offset, capped 220px | the light lags the page | static gradient |
 | CTA press | pointer down | 0.98 scale, 200ms | tactile confirmation | allowed (discrete, user-initiated) |
 
 ## Component Contract
 
+Surface rules:
+- At most **two** bordered levels in any one view. Depth comes from shadow and
+  the near-invisible `--edge` token, not from outlining every group.
+- `.flow-card` is the default content surface (no outline, panel radius,
+  two-stage shadow). `.flow-well` is a tonal grouping *inside* a card — use it
+  instead of nesting another bordered box.
+- Radii: `rounded-sm` / `rounded-card` / `rounded-panel`. One name, one value —
+  do not re-declare a radius token in both `:root` and `@theme inline`.
+- `backdrop-filter` on `.glass-surface` is declared unconditionally with the
+  `-webkit-` form first. Wrapping it in `@supports` caused Lightning CSS to
+  drop the property from the build entirely.
+
 Shared primitives:
+- `PageField`: the one full-bleed atmosphere for a route.
 - `GlassCard`: frosted panel with solid fallback and optional hover lift.
 - `GlassPanel`: black-card glass wrapper for the mission-console system.
 - `BentoGrid`: responsive, stable grid tracks for dense tiles.
@@ -120,7 +166,25 @@ Shared primitives:
 
 ## Accessibility & Performance
 
+Three rules exist because breaking them produced real, measured failures:
+
+- **On-tint text needs its own token.** A chip is `bg-X/12 text-X`: the same
+  hue lightens the background and colours the text, which caps the ratio near
+  4:1 however the tint is tuned. Use `--accent-on-tint`, `--running-on-tint`,
+  and `--risk-*-on-tint` for chip *text*; the raw hues stay for fills, dots,
+  and rules, which only need 3:1.
+- **Never de-emphasise with wrapper opacity.** `opacity` multiplies every
+  descendant's contrast at once — an `opacity-60` container took body copy to
+  2.8:1. De-emphasise with a text colour that still clears 4.5:1, and carry
+  state with surface and rule treatment instead.
+- **Form borders use `--input-border`, never `--edge`.** `--edge` sits near
+  1.25:1 by design; a control boundary is load-bearing and needs 3:1 (1.4.11).
+
 - Body contrast targets WCAG AA over glass and fallback surfaces.
+- Every status/body token is declared in BOTH theme blocks. A token left to
+  inherit lands a dark-mode value on paper.
+- The reduced-motion block must also park Tailwind's own `animate-*`
+  utilities, and must reset `filter` as well as opacity and transform.
 - Status and risk never rely on color alone.
 - Interactive targets stay at least 44px tall.
 - Focus rings remain visible globally.

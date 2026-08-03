@@ -75,7 +75,7 @@ export function AssetQuickLinks({
 
         const content = (
           <>
-            <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+            <span className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
               {asset.label}
             </span>
             <span

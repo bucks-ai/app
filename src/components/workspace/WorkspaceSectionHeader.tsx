@@ -16,7 +16,7 @@ export function WorkspaceSectionHeader({
   return (
     <header className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
       <div className="min-w-0">
-        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
+        <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">
           {eyebrow}
         </p>
         <h2 className="mt-2 break-words text-2xl font-semibold tracking-tight text-foreground">

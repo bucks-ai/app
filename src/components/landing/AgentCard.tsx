@@ -32,7 +32,7 @@ export function AgentCard({
     >
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
             Agent
           </p>
           <h3 className="mt-3 text-lg font-semibold tracking-tight text-foreground">
@@ -43,21 +43,21 @@ export function AgentCard({
       </div>
       <p className="mt-4 text-sm leading-6 text-foreground-secondary">{agent.purpose}</p>
       <div className="mt-5 border-t border-border/70 pt-4">
-        <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
           Permissions
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
           {agent.permissions.map((permission) => (
             <span
               key={permission}
-              className="rounded-md border border-border bg-background/70 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-foreground-secondary"
+              className="rounded-md bg-muted px-2.5 py-1 font-mono text-[11px] uppercase tracking-[0.12em] text-foreground-secondary"
             >
               {permission}
             </span>
           ))}
         </div>
       </div>
-      <p className="mt-5 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+      <p className="mt-5 font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
         Last run: <span className="text-foreground-secondary">{agent.lastRun}</span>
       </p>
     </GlassPanel>

@@ -20,7 +20,7 @@ const ctaMetrics = [
 
 export function ClosingCTA() {
   return (
-    <section className="light-field px-6 py-20 sm:py-28">
+    <section className="relative px-6 py-20 sm:py-28">
       <div className="mx-auto max-w-6xl">
         <div className="grid gap-8 lg:grid-cols-[minmax(0,0.9fr)_minmax(24rem,1.1fr)] lg:items-end">
           <Reveal>
@@ -56,9 +56,9 @@ export function ClosingCTA() {
               {ctaMetrics.map(([label, value]) => (
                 <div
                   key={label}
-                  className="rounded-lg border border-border bg-background/55 px-4 py-3"
+                  className="flow-well px-4 py-3"
                 >
-                  <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                  <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
                     {label}
                   </p>
                   <p className="mt-1 text-sm font-semibold text-foreground">

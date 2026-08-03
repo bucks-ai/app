@@ -22,13 +22,15 @@ export function NextActionBlock({
 }: NextActionBlockProps) {
   const reducedMotion = useReducedMotion();
 
+  // Gradient was accent-soft → accent-BLUE-soft, one of the leaks that put a
+  // second hue right next to the teal CTA. Both stops are teal now.
   return (
     <motion.div
-      className={`interactive-surface rounded-xl border border-accent/30 bg-[linear-gradient(135deg,var(--accent-soft),var(--accent-blue-soft))] p-4 shadow-[var(--shadow-soft)] ${className}`}
+      className={`interactive-surface rounded-2xl border border-accent/15 bg-[linear-gradient(135deg,var(--accent-soft),color-mix(in_srgb,var(--accent)_5%,transparent))] p-5 ${className}`}
       whileHover={reducedMotion ? undefined : { y: -2 }}
       transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
     >
-      <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-accent-bright">
+      <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-accent-bright">
         Next action
       </p>
       <h3 className="mt-2 text-base font-semibold tracking-tight text-foreground">
@@ -39,7 +41,7 @@ export function NextActionBlock({
       </p>
       <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         {meta ? (
-          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
             {meta}
           </p>
         ) : null}

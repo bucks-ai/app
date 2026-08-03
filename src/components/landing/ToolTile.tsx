@@ -25,7 +25,7 @@ export function ToolTile({
     <GlassPanel interactive variant="elevated" className={`p-4 ${className}`}>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
             Tool
           </p>
           <h3 className="mt-2 text-base font-semibold text-foreground">{tool.name}</h3>
@@ -33,7 +33,7 @@ export function ToolTile({
         <StatusPill label={tool.access} variant={variantForAccess(tool.access)} />
       </div>
       <p className="mt-3 text-sm leading-6 text-foreground-secondary">{tool.role}</p>
-      <p className="mt-4 border-t border-border/70 pt-3 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+      <p className="mt-4 border-t border-border/70 pt-3 font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
         Signal: <span className="text-foreground-secondary">{tool.signal}</span>
       </p>
     </GlassPanel>

@@ -65,13 +65,13 @@ export function OperatingTeamOverviewCard({
   return (
     <div className="rounded-lg border border-border bg-surface p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
+        <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">
           Operating Team
         </p>
         <button
           type="button"
           onClick={onOpenTeam}
-          className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground transition-colors hover:text-foreground-secondary"
+          className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground transition-colors hover:text-foreground-secondary"
         >
           Open
         </button>
@@ -81,7 +81,7 @@ export function OperatingTeamOverviewCard({
         <div className="mt-3 space-y-3">
           <div className="grid grid-cols-3 gap-2">
             <span className="rounded border border-border bg-background px-2.5 py-2">
-              <span className="block font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+              <span className="block font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
                 Agents
               </span>
               <span className="text-sm font-semibold text-foreground">
@@ -89,7 +89,7 @@ export function OperatingTeamOverviewCard({
               </span>
             </span>
             <span className="rounded border border-success/20 bg-success/8 px-2.5 py-2">
-              <span className="block font-mono text-[10px] uppercase tracking-widest text-success">
+              <span className="block font-mono text-[11px] uppercase tracking-widest text-success">
                 Done
               </span>
               <span className="text-sm font-semibold text-foreground">
@@ -97,7 +97,7 @@ export function OperatingTeamOverviewCard({
               </span>
             </span>
             <span className="rounded border border-error/20 bg-error/8 px-2.5 py-2">
-              <span className="block font-mono text-[10px] uppercase tracking-widest text-error">
+              <span className="block font-mono text-[11px] uppercase tracking-widest text-error">
                 Held
               </span>
               <span className="text-sm font-semibold text-foreground">

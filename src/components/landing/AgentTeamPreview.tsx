@@ -49,7 +49,7 @@ const agents: AgentCardData[] = [
 
 export function AgentTeamPreview() {
   return (
-    <section className="relative overflow-hidden border-y border-border-subtle bg-surface/35 px-6 py-20 sm:py-28">
+    <section className="relative overflow-hidden px-6 py-20 sm:py-28">
       <div aria-hidden className="grid-backdrop pointer-events-none absolute inset-0 opacity-35" />
       <div className="relative mx-auto max-w-6xl">
         <Reveal>
@@ -60,13 +60,13 @@ export function AgentTeamPreview() {
           />
         </Reveal>
 
+        {/* The middle card used to sit 12px high (`xl:-translate-y-3`). With
+            every card the same weight that read as a misalignment rather than
+            as emphasis, so the row is flush now. */}
         <div className="mt-12 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {agents.map((agent, index) => (
             <Reveal key={agent.name} delay={index * 70}>
-              <AgentCard
-                agent={agent}
-                className={index === 1 ? "xl:-translate-y-3" : ""}
-              />
+              <AgentCard agent={agent} />
             </Reveal>
           ))}
         </div>

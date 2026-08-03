@@ -55,10 +55,10 @@ export function WorkspaceRightRail({
       {/* Progress snapshot */}
       <div className="solid-surface rounded-xl p-4">
         <div className="flex items-center justify-between gap-3">
-          <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
+          <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">
             Progress
           </p>
-          <span className="font-mono text-[10px] uppercase tracking-widest text-foreground-secondary">
+          <span className="font-mono text-[11px] uppercase tracking-widest text-foreground-secondary">
             {progress}%
           </span>
         </div>
@@ -74,7 +74,7 @@ export function WorkspaceRightRail({
             onClick={() => onTabChange("actions")}
             className="interactive-surface min-h-20 rounded-lg border border-warning/20 bg-warning/8 px-2.5 py-2 text-left transition-colors hover:border-warning/40"
           >
-            <span className="block font-mono text-[10px] uppercase tracking-widest text-warning">
+            <span className="block font-mono text-[11px] uppercase tracking-widest text-warning">
               Approvals
             </span>
             <span className="mt-1 block text-lg font-semibold text-foreground">
@@ -86,7 +86,7 @@ export function WorkspaceRightRail({
             onClick={() => onTabChange("actions")}
             className="interactive-surface min-h-20 rounded-lg border border-error/20 bg-error/8 px-2.5 py-2 text-left transition-colors hover:border-error/40"
           >
-            <span className="block font-mono text-[10px] uppercase tracking-widest text-error">
+            <span className="block font-mono text-[11px] uppercase tracking-widest text-error">
               Blockers
             </span>
             <span className="mt-1 block text-lg font-semibold text-foreground">
@@ -99,7 +99,7 @@ export function WorkspaceRightRail({
       {/* Key blockers */}
       {blockers.length > 0 ? (
         <div className="solid-surface rounded-xl p-4">
-          <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-error">
+          <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-error">
             Key blockers
           </p>
           <div className="mt-3 space-y-2">
@@ -120,7 +120,7 @@ export function WorkspaceRightRail({
               <button
                 type="button"
                 onClick={() => onTabChange("actions")}
-                className="w-full text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground transition-colors hover:text-foreground-secondary"
+                className="w-full text-left font-mono text-[11px] uppercase tracking-widest text-muted-foreground transition-colors hover:text-foreground-secondary"
               >
                 +{blockers.length - 3} more in Actions
               </button>
@@ -132,7 +132,7 @@ export function WorkspaceRightRail({
       {/* Deploy + assets */}
       <div className="solid-surface rounded-xl p-4">
         <div className="flex items-center justify-between gap-2">
-          <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
+          <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">
             Deploy &amp; assets
           </p>
           <DeploymentStatusBadge status={deploymentStatus} />

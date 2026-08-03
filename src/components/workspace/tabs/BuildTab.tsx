@@ -76,7 +76,7 @@ function StepRow({
           {label}
         </p>
         {status === "active" ? (
-          <span className="ml-auto rounded border border-accent/30 bg-accent/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-accent">
+          <span className="ml-auto rounded border border-accent/30 bg-accent/10 px-2 py-0.5 font-mono text-[11px] uppercase tracking-widest text-accent">
             Active
           </span>
         ) : null}

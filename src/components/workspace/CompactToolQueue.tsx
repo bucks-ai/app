@@ -125,7 +125,7 @@ export function CompactToolQueue({
           <button
             type="button"
             onClick={onOpenTools}
-            className="mt-2 font-mono text-[10px] uppercase tracking-widest text-accent"
+            className="mt-2 font-mono text-[11px] uppercase tracking-widest text-accent"
           >
             Open tools
           </button>
@@ -152,19 +152,19 @@ export function CompactToolQueue({
                     {row.name}
                   </p>
                   <span
-                    className={`rounded border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest ${statusTone(row.status)}`}
+                    className={`rounded border px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-widest ${statusTone(row.status)}`}
                   >
                     {statusLabel(row.status)}
                   </span>
                   <span
-                    className={`rounded border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest ${riskTone(row.risk)}`}
+                    className={`rounded border px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-widest ${riskTone(row.risk)}`}
                   >
                     {row.risk}
                   </span>
                 </div>
                 <p className="mt-0.5 truncate text-xs text-muted-foreground">{row.purpose}</p>
               </div>
-              <span className="shrink-0 rounded border border-border bg-elevated px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-foreground-secondary">
+              <span className="shrink-0 rounded border border-border bg-elevated px-2 py-1 font-mono text-[11px] uppercase tracking-widest text-foreground-secondary">
                 {row.cta}
               </span>
             </button>
@@ -181,7 +181,7 @@ export function CompactToolQueue({
         <button
           type="button"
           onClick={onOpenTools}
-          className="w-full rounded border border-border bg-surface px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground transition-colors hover:border-accent/35 hover:text-accent"
+          className="w-full rounded border border-border bg-surface px-3 py-2 font-mono text-[11px] uppercase tracking-widest text-muted-foreground transition-colors hover:border-accent/35 hover:text-accent"
         >
           View {rows.length - visible.length} more tools
         </button>

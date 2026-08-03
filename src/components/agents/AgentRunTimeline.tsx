@@ -21,10 +21,10 @@ export function AgentRunTimeline({ runs, agents, limit = 8 }: AgentRunTimelinePr
   return (
     <section className="rounded-lg border border-border bg-surface p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
+        <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">
           Recent agent runs
         </p>
-        <span className="rounded border border-border bg-background px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+        <span className="rounded border border-border bg-background px-2 py-1 font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
           {runs.length} total
         </span>
       </div>
@@ -43,7 +43,7 @@ export function AgentRunTimeline({ runs, agents, limit = 8 }: AgentRunTimelinePr
                     <p className="break-words text-xs font-semibold text-foreground">
                       {run.title}
                     </p>
-                    <p className="mt-1 break-words font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                    <p className="mt-1 break-words font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
                       {namesByAgent.get(run.agent_id) ?? humanizeAgentValue(run.agent_id)}
                       {" / "}
                       {humanizeAgentValue(run.source)}
@@ -64,7 +64,7 @@ export function AgentRunTimeline({ runs, agents, limit = 8 }: AgentRunTimelinePr
                     {run.error.message}
                   </p>
                 ) : null}
-                <p className="mt-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                <p className="mt-2 font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
                   {formatAgentTime(timestamp)}
                 </p>
               </article>

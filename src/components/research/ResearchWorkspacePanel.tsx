@@ -91,7 +91,7 @@ export function ResearchWorkspacePanel({ businessId }: ResearchWorkspacePanelPro
   if (loadState === "error") {
     return (
       <div className="rounded-lg border border-error/25 bg-error/8 p-5">
-        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-error">
+        <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-error">
           Research unavailable
         </p>
         <p className="mt-3 text-sm leading-6 text-error">

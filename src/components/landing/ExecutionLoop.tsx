@@ -110,7 +110,7 @@ function LoopConsole({ active }: { active: number }) {
               return (
                 <li key={s.key} className="flex flex-1 items-center last:flex-none">
                   <span
-                    className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border font-mono text-[9px] ${
+                    className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border font-mono text-[11px] ${
                       state === "done"
                         ? "border-status-done/45 text-status-done"
                         : state === "running"
@@ -165,16 +165,16 @@ function LoopConsole({ active }: { active: number }) {
               transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
             >
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-xl border border-border bg-background/72 p-3">
-                  <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                <div className="flow-well p-3.5">
+                  <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
                     Artifact
                   </p>
                   <p className="mt-2 text-sm font-semibold text-foreground">
                     {step.artifact}
                   </p>
                 </div>
-                <div className="rounded-xl border border-border bg-background/72 p-3">
-                  <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                <div className="flow-well p-3.5">
+                  <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
                     Permissions
                   </p>
                   <p className="mt-2 font-mono text-xs leading-5 text-foreground-secondary">
@@ -183,16 +183,16 @@ function LoopConsole({ active }: { active: number }) {
                 </div>
               </div>
 
-              <div className="mt-3 rounded-xl border border-border bg-background/72 p-3">
-                <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+              <div className="flow-well mt-3 p-3.5">
+                <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
                   Last log line
                 </p>
                 <p className="mt-2 grid grid-cols-[3rem_minmax(0,1fr)] gap-2 text-sm leading-5 text-foreground-secondary">
-                  <span className="font-mono text-[10px] text-muted-foreground">
+                  <span className="font-mono text-[11px] text-muted-foreground">
                     {`0${active + 2}:1${active}`}
                   </span>
                   <span>
-                    <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-accent-bright">
+                    <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-accent-bright">
                       {step.key}
                     </span>{" "}
                     {step.logLine}
@@ -235,9 +235,8 @@ export function ExecutionLoop() {
   return (
     <section
       id="execution-loop"
-      className="relative overflow-clip border-y border-border-subtle bg-surface/45 px-6 py-20 sm:py-28"
+      className="relative overflow-clip px-6 py-20 sm:py-28"
     >
-      <div aria-hidden className="grid-backdrop pointer-events-none absolute inset-0 opacity-40" />
       <div className="relative mx-auto max-w-6xl">
         <SectionHeader
           eyebrow="Execution Loop"
@@ -245,8 +244,12 @@ export function ExecutionLoop() {
           description="Scroll the loop. Each stage produces an artifact, runs under explicit permissions, and hands state to the next stage — the console tracks where you are."
         />
 
+        {/* Seven bordered cards of identical weight stacked in one column
+            read as a filing cabinet and gave the scroll story no focus.
+            Only the active step draws a surface now; the rest are separated
+            by space and a left rule, so the eye tracks the one that's live. */}
         <div className="mt-14 grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(24rem,0.95fr)]">
-          <ol className="space-y-4 sm:space-y-6">
+          <ol className="space-y-2">
             {steps.map((step, index) => {
               const isActive = index === active;
               return (
@@ -255,15 +258,25 @@ export function ExecutionLoop() {
                   ref={(node) => {
                     stepRefs.current[index] = node;
                   }}
-                  className={`rounded-card border p-5 transition-colors duration-300 sm:p-6 ${
+                  // De-emphasis is carried by the surface and the left rule,
+                  // never by opacity. A wrapper `opacity-60` multiplied every
+                  // descendant's contrast — the body copy landed at 2.8:1 in
+                  // light mode — and `hover:opacity-90` does nothing for
+                  // keyboard or touch. This is real content, so it stays at
+                  // full opacity and simply doesn't get the active treatment.
+                  className={`rounded-card border-l-2 py-5 pl-6 pr-5 transition-all duration-500 sm:py-6 ${
                     isActive
-                      ? "border-accent/45 bg-surface/80"
-                      : "border-border bg-surface/40"
+                      ? "border-l-accent bg-[var(--surface-raised)] shadow-[var(--shadow-card)]"
+                      : "border-l-edge-strong"
                   }`}
                   aria-current={isActive ? "step" : undefined}
                 >
                   <div className="flex items-center justify-between gap-3">
-                    <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-accent-bright">
+                    <p
+                      className={`font-mono text-[11px] font-semibold uppercase tracking-[0.18em] ${
+                        isActive ? "text-accent-bright" : "text-muted-foreground"
+                      }`}
+                    >
                       {String(index + 1).padStart(2, "0")} · {step.label}
                     </p>
                     {/* inline state so the story works without the console on mobile */}
@@ -283,7 +296,7 @@ export function ExecutionLoop() {
                   <p className="mt-2.5 text-sm leading-7 text-foreground-secondary">
                     {step.body}
                   </p>
-                  <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground lg:hidden">
+                  <p className="mt-3 font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground lg:hidden">
                     Artifact: <span className="text-foreground-secondary">{step.artifact}</span>
                   </p>
                 </li>

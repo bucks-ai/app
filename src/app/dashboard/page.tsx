@@ -133,33 +133,37 @@ function DashboardKpis({
   sample?: boolean;
 }) {
   return (
+    // Every tile used to take a status colour, so four counters rendered in
+    // four different hues and none of them meant anything. Colour is now
+    // reserved for the two states a founder must act on — approvals waiting
+    // and blockers — and everything healthy stays neutral.
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <KpiStat
         label={sample ? "Sample projects" : "Total projects"}
         value={projects}
         detail={sample ? "Preview workspace records" : "Saved MVP workspaces"}
-        tone="accent"
+        tone="neutral"
         sparkline={[1, 2, 2, 3, projects + 1]}
       />
       <KpiStat
         label="Open approvals"
         value={approvals}
         detail="Founder decisions waiting"
-        tone={approvals > 0 ? "warning" : "success"}
+        tone={approvals > 0 ? "warning" : "neutral"}
         sparkline={[0, 1, approvals, approvals + 1, approvals]}
       />
       <KpiStat
         label="Active deploys"
         value={activeDeploys}
         detail="Builds with live deployment state"
-        tone={activeDeploys > 0 ? "success" : "neutral"}
+        tone="neutral"
         sparkline={[0, 0, 1, activeDeploys, activeDeploys]}
       />
       <KpiStat
         label="Blockers"
         value={blockers}
         detail={blockers > 0 ? "Needs intervention" : "No hard stops"}
-        tone={blockers > 0 ? "danger" : "success"}
+        tone={blockers > 0 ? "danger" : "neutral"}
         sparkline={[0, blockers, blockers, Math.max(0, blockers - 1), blockers]}
       />
     </div>
@@ -185,10 +189,10 @@ function SidePanel({
         </SectionLabel>
         {typeof count === "number" && count > 0 ? (
           <span
-            className={`rounded-full px-2 py-0.5 font-mono text-[10px] font-semibold ${
+            className={`rounded-full px-2 py-0.5 font-mono text-[11px] font-semibold ${
               tone === "warning"
                 ? "bg-warning/15 text-warning"
-                : "bg-accent/15 text-accent"
+                : "bg-accent/15 text-accent-on-tint"
             }`}
           >
             {count}
@@ -244,19 +248,23 @@ function SignInPanel() {
             </Link>
           </div>
         </div>
-        <div className="elevated-surface rounded-xl p-4">
-          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+        <div className="flow-well p-5">
+          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
             Preview mode
           </p>
-          <div className="mt-4 space-y-3">
+          {/* These three rows carried `skeleton-shimmer`, so a loading
+              animation ran forever over hard-coded strings that will never
+              load. On a product whose claim is honest agent state, a fake
+              loading indicator is the worst possible decoration. */}
+          <div className="mt-4 divide-y divide-edge">
             {["Research complete", "Deploy running", "Validation queued"].map(
               (item) => (
-                <div
+                <p
                   key={item}
-                  className="skeleton-shimmer rounded-lg border border-border bg-surface/70 px-3 py-2 text-sm text-foreground-secondary"
+                  className="py-2.5 text-sm text-foreground-secondary"
                 >
                   {item}
-                </div>
+                </p>
               )
             )}
           </div>

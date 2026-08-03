@@ -11,10 +11,10 @@ export function ResearchHypothesesPanel({
   return (
     <div id="research-hypotheses" className="scroll-mt-28 rounded-lg border border-border bg-surface p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
+        <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">
           Research hypotheses
         </p>
-        <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+        <span className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
           {hypotheses.length} hypotheses
         </span>
       </div>
@@ -39,7 +39,7 @@ export function ResearchHypothesesPanel({
               </div>
               <div className="mt-3 grid gap-2 md:grid-cols-2">
                 <div className="rounded border border-border bg-surface p-2.5">
-                  <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                  <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
                     Test method
                   </p>
                   <p className="mt-1 break-words text-xs leading-5 text-foreground-secondary">
@@ -47,7 +47,7 @@ export function ResearchHypothesesPanel({
                   </p>
                 </div>
                 <div className="rounded border border-border bg-surface p-2.5">
-                  <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                  <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
                     Success criteria
                   </p>
                   <p className="mt-1 break-words text-xs leading-5 text-foreground-secondary">

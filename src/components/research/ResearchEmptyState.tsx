@@ -11,7 +11,7 @@ export function ResearchEmptyState({
 }: ResearchEmptyStateProps) {
   return (
     <div className="rounded-lg border border-border bg-surface p-5 sm:p-6">
-      <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
+      <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">
         Research mode
       </p>
       <h2 className="mt-3 text-xl font-semibold text-foreground">

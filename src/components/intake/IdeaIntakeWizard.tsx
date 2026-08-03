@@ -164,9 +164,11 @@ function ProgressRail({
       <div className="mb-4 flex items-center justify-between">
         <div>
           <SectionLabel>Launch Path</SectionLabel>
-          <h2 className="mt-2 text-lg font-semibold text-foreground">
+          {/* Not an h2: this rail renders above the page h1, so a heading
+              here made the document open below its own top level. */}
+          <p className="mt-2 text-lg font-semibold text-foreground">
             Founder intake
-          </h2>
+          </p>
         </div>
         <StatusPill label={`${currentStep + 1} / ${steps.length}`} />
       </div>
@@ -196,7 +198,11 @@ function ProgressRail({
                 : ("upcoming" as const);
 
           return (
-            <li key={step.title} className="flex gap-3.5">
+            <li
+              key={step.title}
+              className="flex gap-3.5"
+              aria-current={state === "current" ? "step" : undefined}
+            >
               <div className="flex flex-col items-center">
                 <StepNode state={state} />
                 {index < steps.length - 1 ? (
@@ -212,18 +218,31 @@ function ProgressRail({
                   />
                 ) : null}
               </div>
-              <div
-                className={`min-w-0 pb-6 transition-opacity duration-300 ${
-                  state === "upcoming" ? "opacity-55" : ""
-                }`}
-              >
+              {/* `opacity-55` here multiplied every descendant's contrast —
+                  upcoming step descriptions measured 2.64:1. Upcoming steps
+                  are de-emphasised by text colour instead, and the state is
+                  now announced rather than implied by dimming. */}
+              <div className="min-w-0 pb-6">
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                     0{index + 1}
                   </span>
-                  <p className="text-sm font-medium text-foreground">
+                  <p
+                    className={`text-sm font-medium ${
+                      state === "upcoming"
+                        ? "text-foreground-secondary"
+                        : "text-foreground"
+                    }`}
+                  >
                     {step.title}
                   </p>
+                  <span className="sr-only">
+                    {state === "done"
+                      ? "Completed"
+                      : state === "current"
+                        ? "Current step"
+                        : "Not started"}
+                  </span>
                 </div>
                 <p className="mt-1 text-xs leading-5 text-foreground-secondary">
                   {step.description}
@@ -248,52 +267,94 @@ type BaseFieldProps = {
   onChange: (name: FieldName, value: string) => void;
 };
 
+/** Stable per-field ids so the label and descriptions can be wired by id. */
+function fieldIds(name: FieldName) {
+  return {
+    id: `intake-${name}`,
+    helperId: `intake-${name}-helper`,
+    errorId: `intake-${name}-error`,
+  };
+}
+
+/** The describedby list for a field, or undefined when it has neither. */
+function describedBy(name: FieldName, helper?: string, error?: string) {
+  const { helperId, errorId } = fieldIds(name);
+  const ids = [helper ? helperId : null, error ? errorId : null].filter(Boolean);
+  return ids.length ? ids.join(" ") : undefined;
+}
+
+/*
+  This wrapped the label text, the Required chip, the control, the helper
+  copy, AND the error in one <label>, so every one of those strings became
+  part of the field's accessible name — "Idea Name REQUIRED What should this
+  startup or product be called?" announced on every focus, with the error
+  appended once validation fired, and no description at all.
+
+  The label element now covers only the label text; helper and error are
+  linked through aria-describedby instead.
+*/
 function FieldWrapper({
+  name,
   label,
   required,
   helper,
   error,
   children,
 }: {
+  name: FieldName;
   label: string;
   required?: boolean;
   helper?: string;
   error?: string;
   children: React.ReactNode;
 }) {
+  const { id, helperId, errorId } = fieldIds(name);
+
   return (
-    <label className="block">
+    <div className="block">
       <div className="mb-2 flex items-center gap-2">
-        <span className="text-sm font-medium text-foreground">{label}</span>
+        <label htmlFor={id} className="text-sm font-medium text-foreground">
+          {label}
+        </label>
         {required ? (
-          <span className="rounded-md border border-accent/35 bg-accent/10 px-2 py-0.5 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-accent-bright">
+          <span className="rounded-md border border-accent/35 bg-accent/10 px-2 py-0.5 font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-accent-bright">
             Required
           </span>
         ) : null}
       </div>
       {children}
       {helper ? (
-        <p className="mt-2 text-xs leading-5 text-muted-foreground">{helper}</p>
+        <p id={helperId} className="mt-2 text-xs leading-5 text-muted-foreground">
+          {helper}
+        </p>
       ) : null}
       {error ? (
-        <p role="alert" className="mt-2 text-xs font-medium text-error">
+        <p
+          id={errorId}
+          role="alert"
+          className="mt-2 text-xs font-medium text-error"
+        >
           {error}
         </p>
       ) : null}
-    </label>
+    </div>
   );
 }
 
 function TextInput(props: BaseFieldProps) {
   return (
     <FieldWrapper
+      name={props.name}
       label={props.label}
       required={props.required}
       helper={props.helper}
       error={props.error}
     >
       <input
+        id={fieldIds(props.name).id}
         type="text"
+        aria-required={props.required || undefined}
+        aria-describedby={describedBy(props.name, props.helper, props.error)}
         value={props.value}
         onChange={(event) => props.onChange(props.name, event.target.value)}
         placeholder={props.placeholder}
@@ -301,7 +362,7 @@ function TextInput(props: BaseFieldProps) {
         className={`w-full rounded-md border bg-background px-4 py-3 text-sm text-foreground outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-muted-foreground ${
           props.error
             ? "border-error/60"
-            : "border-border hover:border-border-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--accent-soft)]"
+            : "border-[var(--input-border)] hover:border-border-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--accent-soft)]"
         }`}
       />
     </FieldWrapper>
@@ -311,12 +372,16 @@ function TextInput(props: BaseFieldProps) {
 function TextArea(props: BaseFieldProps) {
   return (
     <FieldWrapper
+      name={props.name}
       label={props.label}
       required={props.required}
       helper={props.helper}
       error={props.error}
     >
       <textarea
+        id={fieldIds(props.name).id}
+        aria-required={props.required || undefined}
+        aria-describedby={describedBy(props.name, props.helper, props.error)}
         value={props.value}
         onChange={(event) => props.onChange(props.name, event.target.value)}
         placeholder={props.placeholder}
@@ -325,7 +390,7 @@ function TextArea(props: BaseFieldProps) {
         className={`w-full rounded-md border bg-background px-4 py-3 text-sm text-foreground outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-muted-foreground ${
           props.error
             ? "border-error/60"
-            : "border-border hover:border-border-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--accent-soft)]"
+            : "border-[var(--input-border)] hover:border-border-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--accent-soft)]"
         }`}
       />
     </FieldWrapper>
@@ -338,19 +403,23 @@ function SelectField({
 }: BaseFieldProps & { options: string[] }) {
   return (
     <FieldWrapper
+      name={props.name}
       label={props.label}
       required={props.required}
       helper={props.helper}
       error={props.error}
     >
       <select
+        id={fieldIds(props.name).id}
+        aria-required={props.required || undefined}
+        aria-describedby={describedBy(props.name, props.helper, props.error)}
         value={props.value}
         onChange={(event) => props.onChange(props.name, event.target.value)}
         aria-invalid={props.error ? true : undefined}
         className={`w-full cursor-pointer rounded-md border bg-background px-4 py-3 text-sm text-foreground outline-none transition-[border-color,box-shadow] duration-200 ${
           props.error
             ? "border-error/60"
-            : "border-border hover:border-border-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--accent-soft)]"
+            : "border-[var(--input-border)] hover:border-border-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--accent-soft)]"
         }`}
       >
         {options.map((option) => (
@@ -881,10 +950,20 @@ export function IdeaIntakeWizard() {
             )}
           </div>
 
+          {/* Content swaps in place here with no navigation, so without a live
+              region a screen-reader user gets no signal that generation
+              started or finished. */}
           {isLoading ? (
-            <div className="mt-4 rounded-lg border border-accent/35 bg-accent/10 p-4">
+            <div
+              role="status"
+              aria-live="polite"
+              className="mt-4 rounded-lg border border-accent/35 bg-accent/10 p-4"
+            >
               <div className="flex items-center gap-3">
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-accent-bright border-t-transparent" />
+                <div
+                  aria-hidden
+                  className="h-4 w-4 animate-spin rounded-full border-2 border-accent-bright border-t-transparent"
+                />
                 <p className="text-sm font-medium text-accent-bright">
                   bucks.ai is building your launch blueprint...
                 </p>

@@ -18,10 +18,10 @@ export function BuyerBudgetPanel({ buyerBudgets }: BuyerBudgetPanelProps) {
   return (
     <div className="rounded-lg border border-border bg-surface p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
+        <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">
           Buyer and budget
         </p>
-        <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+        <span className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
           {buyerBudgets.length} records
         </span>
       </div>

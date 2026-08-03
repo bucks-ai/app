@@ -88,7 +88,7 @@ export function OperatingTeamPanel({ businessId }: OperatingTeamPanelProps) {
   if (loadState === "error") {
     return (
       <div className="rounded-lg border border-error/25 bg-error/8 p-5">
-        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-error">
+        <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-error">
           Operating team unavailable
         </p>
         <p className="mt-3 break-words text-sm leading-6 text-error">
@@ -108,7 +108,7 @@ export function OperatingTeamPanel({ businessId }: OperatingTeamPanelProps) {
   if (!registry || registry.agents.length === 0) {
     return (
       <div className="rounded-lg border border-border bg-surface p-5">
-        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
+        <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">
           Operating Team
         </p>
         <p className="mt-3 text-sm leading-6 text-foreground-secondary">
@@ -130,7 +130,7 @@ export function OperatingTeamPanel({ businessId }: OperatingTeamPanelProps) {
 
       {runsWarning ? (
         <div className="rounded-lg border border-warning/25 bg-warning/8 p-4">
-          <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-warning">
+          <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-warning">
             Agent run history
           </p>
           <p className="mt-2 break-words text-sm leading-6 text-warning">

@@ -20,10 +20,10 @@ export function CompetitorMapPanel({ competitors }: CompetitorMapPanelProps) {
   return (
     <div id="research-competitors" className="scroll-mt-28 rounded-lg border border-border bg-surface p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
+        <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">
           Competitor map
         </p>
-        <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+        <span className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
           {competitors.length} mapped
         </span>
       </div>

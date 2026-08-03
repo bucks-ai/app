@@ -49,7 +49,7 @@ const proofMetrics = [
 
 export function WorkflowSteps() {
   return (
-    <section id="execution-flow" className="px-6 py-20 sm:py-28">
+    <section id="execution-flow" className="relative px-6 py-20 sm:py-28">
       <div className="mx-auto max-w-6xl">
         <Reveal>
           <SectionHeader
@@ -59,11 +59,11 @@ export function WorkflowSteps() {
           />
         </Reveal>
 
-        <div className="mt-14 grid gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(22rem,0.85fr)]">
-          <GlassPanel as="section" className="p-5 sm:p-6">
+        <div className="mt-16 grid gap-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(22rem,0.95fr)]">
+          <GlassPanel as="section" className="p-6 sm:p-8">
             <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
                   Current run
                 </p>
                 <h3 className="mt-2 text-xl font-semibold tracking-tight text-foreground">
@@ -75,9 +75,12 @@ export function WorkflowSteps() {
             <AnimatedProgressRail stages={stages} />
           </GlassPanel>
 
-          <GlassPanel as="section" className="p-5 sm:p-6">
-            <div className="mb-4 rounded-xl border border-status-pending/30 bg-status-pending/10 p-4">
-              <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-status-pending">
+          <GlassPanel as="section" className="p-6 sm:p-8">
+            {/* Kept as a distinct surface — this one is a real semantic
+                interruption, not decoration — but softened to a left rule
+                and a tint rather than a full outlined box. */}
+            <div className="mb-6 rounded-r-xl border-l-2 border-status-pending/50 bg-status-pending/[0.07] py-4 pl-5 pr-4">
+              <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-status-pending">
                 Operator checkpoint
               </p>
               <p className="mt-2 text-sm font-semibold text-foreground">
@@ -92,17 +95,17 @@ export function WorkflowSteps() {
           </GlassPanel>
         </div>
 
-        <div className="mt-5 grid gap-4 md:grid-cols-3">
+        {/* Three tiles became three statements. Same content, no containers —
+            the hairline above the row is the only division needed. */}
+        <div className="mt-12 grid gap-8 border-t border-edge pt-10 md:grid-cols-3">
           {proofMetrics.map(([value, label], index) => (
             <Reveal key={label} delay={index * 70}>
-              <div className="neumorphic-soft rounded-card p-5">
-                <p className="font-mono text-2xl font-semibold text-foreground">
-                  {value}
-                </p>
-                <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-                  {label}
-                </p>
-              </div>
+              <p className="font-mono text-2xl font-semibold text-foreground">
+                {value}
+              </p>
+              <p className="mt-2 font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                {label}
+              </p>
             </Reveal>
           ))}
         </div>

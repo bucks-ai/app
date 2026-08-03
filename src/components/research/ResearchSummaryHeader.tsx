@@ -15,7 +15,7 @@ export function ResearchSummaryHeader({ workspace }: ResearchSummaryHeaderProps)
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
+            <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">
               Research mode
             </p>
             <ResearchStatusBadge value={summary.status} />
@@ -28,7 +28,7 @@ export function ResearchSummaryHeader({ workspace }: ResearchSummaryHeaderProps)
           </p>
         </div>
         <div className="shrink-0 rounded border border-accent/30 bg-accent/10 px-3 py-2">
-          <p className="font-mono text-[10px] uppercase tracking-widest text-accent">
+          <p className="font-mono text-[11px] uppercase tracking-widest text-accent">
             Score
           </p>
           <p className="mt-1 text-xl font-semibold text-foreground">
@@ -50,7 +50,7 @@ export function ResearchSummaryHeader({ workspace }: ResearchSummaryHeaderProps)
             key={label}
             className="min-w-0 rounded border border-border bg-background px-3 py-2.5"
           >
-            <p className="truncate font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+            <p className="truncate font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
               {label}
             </p>
             <p className="mt-1 text-lg font-semibold text-foreground">{value}</p>

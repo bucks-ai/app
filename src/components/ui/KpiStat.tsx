@@ -65,41 +65,49 @@ export function KpiStat({
 
   return (
     <motion.div
-      className={`neumorphic-soft relative min-h-[9.5rem] overflow-hidden rounded-card p-5 ${className}`}
+      className={`flow-card interactive-surface flex min-h-[9.5rem] flex-col p-6 ${className}`}
       initial={false}
       whileInView={reducedMotion ? undefined : { opacity: 1, y: 0 }}
       viewport={{ once: true }}
       transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
     >
-      <div
-        aria-hidden
-        className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent"
-      />
-      <div className="relative z-10">
-        <SectionLabel tone="muted">{label}</SectionLabel>
-        <motion.p
-          className={`mt-3 font-mono text-4xl font-semibold tracking-tight ${toneText[tone]}`}
-        >
-          {rounded}
-        </motion.p>
-        {detail ? <p className="mt-2 text-sm leading-6 text-foreground-secondary">{detail}</p> : null}
+      <SectionLabel tone="muted">{label}</SectionLabel>
+      <motion.p
+        className={`mt-3 font-mono text-4xl font-semibold tracking-tight ${toneText[tone]}`}
+      >
+        {rounded}
+      </motion.p>
+      {/* The sparkline used to be absolutely positioned bottom-right, so any
+          detail string long enough to reach the corner got a line drawn
+          through it. It now shares a flex row with the text and cannot
+          overlap at any width. */}
+      <div className="mt-auto flex items-end justify-between gap-3 pt-3">
+        {detail ? (
+          <p className="min-w-0 text-sm leading-6 text-foreground-secondary">
+            {detail}
+          </p>
+        ) : (
+          <span />
+        )}
+        {sparkline && sparkline.length > 1 ? (
+          <svg
+            aria-hidden
+            className="h-9 w-20 shrink-0 opacity-70"
+            viewBox="0 0 100 44"
+            preserveAspectRatio="none"
+          >
+            <polyline
+              points={sparklinePoints(sparkline)}
+              fill="none"
+              stroke={toneStroke[tone]}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              vectorEffect="non-scaling-stroke"
+            />
+          </svg>
+        ) : null}
       </div>
-      {sparkline && sparkline.length > 1 ? (
-        <svg
-          aria-hidden
-          className="absolute bottom-3 right-3 h-12 w-24 opacity-75"
-          viewBox="0 0 100 44"
-        >
-          <polyline
-            points={sparklinePoints(sparkline)}
-            fill="none"
-            stroke={toneStroke[tone]}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth="2"
-          />
-        </svg>
-      ) : null}
     </motion.div>
   );
 }

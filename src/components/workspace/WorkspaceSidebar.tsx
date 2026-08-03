@@ -98,13 +98,13 @@ export function WorkspaceSidebar({
     <aside className="hidden w-72 shrink-0 border-r border-border/80 bg-background/35 backdrop-blur lg:block">
       <div className="sticky top-[69px] flex max-h-[calc(100vh-69px)] flex-col gap-4 overflow-y-auto px-3 py-4">
         <div className="solid-surface rounded-xl p-3.5">
-          <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
+          <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">
             Workspace
           </p>
           <h2 className="mt-1.5 truncate text-sm font-semibold text-foreground">
             {business.name}
           </h2>
-          <p className="mt-1 truncate font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+          <p className="mt-1 truncate font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
             {phase} &middot; {progress}%
           </p>
           <div
@@ -125,7 +125,7 @@ export function WorkspaceSidebar({
         <nav aria-label="Workspace sections" className="space-y-4">
           {groups.map((group) => (
             <div key={group}>
-              <p className="px-2 font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+              <p className="px-2 font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
                 {group}
               </p>
               <div className="mt-2 space-y-1">
@@ -147,7 +147,7 @@ export function WorkspaceSidebar({
                       aria-current={isActive ? "page" : undefined}
                     >
                       <span
-                        className={`flex h-7 w-8 shrink-0 items-center justify-center rounded-md border font-mono text-[10px] ${
+                        className={`flex h-7 w-8 shrink-0 items-center justify-center rounded-md border font-mono text-[11px] ${
                           isActive
                             ? "border-accent/40 bg-accent/15 text-accent"
                             : "border-border bg-background text-muted-foreground"
@@ -159,7 +159,7 @@ export function WorkspaceSidebar({
                         <span className="flex items-center gap-2">
                           <span className="truncate text-sm font-semibold">{tab.label}</span>
                           {count > 0 ? (
-                            <span className="rounded-full bg-warning/20 px-1.5 py-0.5 font-mono text-[10px] text-warning">
+                            <span className="rounded-full bg-warning/20 px-1.5 py-0.5 font-mono text-[11px] text-warning">
                               {count}
                             </span>
                           ) : null}

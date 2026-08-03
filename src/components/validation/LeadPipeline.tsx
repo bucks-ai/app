@@ -96,7 +96,7 @@ export function LeadPipeline({ businessId, leads, onChange }: LeadPipelineProps)
     <div id="validation-leads" className="rounded-lg border border-border bg-surface p-4 scroll-mt-28">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
+          <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">
             Lead pipeline
           </p>
           <p className="mt-1 text-xs text-muted-foreground">Move real discovery contacts through interview stages.</p>
@@ -168,7 +168,7 @@ export function LeadPipeline({ businessId, leads, onChange }: LeadPipelineProps)
           <div key={group.status} className="min-w-0 rounded border border-border bg-background p-3">
             <div className="flex items-center justify-between gap-2">
               <ValidationStatusBadge value={group.status} />
-              <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+              <span className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
                 {group.leads.length}
               </span>
             </div>

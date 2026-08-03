@@ -47,7 +47,7 @@ export function MissionConsole({ compact = false }: { compact?: boolean }) {
               key={label}
               className="elevated-surface rounded-xl p-3"
             >
-              <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+              <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
                 {label}
               </p>
               <p className="mt-2 text-base font-semibold text-foreground">{value}</p>
@@ -62,7 +62,7 @@ export function MissionConsole({ compact = false }: { compact?: boolean }) {
         <div className="rounded-xl border border-status-pending/30 bg-status-pending/10 p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-status-pending">
+              <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-status-pending">
                 Human checkpoint
               </p>
               <p className="mt-2 text-sm font-semibold text-foreground">

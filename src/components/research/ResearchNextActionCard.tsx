@@ -99,7 +99,7 @@ export function ResearchNextActionCard({
         compact ? "p-3" : "p-4"
       }`}
     >
-      <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-warning">
+      <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-warning">
         Next research action
       </p>
       <p className="mt-2 text-sm font-semibold text-foreground">{action.title}</p>

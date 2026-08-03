@@ -87,7 +87,7 @@ export function FeedbackNotes({
     <div id="validation-feedback" className="rounded-lg border border-border bg-surface p-4 scroll-mt-28">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
+          <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">
             Feedback notes
           </p>
           <p className="mt-1 text-xs text-muted-foreground">Capture the evidence from discovery calls.</p>

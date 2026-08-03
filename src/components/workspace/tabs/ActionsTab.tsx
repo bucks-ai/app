@@ -125,7 +125,7 @@ export function ActionsTab({ business, executionStatus }: ActionsTabProps) {
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <span
-                  className={`rounded border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-widest ${
+                  className={`rounded border px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-widest ${
                     categoryBadge[action.category]
                   }`}
                 >
@@ -142,7 +142,7 @@ export function ActionsTab({ business, executionStatus }: ActionsTabProps) {
               ) : null}
             </div>
             <span
-              className={`shrink-0 rounded border px-2 py-1 font-mono text-[10px] uppercase tracking-widest ${
+              className={`shrink-0 rounded border px-2 py-1 font-mono text-[11px] uppercase tracking-widest ${
                 ownerStyle[action.owner]
               }`}
             >

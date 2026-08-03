@@ -47,7 +47,7 @@ export function ResearchRailCard({
   return (
     <div className="rounded-lg border border-border bg-surface p-4">
       <div className="flex items-center justify-between gap-2">
-        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
+        <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">
           Research
         </p>
         {workspace ? <ResearchStatusBadge value={workspace.summary.status} /> : null}

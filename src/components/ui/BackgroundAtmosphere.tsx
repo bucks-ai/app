@@ -1,35 +1,42 @@
 type BackgroundAtmosphereProps = {
-  /** aurora bloom strength — hero uses "strong", quiet sections "soft" */
+  /** local bloom strength — hero uses "strong", quiet sections "soft" */
   intensity?: "soft" | "strong";
-  /** show the hairline grid layer */
+  /** show the hairline grid layer (usually off — PageField owns the grid) */
   grid?: boolean;
   /** show the fine noise layer (parent needs position:relative) */
   noise?: boolean;
-  /** slow ambient drift on the aurora (CSS-only, killed by reduced-motion) */
+  /** slow ambient drift on the bloom (CSS-only, killed by reduced-motion) */
   drift?: boolean;
 };
 
+/*
+  These used to be indigo (rgba(109,93,252)) and cyan, left over from an
+  earlier palette — which is why teal CTAs sat on a purple glow. They are
+  now derived from --accent so the atmosphere can never drift off-brand.
+*/
 const auroras = {
-  soft: "radial-gradient(circle at 50% 0%, rgba(109,93,252,0.12), transparent 42%)",
+  soft: "radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 46%)",
   strong:
-    "radial-gradient(circle at 28% 35%, rgba(109,93,252,0.24), transparent 36%), radial-gradient(circle at 72% 24%, rgba(34,211,238,0.08), transparent 34%)",
+    "radial-gradient(circle at 30% 34%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 40%), radial-gradient(circle at 72% 22%, color-mix(in srgb, var(--accent-deep) 20%, transparent), transparent 38%)",
 };
 
 /**
- * Shared section atmosphere: aurora bloom + hairline grid + noise, all
- * pointer-transparent and low-contrast so text stays AA on top. Pure CSS —
- * the drift animation lives in globals.css behind prefers-reduced-motion.
+ * A *local* accent bloom for one section — used sparingly, on top of the
+ * page-wide <PageField />. Sections should not use this to establish their
+ * own background; that is what produced the banded, choppy read.
+ *
+ * All layers are pointer-transparent and low-contrast so text stays AA.
  */
 export function BackgroundAtmosphere({
   intensity = "soft",
-  grid = true,
+  grid = false,
   noise = false,
   drift = false,
 }: BackgroundAtmosphereProps) {
   return (
     <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
       <div
-        className={`absolute left-1/2 top-0 h-[34rem] w-[72rem] -translate-x-1/2 rounded-full opacity-75 blur-3xl ${
+        className={`absolute left-1/2 top-0 h-[34rem] w-[72rem] -translate-x-1/2 rounded-full opacity-70 blur-3xl ${
           drift ? "ambient-orbit" : ""
         }`}
         style={{ background: auroras[intensity] }}

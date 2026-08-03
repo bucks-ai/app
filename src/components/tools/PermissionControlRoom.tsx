@@ -399,7 +399,7 @@ export function PermissionControlRoom({
                 href="/login"
                 className="rounded-md border border-border bg-background px-4 py-3 text-center text-sm font-semibold text-foreground-secondary transition-colors hover:border-accent/60 hover:text-foreground"
               >
-                Sign in -&gt;
+                Sign in →
               </Link>
             ) : null}
           </div>

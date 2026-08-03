@@ -1,4 +1,3 @@
-import Link from "next/link";
 import {
   DeploymentStatusBadge,
   deploymentStatusLabel,
@@ -17,10 +16,10 @@ type BusinessCardProps = {
 };
 
 function statTone(value: number, intent: "warning" | "danger") {
-  if (value === 0) return "border-success/20 bg-success/10 text-success";
+  if (value === 0) return "bg-success/10 text-success";
   return intent === "warning"
-    ? "border-warning/30 bg-warning/10 text-warning"
-    : "border-error/30 bg-error/10 text-error";
+    ? "bg-warning/10 text-warning"
+    : "bg-error/10 text-error";
 }
 
 function progressForBusiness(business: DashboardBusiness) {
@@ -49,20 +48,20 @@ export function BusinessCard({ business, label }: BusinessCardProps) {
   const progress = progressForBusiness(business);
 
   return (
-    <GlassCard interactive variant="solid" className="group h-full p-5 sm:p-6">
-      <article className="grid h-full gap-5">
+    <GlassCard interactive variant="solid" className="group h-full p-6 sm:p-8">
+      <article className="grid h-full gap-6">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <StatusPill label={business.status} variant={business.statusVariant} />
             <DeploymentStatusBadge status={deployStatus} />
-            <span className="rounded-md border border-border bg-background/70 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+            <span className="rounded-md bg-muted px-2.5 py-1 font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
               {label ?? business.businessType}
             </span>
           </div>
 
-          <div className="mt-5 grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+          <div className="mt-6 grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
             <div className="min-w-0">
-              <h3 className="text-2xl font-semibold tracking-tight text-foreground">
+              <h3 className="display-serif text-3xl text-foreground">
                 {business.name}
               </h3>
               <p className="mt-2 line-clamp-2 text-sm leading-6 text-foreground-secondary">
@@ -79,12 +78,14 @@ export function BusinessCard({ business, label }: BusinessCardProps) {
             />
           </div>
 
-          <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
-            <span className="rounded-full border border-accent/20 bg-accent/10 px-3 py-1.5 font-mono uppercase tracking-[0.14em] text-accent-bright">
+          {/* Three outlined pills became three tinted ones. The outline plus
+              fill plus mono caps was three signals doing one job. */}
+          <div className="mt-5 flex flex-wrap items-center gap-2 text-xs">
+            <span className="rounded-full bg-accent/10 px-3 py-1.5 font-mono uppercase tracking-[0.14em] text-accent-on-tint">
               {progress}% complete
             </span>
             <span
-              className={`rounded-full border px-3 py-1.5 font-mono uppercase tracking-[0.14em] ${statTone(
+              className={`rounded-full px-3 py-1.5 font-mono uppercase tracking-[0.14em] ${statTone(
                 approvalCount,
                 "warning"
               )}`}
@@ -92,7 +93,7 @@ export function BusinessCard({ business, label }: BusinessCardProps) {
               {approvalCount} approvals
             </span>
             <span
-              className={`rounded-full border px-3 py-1.5 font-mono uppercase tracking-[0.14em] ${statTone(
+              className={`rounded-full px-3 py-1.5 font-mono uppercase tracking-[0.14em] ${statTone(
                 blockerCount,
                 "danger"
               )}`}
@@ -101,22 +102,20 @@ export function BusinessCard({ business, label }: BusinessCardProps) {
             </span>
           </div>
 
-          <p className="mt-4 min-w-0 truncate border-t border-border/70 pt-4 text-sm text-foreground-secondary">
-            <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+          <p className="mt-5 min-w-0 truncate border-t border-edge pt-5 text-sm text-foreground-secondary">
+            <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
               Last:
             </span>{" "}
             {lastActivity}
           </p>
 
-          <div className="mt-4 grid gap-3 rounded-xl border border-border bg-background/58 p-4 text-sm leading-6 text-foreground-secondary">
-            <p className="line-clamp-3">{business.blueprintSummary}</p>
-            <Link
-              href={href}
-              className="inline-flex min-h-11 w-fit items-center rounded-lg border border-border bg-elevated px-4 py-2 text-sm font-medium text-foreground transition-colors hover:border-accent/40 hover:text-accent-bright"
-            >
-              View full workspace
-            </Link>
-          </div>
+          {/* Was a bordered box holding a bordered button. The button is gone
+              too: this card already ends in a NextActionBlock whose CTA goes
+              to the same href, so the card offered two buttons to one place
+              and neither read as primary. */}
+          <p className="mt-5 line-clamp-3 text-sm leading-6 text-foreground-secondary">
+            {business.blueprintSummary}
+          </p>
         </div>
 
         <NextActionBlock

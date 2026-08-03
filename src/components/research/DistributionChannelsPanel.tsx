@@ -15,10 +15,10 @@ export function DistributionChannelsPanel({
   return (
     <div className="rounded-lg border border-border bg-surface p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
+        <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">
           Distribution channels
         </p>
-        <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+        <span className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
           {channels.length} channels
         </span>
       </div>
@@ -45,7 +45,7 @@ export function DistributionChannelsPanel({
                   ["Hard", score(channel.difficulty_score)],
                 ].map(([label, value]) => (
                   <div key={label} className="rounded border border-border bg-surface p-2">
-                    <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                    <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
                       {label}
                     </p>
                     <p className="mt-1 text-xs font-semibold text-foreground-secondary">{value}</p>

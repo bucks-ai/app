@@ -77,7 +77,7 @@ export function ValidationStatusBadge({
 
   return (
     <span
-      className={`inline-flex w-fit max-w-full items-center rounded-md border px-2 py-1 font-mono text-[10px] font-medium uppercase tracking-[0.16em] ${toneClasses[resolvedTone]} ${className}`}
+      className={`inline-flex w-fit max-w-full items-center rounded-md border px-2 py-1 font-mono text-[11px] font-medium uppercase tracking-[0.16em] ${toneClasses[resolvedTone]} ${className}`}
     >
       <span className="truncate">{label ?? validationLabel(String(raw))}</span>
     </span>

@@ -37,7 +37,7 @@ export function OperatingTeamSummaryHeader({
     <section className="rounded-lg border border-border bg-surface p-4 sm:p-5">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div className="min-w-0">
-          <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
+          <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">
             Operating Team
           </p>
           <h2 className="mt-2 break-words text-2xl font-semibold tracking-tight text-foreground">
@@ -54,7 +54,7 @@ export function OperatingTeamSummaryHeader({
                     : "border-border bg-background"
             }`}
           >
-            <p className="font-mono text-[10px] uppercase tracking-widest text-foreground-secondary">
+            <p className="font-mono text-[11px] uppercase tracking-widest text-foreground-secondary">
               Primary team action
             </p>
             <p className="mt-1 text-sm font-semibold text-foreground">
@@ -79,7 +79,7 @@ export function OperatingTeamSummaryHeader({
             key={metric.label}
             className="rounded border border-border bg-background px-3 py-2.5"
           >
-            <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+            <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
               {metric.label}
             </p>
             <p className={`mt-1 text-xl font-semibold ${metric.tone}`}>

@@ -40,7 +40,10 @@ export function ThemeToggle() {
     <button
       type="button"
       onClick={toggle}
-      aria-label="Toggle color theme"
+      // The name was a constant, so the current theme was only available
+      // through `title` (a description, which not every SR setup reads).
+      aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+      aria-pressed={theme === "light"}
       title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
       className="inline-flex h-11 w-11 cursor-pointer items-center justify-center rounded-lg border border-border bg-surface text-foreground-secondary transition-colors hover:text-foreground"
     >

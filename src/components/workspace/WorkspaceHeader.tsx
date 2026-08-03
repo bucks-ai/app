@@ -42,7 +42,7 @@ export function WorkspaceHeader({
             <h1 className="truncate text-sm font-semibold tracking-tight text-foreground sm:text-base">
               {business.name}
             </h1>
-            <p className="mt-0.5 truncate font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+            <p className="mt-0.5 truncate font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
               {phaseLabel(phase)} &middot; {progress}%
             </p>
           </div>

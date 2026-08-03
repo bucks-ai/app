@@ -110,12 +110,14 @@ export function SystemPreview() {
               description="bucks.ai coordinates the tools a software business actually runs on, with access mode and current signal visible on every tile."
             />
           </Reveal>
-          <div className="mt-10 grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+          {/* Was a 6-column track with the first two tiles spanning 3 and the
+              rest spanning 2, which left the sixth tool alone in its own row
+              beside an L-shaped void. Six equal tiles fill two clean rows. */}
+          <div className="mt-10 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {tools.map((tool, index) => (
               <Reveal
                 key={tool.name}
                 delay={index * 55}
-                className={index < 2 ? "xl:col-span-3" : "xl:col-span-2"}
               >
                 <ToolTile
                   tool={tool}

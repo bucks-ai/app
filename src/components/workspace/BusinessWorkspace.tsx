@@ -8,6 +8,7 @@ import {
   fetchBusinessExecutionStatus,
   fetchExecutionTimeline,
 } from "@/lib/execution-client";
+import { PageField } from "@/components/ui/PageField";
 import { WorkspaceTabs } from "@/components/workspace/WorkspaceTabs";
 import type { TabKey } from "@/components/workspace/WorkspaceTabs";
 import { WorkspaceSidebar } from "@/components/workspace/WorkspaceSidebar";
@@ -129,7 +130,10 @@ export function BusinessWorkspace({
     ) : null;
 
   return (
-    <div className="light-field flex min-h-screen flex-col overflow-x-hidden bg-background pt-[69px]">
+    <div className="flex min-h-screen flex-col overflow-x-hidden pt-[69px]">
+      {/* Grid off: the workspace is already dense with real data, so the
+          field stays a plain gradient here. */}
+      <PageField grid={false} />
       <div className="flex min-w-0 flex-1">
         {/* Desktop left navigation */}
         <WorkspaceSidebar
@@ -181,7 +185,7 @@ export function BusinessWorkspace({
 
           {business.nextActions.length > 0 ? (
             <div>
-              <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
+              <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.24em] text-accent">
                 Next autonomous actions
               </p>
               <ul className="space-y-1.5">

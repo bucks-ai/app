@@ -19,9 +19,9 @@ export function BlueprintSection({
       <div className="mb-5 flex items-start justify-between gap-4">
         <div>
           <SectionLabel>Mission Control</SectionLabel>
-          <h2 className="mt-2 text-xl font-semibold text-[#F0F0F0]">{title}</h2>
+          <h2 className="mt-2 text-xl font-semibold text-foreground">{title}</h2>
           {description ? (
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-[#888888]">
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
               {description}
             </p>
           ) : null}

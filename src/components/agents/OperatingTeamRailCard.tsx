@@ -65,11 +65,11 @@ export function OperatingTeamRailCard({
   return (
     <div className="rounded-lg border border-border bg-surface p-4">
       <div className="flex items-center justify-between gap-2">
-        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
+        <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">
           Team
         </p>
         {summary ? (
-          <span className="rounded border border-border bg-background px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-foreground-secondary">
+          <span className="rounded border border-border bg-background px-2 py-1 font-mono text-[11px] uppercase tracking-widest text-foreground-secondary">
             {summary.totalAgents} agents
           </span>
         ) : null}

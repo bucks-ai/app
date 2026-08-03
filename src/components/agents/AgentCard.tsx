@@ -53,7 +53,7 @@ export function AgentCard({ entry, latestRun }: AgentCardProps) {
       ) : null}
 
       <div className="mt-3 rounded border border-border bg-background px-3 py-2">
-        <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+        <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
           Runtime signal
         </p>
         <p className="mt-1 break-words text-xs leading-5 text-foreground-secondary">
@@ -74,7 +74,7 @@ export function AgentCard({ entry, latestRun }: AgentCardProps) {
               {latestRun.summary}
             </p>
           ) : null}
-          <p className="mt-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+          <p className="mt-2 font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
             {formatAgentTime(latestRunTime)}
           </p>
         </div>

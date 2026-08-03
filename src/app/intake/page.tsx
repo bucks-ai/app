@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { IdeaIntakeWizard } from "@/components/intake/IdeaIntakeWizard";
 import { Footer } from "@/components/shared/Footer";
 import { Navbar } from "@/components/shared/Navbar";
+import { PageField } from "@/components/ui/PageField";
 
 export const metadata: Metadata = {
   title: "Idea Intake | bucks.ai",
@@ -13,8 +14,13 @@ export default function IntakePage() {
   return (
     <>
       <Navbar />
-      <main className="relative min-h-screen overflow-clip bg-background px-5 pb-20 pt-28 sm:px-6">
-        <div aria-hidden className="grid-backdrop pointer-events-none absolute inset-0" />
+      {/* Last route still painting its own background and grid instead of
+          using the shared field. */}
+      <PageField />
+      <main
+        id="main-content"
+        className="relative min-h-screen overflow-clip px-5 pb-24 pt-32 sm:px-6"
+      >
         <div className="relative mx-auto max-w-7xl">
           <IdeaIntakeWizard />
         </div>

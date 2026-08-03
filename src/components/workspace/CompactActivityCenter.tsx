@@ -102,7 +102,7 @@ export function CompactActivityCenter({
               key={item.key}
               type="button"
               onClick={() => setFilter(item.key)}
-              className={`shrink-0 rounded border px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-widest transition-colors ${
+              className={`shrink-0 rounded border px-2.5 py-1.5 font-mono text-[11px] uppercase tracking-widest transition-colors ${
                 filter === item.key
                   ? "border-accent/40 bg-accent/10 text-accent"
                   : "border-border bg-background text-muted-foreground hover:text-foreground-secondary"
@@ -137,11 +137,11 @@ export function CompactActivityCenter({
                       <p className="truncate text-xs font-medium text-foreground-secondary">
                         {event.title}
                       </p>
-                      <p className="shrink-0 font-mono text-[10px] text-muted-foreground">
+                      <p className="shrink-0 font-mono text-[11px] text-muted-foreground">
                         {formatDate(event.createdAt)}
                       </p>
                     </div>
-                    <p className="mt-0.5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                    <p className="mt-0.5 font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
                       {event.category}
                     </p>
                     {expanded ? (

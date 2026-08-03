@@ -20,7 +20,7 @@ type ResearchStatusBadgeProps = {
 };
 
 const toneClasses: Record<BadgeTone, string> = {
-  accent: "border-accent/35 bg-accent/10 text-accent",
+  accent: "border-accent/35 bg-accent/10 text-accent-on-tint",
   success: "border-success/25 bg-success/10 text-success",
   warning: "border-warning/35 bg-warning/10 text-warning",
   danger: "border-error/35 bg-error/10 text-error",
@@ -65,7 +65,7 @@ export function ResearchStatusBadge({
 
   return (
     <span
-      className={`inline-flex w-fit max-w-full items-center rounded-md border px-2 py-1 font-mono text-[10px] font-medium uppercase tracking-[0.16em] ${toneClasses[resolvedTone]} ${className}`}
+      className={`inline-flex w-fit max-w-full items-center rounded-md border px-2 py-1 font-mono text-[11px] font-medium uppercase tracking-[0.16em] ${toneClasses[resolvedTone]} ${className}`}
     >
       <span className="truncate">{label ?? researchLabel(String(raw))}</span>
     </span>

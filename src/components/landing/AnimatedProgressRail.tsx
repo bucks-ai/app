@@ -13,33 +13,66 @@ function variantForStatus(status: RailStage["status"]) {
   return "warning" as const;
 }
 
+/**
+ * The run as a vertical spine.
+ *
+ * This was a five-column grid inside a two-column section, which left each
+ * stage about 78px of text width — every description broke after one or two
+ * words, and five bordered tiles sat in a row like a filing cabinet. A
+ * single continuous rail gives each stage a full line length, and the line
+ * itself carries the sense of the work moving from one agent to the next.
+ */
 export function AnimatedProgressRail({ stages }: { stages: RailStage[] }) {
   return (
-    <ol className="relative grid gap-4 lg:grid-cols-5">
-      {stages.map((stage, index) => (
-        <li key={stage.label} className="relative">
-          {index < stages.length - 1 ? (
+    <ol className="relative grid gap-0">
+      {stages.map((stage, index) => {
+        const isLast = index === stages.length - 1;
+        const isRunning = stage.status === "Running";
+
+        return (
+          <li key={stage.label} className="relative grid grid-cols-[2.5rem_minmax(0,1fr)] gap-4">
+            {/* The spine. Animated only on the segment leaving the active
+                stage, so motion marks where work is actually flowing. */}
+            {!isLast ? (
+              <span
+                aria-hidden
+                className={`absolute left-5 top-10 h-[calc(100%-2.5rem)] -translate-x-1/2 ${
+                  isRunning
+                    ? "flow-line-y"
+                    : stage.status === "Complete"
+                      ? "w-px rail-line-done"
+                      : "w-px rail-line-idle"
+                }`}
+              />
+            ) : null}
+
             <span
-              aria-hidden
-              className={`absolute left-5 top-5 hidden h-px w-[calc(100%+1rem)] lg:block ${
-                stage.status === "Running" ? "flow-line-x" : "rail-line-idle"
+              className={`relative z-10 flex h-10 w-10 items-center justify-center rounded-full font-mono text-xs ${
+                isRunning
+                  ? "pulse-ring bg-accent text-accent-contrast"
+                  : "bg-muted text-foreground-secondary"
               }`}
-            />
-          ) : null}
-          <div className="relative z-10 rounded-xl border border-border bg-surface/70 p-4">
-            <span className="flex h-10 w-10 items-center justify-center rounded-full border border-accent/35 bg-background font-mono text-xs text-accent-bright">
+            >
               {String(index + 1).padStart(2, "0")}
             </span>
-            <h3 className="mt-4 text-sm font-semibold text-foreground">{stage.label}</h3>
-            <p className="mt-2 text-sm leading-6 text-foreground-secondary">{stage.detail}</p>
-            <StatusPill
-              label={stage.status}
-              variant={variantForStatus(stage.status)}
-              className="mt-4"
-            />
-          </div>
-        </li>
-      ))}
+
+            <div className={isLast ? "min-w-0 pb-0" : "min-w-0 pb-7"}>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <h3 className="text-sm font-semibold text-foreground">
+                  {stage.label}
+                </h3>
+                <StatusPill
+                  label={stage.status}
+                  variant={variantForStatus(stage.status)}
+                />
+              </div>
+              <p className="mt-2 max-w-prose text-sm leading-6 text-foreground-secondary">
+                {stage.detail}
+              </p>
+            </div>
+          </li>
+        );
+      })}
     </ol>
   );
 }

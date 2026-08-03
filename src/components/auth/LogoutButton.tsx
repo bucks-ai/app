@@ -30,7 +30,7 @@ export function LogoutButton({
     <button
       onClick={handleLogout}
       disabled={loading}
-      className={`text-sm text-[#888888] transition-colors hover:text-[#F0F0F0] disabled:cursor-not-allowed disabled:opacity-60 ${className}`}
+      className={`text-sm text-foreground-secondary transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60 ${className}`}
     >
       {loading ? "Signing out…" : children}
     </button>
