@@ -1,339 +1,454 @@
 # M4b Verification Report
 
-Mission: **M4b — Sandbox-per-Business Execution (batch 2)**. This is the
-done-when evidence for `m4b-09-verification-report`, the centerpiece of the
-M4 pivot proof corpus: the claim under audit is *"our system executes
-missions against customer repos under containment."* This pass combines
-static/code verification, the full test suite, and live read-only probes
-against the real production Supabase project (`SUPABASE_URL` in `.env`) on
-2026-07-26. No mutating action was taken against production during this
-pass; no business repo, Vercel project, or credential was created.
+Mission: **M4b — Sandbox-per-Business Execution**. This is the done-when
+evidence for `m4b-09-verification-report`, and the centerpiece of the M4
+pivot proof corpus. The claim under audit is:
+
+> *"Our system executes missions against customer repos under containment."*
+
+**This report supersedes the 2026-07-26 revision** (PR #90), whose verdict —
+"the M4 pivot has not been demonstrated live" — was correct on its date and
+was invalidated by events on 2026-07-27 through 2026-07-31. The two
+blockers that report identified as fatal (the sandbox-config storage split,
+and the unmerged claim gate) were both closed, and `m4b-08` then ran. The
+prior text is preserved in git history at `d3387ea` and should be read as
+the pre-pivot baseline, not as a current statement of fact.
+
+Verification pass performed **2026-08-03**, combining: the full runner and
+app test suites, read-only probes against the production Supabase project,
+live execution of the containment guard functions against real production
+configuration, forensic inspection of the business repository the runner
+built into, and an HTTP probe of the resulting deployment. **No production
+data was written during this pass. No mission was claimed, and no business
+repo, Vercel project, or credential was created or modified.**
+
+---
 
 ## Verdict
 
-- **The M4 pivot has not been demonstrated live.** `m4b-08` — the task whose
-  entire job was to click Execute and watch a real business repo get built
-  and deployed — is **blocked**, not complete. It never got as far as
-  creating a mission, cloning a repo, or making a commit. See "m4b-08: what
-  was and wasn't demonstrated" below.
-- **Headline finding: even once every blocker below is cleared, the pivot
-  cannot succeed through the founder-facing UI as currently wired.** The
-  per-business sandbox configuration that the founder sets via the Settings
-  tab is stored in a different place than the one the runner reads from. See
-  "Critical finding" — this is a cross-stack integration gap, not a missing
-  credential, and it was not caught by any test because each side's tests
-  mock the other side away.
-- **m4b-01 (migrations wiring), m4b-02 (Execute CTA/approvals UX), m4b-04
-  (sandbox config model), m4b-05 (foreign-repo execution), m4b-06 (business
-  Vercel deploy): correctly built, unit-tested, and merged to `main`.** All
-  their guarantees are real at the unit-test level; none has been exercised
-  against a live business repo or live Vercel project, because no business
-  has ever had a sandbox configured (confirmed live, see below).
-- **m4b-07 (claim-gate lift): code-complete on its own branch
-  (`feature/m4b/claim-gate-lift`, 2 commits) but NOT merged to `main`, and
-  its own task status is still `running`, not `complete`.** This alone is a
-  hard blocker for `m4b-08` (it's the first item on `m4b-08`'s own resource
-  list). All 10 new/changed tests for it pass, and the full suite passes on
-  that branch (**1790 passed**).
-- **Found and fixed during this pass:** a same-day, already-on-`main` hotfix
-  (`0003ad4`, 2026-07-22, unrelated to this task) silently broke 6 of the 31
-  tests in `tests/test_foreign_repo_workspace.py` — the node-level tests for
-  the wrong-repo-refusal / business-not-found / missing-secret containment
-  paths. They were failing for the right reason (a fixture gap, not a logic
-  bug) but had apparently not been run to completion since: `python -m
-  pytest tests/ -x -q` was silently non-green on `main`. Fixed as part of
-  this pass (see "Test regression" below); full suite is now **1780 passed**
-  on this branch.
+**The core claim is demonstrated, with one material qualification.**
 
-## Critical finding: sandbox config is stored in two places that never sync
+The runner autonomously cloned a customer-owned GitHub repository
+(`rangasatvik/testflow-demo`, business "AI Infra"), built a working
+application into it across **5 commits and ~1,787 insertions**, and pushed
+to **9 feature branches on the customer's remote**. The result is live and
+serving at **https://testflow-demo.vercel.app** (verified HTTP 200 this
+pass, `<title>Testflow Security Assessment</title>`). Containment held:
+**zero business content entered the bucks-ai repository**, verified against
+the commit log for the execution window.
 
-Two separate, independently-built storage locations exist for "this
-business's sandbox config," and nothing in the codebase copies data between
-them:
+**The qualification — and it is load-bearing for an outside reader:**
 
-| Side | Storage | Built by | Reads/writes |
+1. **The deploy step was performed manually by the founder**, not by the
+   runner. Everything *built* was autonomous; the step that made it *live*
+   was not. Root cause is a broken business-task worker dispatch, documented
+   below and specified as M4c item 12.
+2. **The task-status ledger cannot be used as evidence of what was done.**
+   6 of 8 tasks are marked `complete` with summaries reading
+   `Files: created none; modified none`. The git history of the customer
+   repo — not the ledger — is the only trustworthy record of the work.
+3. **Reaching this took ~6 hours of founder debugging in one session.** Per
+   the founder's own contemporaneous notes, zero of those hours were the AI
+   failing to write code; every blocker was harness plumbing. That failure
+   list became the M4c specification.
+
+So the honest one-line claim the proof corpus can support is: **"our system
+autonomously builds into customer repositories under verified containment,
+and cannot yet ship the result unattended."** The stronger claim —
+end-to-end unattended execution — is **not** yet supported.
+
+---
+
+## 1. What `m4b-08` demonstrated live, with artifact paths
+
+Every artifact below was inspected directly during this pass.
+
+### 1.1 The customer repository
+
+| Fact | Value | How verified |
+|---|---|---|
+| Business | "AI Infra", `business_id` `931f4a57-007c-419f-8209-7957a9f5d8eb` | Live `business_sandbox` row |
+| Customer repo | `rangasatvik/testflow-demo` | `git remote get-url origin` in the workspace |
+| Local workspace | `runner/langgraph/.workspaces/931f4a57-007c-419f-8209-7957a9f5d8eb` | Present on disk, gitignored (`.gitignore:72`), untracked |
+| Commits by the runner | 5 | `git log` in that workspace |
+| Remote branches pushed | 9 (`origin/feature/ai-infra/*`) | `git branch -r` |
+| Live deployment | https://testflow-demo.vercel.app → **HTTP 200** | `curl` this pass |
+
+**The five commits** (workspace `git log --oneline`):
+
+```
+903a244  Build security assessment landing sections          2 files,   +82
+8cb6b8c  Build security assessment landing page              2 files,  +129
+36c0f15  Instrument analytics capture: visits, demos, opens  7 files,  +260
+39050b6  Scaffold infra: Node/Express, Docker, AWS, Postgres 13 files, +1316
+1116bdd  Build security assessment MVP (root)                8 files, +2618
+```
+
+**Corrected build metrics.** The `CHAT_HANDOFF_2026-07-11.md` closure note
+claims "1,819 insertions across 19 files." The precise figures are:
+
+- **1,787 insertions** across the four commits after the root commit.
+- The root commit's 2,618 insertions include **1,730 lines of generated
+  `package-lock.json`**, which no honest reader should count as authored work.
+- **21 tracked files** at HEAD; **1,617 lines excluding the lockfile**.
+
+The handoff figure is approximately right but was never recomputed. An
+outside auditor should cite **~1,600 lines of authored application code
+across 21 files**, not the headline number.
+
+**What was actually built** (`git ls-files` at HEAD): a React frontend
+(`src/App.jsx`, `src/styles.css`, `index.html`), an Express + Postgres
+analytics backend (`server/index.js`, `server/analytics.js`, `server/db.js`,
+`server/migrations/0001_create_analytics_events.sql`), containerization
+(`Dockerfile`, `docker-compose.yml`, `.dockerignore`), AWS ECS deploy config
+(`infra/aws/ecs-task-definition.json`, `infra/aws/deploy-aws.yml.example`),
+and documentation (`README.md`, `docs/security-best-practices.md`).
+
+### 1.2 Containment, verified
+
+`git log --since=2026-07-29 --until=2026-08-01` on bucks-ai returns six
+commits, all founder-authored M4c specification and sandbox-config work.
+**No business application code appears in the bucks-ai repository.** The
+customer's code exists only in the gitignored workspace and on the
+customer's own remote.
+
+### 1.3 What is NOT demonstrated
+
+- **Unattended deploy.** `ai-infra-03` ("Deploy the scaffolded app") was
+  marked `complete` with the summary `Files: created none; modified none /
+  Check: unknown / SQL: unknown` — it did nothing. The founder deployed by
+  hand on 2026-07-31. Prompt artifact:
+  `runner/langgraph/outbox/ai-infra-03_prompt.txt`.
+- **Root cause** (from the founder's notes, corroborated by the prompt
+  artifact): the runner passes the task prompt as an *attached file
+  reference* with cwd left in the bucks-ai tree rather than the business
+  workspace. Two independent workers therefore saw "a file describing a
+  deploy to someone else's Vercel project," correctly judged that
+  consequential and irreversible, and **asked for clarification instead of
+  acting**. The workers behaved correctly; the dispatch is broken. This is
+  M4c item 12.
+- **Mission-level completion.** Three business missions for this business
+  (`d49b2a95`, `d6802ad8`, `8511bfc9`) are still `running` in production
+  despite all 8 tasks being `complete`. Mission status never closes. A
+  fourth (`ecdcfb9e`) was queued 2026-08-03.
+
+---
+
+## 2. Containment guarantees: status matrix
+
+All four guarantees were exercised **live against production configuration**
+this pass, not merely unit-tested. This is the substantive upgrade over the
+2026-07-26 revision.
+
+| Guarantee | Test proof | Live proof (this pass) | Status |
 |---|---|---|---|
-| **App** (founder Settings tab, API) | `public.business_sandbox` table (`supabase/migrations/0004_business_sandbox.sql`) | m4b-04 | `src/lib/sandbox.ts` (`.from("business_sandbox")`, confirmed at lines 168, 346, 353, 360, 367), `src/app/api/businesses/[id]/sandbox/route.ts` (GET/PATCH), rendered by `src/components/workspace/SandboxStatusPanel.tsx` on the Settings tab |
-| **Runner** (execution: foreign-repo clone, Vercel deploy target, claim gate) | `public.businesses.sandbox_config` JSONB column (`supabase/migrations/0004_businesses_sandbox_config.sql` + `0005_business_sandbox_config_vercel_target.sql`) | m4b-05, m4b-06, and the unmerged m4b-07 | `tools/foreign_repo_workspace.py:213` (`sandbox_config = business.get("sandbox_config")`), `tools/vercel_tools.py:311-330` (`resolve_business_vercel_target(sandbox_config)`), `graph.py:250` (`sandbox_config = (business or {}).get("sandbox_config")`), and on the unmerged branch `tools/seeded_mission_queue.py:101` (claim-gate resolver) |
+| **Wrong-repo refusal** | `tests/test_foreign_repo_workspace.py` — **32 passed** | `is_bucks_ai_repo()` correctly rejected `bucks-ai/app` (the configured repo), `bucks-ai/bucks-ai`, and resisted case (`BUCKS-AI/BUCKS-AI`) and whitespace/slash (`' bucks-ai/bucks-ai/ '`) evasion; accepted `rangasatvik/testflow-demo`. `guard_business_repo_path()` raised `ForeignRepoGuardError` on the bucks-ai repo root. | **Verified live** (see caveat 2.1) |
+| **Secret-name-only storage** | `tests/test_business_sandbox.py` — **8 passed**; `src/lib/sandbox.test.ts` | The live `business_sandbox` row holds `github_token_secret_name: "TESTFLOW_GITHUB_TOKEN"` and `vercel_token_secret_name: "TESTFLOW_VERCEL_TOKEN"` — **names, no values**. Schema (`0004_business_sandbox.sql`) has *no column capable of holding a token*: only `repo_full_name`, `vercel_project_id`, and two `*_secret_name` TEXT columns. | **Verified live and structurally guaranteed** (see 4.1) |
+| **Claim-gate conditions** | `tests/test_seeded_mission_queue.py` — **58 passed** | `evaluate_business_mission_claim()` run against the **real queued mission** `ecdcfb9e`: `{'allowed': True}` — proving all four conditions hold on real data. Negative paths confirmed live: `missing_business_id`, `business_not_found`. | **Verified live** |
+| **Deploy targeting** | `tests/test_business_vercel_target.py` — **21 passed** | `resolve_business_vercel_target()` on the live config resolved to the **business's own** project `prj_u463pZOf1N5oDh7Le6KOfR0ToE22` via its own `TESTFLOW_VERCEL_TOKEN`. Partial and empty configs both returned `partial_sandbox_config` — **no bucks-ai fallback**. | **Verified live** |
 
-Confirmed by exhaustive grep: **zero** files under `src/app/` or `src/lib/`
-ever write to `businesses.sandbox_config` (only a type declaration exists,
-`src/types/database.ts:35,224`); **zero** files under `runner/langgraph/`
-ever read from or write to the `business_sandbox` table. No SQL trigger,
-view, or sync job bridges them (`grep sandbox_config
-supabase/migrations/*.sql` shows only the two independent column/table
-definitions, no bridging logic).
+### 2.1 Caveat: the path guard is an equality check, not a containment check
 
-**Live confirmation, read-only, against production:**
+`guard_business_repo_path` (`tools/foreign_repo_workspace.py:166-180`)
+compares `os.path.realpath(repo_path) == os.path.realpath(cfg.repo_path)`.
+Verified live: it refuses `/home/arnav/bucks-ai`, but **allows**
+`/home/arnav/bucks-ai/runner/langgraph` — a path inside the bucks-ai tree.
+
+This is **not currently exploitable**: `repo_path` is always constructed by
+`ensure_workspace` as `.workspaces/<business_id>`, and workspaces live under
+the bucks-ai tree by design (so the guard *cannot* simply reject subpaths
+without rejecting every legitimate workspace). The code's own docstring is
+honest about this, calling itself defense-in-depth. Recorded here because an
+auditor will ask, and because it becomes a real gap the moment `repo_path`
+is settable from anywhere but `ensure_workspace`.
+
+---
+
+## 3. The 2026-07-26 blockers: both closed
+
+### 3.1 Sandbox-config storage split — FIXED
+
+The prior report's Critical Finding was that the founder-facing Settings tab
+wrote to `public.business_sandbox` while every runner path read
+`public.businesses.sandbox_config`, with nothing syncing them — so
+configuring the UI had no effect on execution.
+
+Closed by **PR #91** (`f0fb877`, 2026-07-27), which added
+`tools/business_sandbox.py::fetch_business_sandbox` as the single runner-side
+read path and switched all consumers (`prepare_business_repo`,
+`evaluate_business_mission_claim`, `resolve_business_vercel_target`,
+`graph.py::_resolve_business_deploy_target`) onto it. `businesses.sandbox_config`
+is left in place but dead — a business with data only on the legacy column
+is treated as **unconfigured, with no silent stale-data fallback**. That
+design choice is correct and worth noting: it fails closed, not open.
+
+Verified this pass: `fetch_business_sandbox('931f4a57-…')` returns the live
+row, and the claim gate built on it returns `allowed: True`. The fix is real
+and is what made `m4b-08` possible.
+
+### 3.2 Claim-gate lift — MERGED
+
+`feature/m4b/claim-gate-lift` merged as PR #89 (`0fe44de`).
+`BUSINESS_EXECUTION_ENABLED` is now **`true`** in the live runner `.env`
+(previously unset/false). The gate is live and permitting real missions.
+
+---
+
+## 4. Migrations wiring (m4b-01): founder-applied, not auto-applied
+
+**Direct answer to the audit question: `0004` was founder-applied, not
+auto-applied. The runner's automated path has never fired in production.**
+
+Live `_runner_migrations` ledger, read this pass:
+
 ```
-GET business_sandbox?select=*                                  -> 200 []   (zero rows, ever)
-GET businesses?select=id,idea_name,sandbox_config&id=eq.ebad9506-...
-    -> {"id":"ebad9506-...","idea_name":"TestFlow AI","sandbox_config":null}
+0001_runner_migrations.sql                      2026-07-22T19:51:44Z  manual-apply-2026-07-22
+0002_agent_runs_cost_duration.sql               2026-07-22T19:51:44Z  manual-apply-2026-07-22
+0003_missions_runner_target.sql                 2026-07-22T19:51:44Z  manual-apply-2026-07-22
+0004_business_sandbox.sql                       2026-07-22T19:51:44Z  manual-apply-2026-07-22
+0004_businesses_sandbox_config.sql              2026-07-22T19:51:44Z  manual-apply-2026-07-22
+0005_business_sandbox_config_vercel_target.sql  2026-07-22T19:51:44Z  manual-apply-2026-07-22
 ```
-So concretely: **a founder who fully fills in the Settings tab for a
-business today would see "configured" in the UI, and the runner would still
-never see it** — `prepare_business_repo`, `resolve_business_vercel_target`,
-and the (unmerged) claim gate all resolve `sandbox_config` from `businesses`
-directly, not from the table the UI writes to. This was not caught by any
-existing test because `tests/test_foreign_repo_workspace.py` and
-`tests/test_business_vercel_target.py` construct their `business` fixture
-dicts with a literal `sandbox_config` key by hand (mocking the runner's own
-assumption), and `src/lib/sandbox.test.ts` / the RLS integration test mock
-or hit only the `business_sandbox` table — neither suite's mocks match the
-other side's actual behavior, so the gap between them is invisible to CI.
 
-This is the actual root blocker of the M4 done-when claim, more fundamental
-than any single missing credential: it must be fixed (pick one storage
-location — recommend the `business_sandbox` table, since it's RLS-scoped
-to the owning user and already has the founder-facing UI built on top of it;
-have the runner read from it instead of `businesses.sandbox_config`, or add
-an explicit sync step) before any live end-to-end demo, including a re-run
-of `m4b-08`, can succeed even with every credential in hand.
+All six share an identical `applied_at` and a **sentinel `sha256` of
+`manual-apply-2026-07-22`** — a literal string, not a computed hash. This is
+the signature of founder application via the Supabase SQL Editor.
+`AUTO_APPLY_MIGRATIONS` remains **unset** (defaults false, `config.py:178-180`).
 
-## m4b-08: what was and wasn't demonstrated
+The automated path itself is built and tested — `check_pending_migrations_if_needed`
+(`graph.py:350-423`), wired into the loop, with `tests/test_migrations_wiring_node.py`
+(**11 passed**). It always logs a loud `migrations_pending` event regardless
+of the auto-apply flag. It is correctly gated off by default; it has simply
+never run for real. m4b-01 is therefore **code-complete and unproven in
+production**.
 
-`m4b-08`'s own resource request (`outbox/m4b-08-execute-end-to-end-demo_resource_request.txt`)
-lists, unresolved:
-- A merged PR for `feature/m4b/claim-gate-lift` (still open, per above)
-- A scoped GitHub token for TestFlow AI's own repo (not in `.env`)
-- A scoped Vercel token for TestFlow AI's own Vercel project (not in `.env`)
-- A real GitHub repo and Vercel project for TestFlow AI (business_id
-  `ebad9506-aaa5-4235-88ab-0ed526e036a2`)
-- A populated `business_sandbox` row for it
-- `BUSINESS_EXECUTION_ENABLED=true` (blocked on the merge above)
-- A human click on Execute in the live UI
+### 4.1 Two live findings on migrations
 
-**Live confirmation that none of this has happened:** production
-`business_sandbox` has zero rows; `businesses.sandbox_config` is `null` for
-TestFlow AI; the production `missions` table has **no `runner_target =
-"business"` mission ever created for TestFlow AI** — the only
-`business`-targeted mission in the entire table (`d49b2a95-...`, created
-2026-07-15, `status: queued`) belongs to a different business
-(`931f4a57-...`, the M4a-era Execute demo) and has sat queued and unclaimed
-for 11 days, which is itself live proof that the claim gate holds closed
-correctly under real conditions — exactly the "queued forever" behavior
-M4a's report flagged as a pending product decision, still true today.
-`AUTO_APPLY_MIGRATIONS`, `BUSINESS_EXECUTION_ENABLED` are both **unset**
-(default false) in the live runner `.env`. No screenshots or artifacts exist
-under `outbox/` for `m4b-08` beyond its prompt and resource-request files —
-it never progressed far enough to produce any.
+1. **`0006` is un-applied in production.** `0006_deprecate_businesses_sandbox_config.sql`
+   does not appear in the ledger. Impact is **nil** — its only executable
+   statement is a `COMMENT ON COLUMN` marking `businesses.sandbox_config`
+   deprecated. No schema or behavior depends on it. But it means the ledger
+   and the migrations directory are out of sync, and the un-applied state
+   is invisible unless the loop runs and logs `migrations_pending`.
+2. **Two migrations share the `0004` prefix** — `0004_business_sandbox.sql`
+   and `0004_businesses_sandbox_config.sql`. Both applied, so no live
+   breakage, but the numbering scheme no longer guarantees a total order.
+   Any future tooling that sorts by prefix will have ambiguous ordering.
 
-**Net: the M4 pivot's live done-when has zero real-world executions to
-point to.** Everything below this point is unit-test or static-code
-verification, not a live demonstration.
+---
 
-## Test regression found and fixed this pass
+## 5. Execute CTA and approvals UX (m4b-02)
 
-`tests/test_foreign_repo_workspace.py`'s node-level tests
-(`test_node_business_not_found_hard_fails`,
-`test_node_success_overrides_repo_path`,
-`test_node_forbidden_repo_hard_fails`,
-`test_node_missing_secret_blocks_and_writes_resource_request`,
-`test_node_missing_secret_fulfilled_retries_successfully`,
-`test_node_no_sandbox_config_blocks_as_resource_request`) call
-`graph.resolve_business_repo_if_needed` with a hand-built task dict that
-never set `runner_target`. `0003ad4` (2026-07-22, already merged to `main`,
-unrelated to this task) added an early `if task.get("runner_target", "self")
-!= "business": return state` guard to that function — correct behavior for
-the real code path (self-targeted dev tasks were being wrongly routed
-through business-repo resolution), but it made all 6 tests short-circuit
-before ever reaching the logic they claim to test, so they failed once
-actually run. Fixed by adding `"runner_target": "business"` to each test's
-task dict (`tests/test_foreign_repo_workspace.py`); no production code
-changed. Verified: `python -m pytest tests/test_foreign_repo_workspace.py
--q` → 31 passed; full suite `python -m pytest tests/ -x -q` → **1780
-passed**.
+Both shipped and merged (PR #85), verified present this pass:
 
-## Containment guarantees: status matrix
+- **Execute CTA**: `ExecutePanel` is imported and rendered as the primary
+  action in `src/components/workspace/tabs/OverviewTab.tsx:12,173`.
+- **Approvals empty-state disambiguation**: `approvals_schema_missing` is a
+  distinct typed state (`src/types/approval-ui.ts:4`) threaded through
+  `src/lib/approvals.ts:76,95` and `src/app/api/approvals/route.ts:24-29`,
+  rendered separately from a genuine "no approvals pending" by
+  `ApprovalsPanel.tsx`. Covered by `ApprovalsPanel.test.ts` and
+  `route.test.ts`.
+- **Sandbox config editing** was added subsequently (PRs #92, #93,
+  `38f6b43`/`544a9a6`) after the original UI shipped with no edit affordance
+  for already-configured fields — one of the six hours of founder debugging.
+  `SandboxStatusPanel.tsx` is the Settings-tab surface.
 
-| Guarantee | Task | Test coverage | Live proof | Status |
-|---|---|---|---|---|
-| **Wrong-repo refusal** (a business mission must never run with `repo_path` == the bucks-ai repo) | m4b-05 | `tests/test_foreign_repo_workspace.py` — 31 tests incl. `test_guard_raises_when_repo_path_equals_bucks_ai_repo`, `test_is_bucks_ai_repo_*`, `test_prepare_business_repo_forbidden_repo`, `test_node_forbidden_repo_hard_fails` | None — no business repo has ever been cloned | **Tested only** |
-| **Secret-name-only storage** (business_sandbox / sandbox_config store names, never token values) | m4b-04 | `src/lib/sandbox.test.ts`, `src/lib/supabase/rls.integration.test.ts` (live, 6 passed against real Supabase) | Live schema probe: `business_sandbox` and `businesses.sandbox_config` columns are all TEXT/JSONB name fields; zero rows contain anything resembling a token (table is empty; column is null) | **Verified at the schema level** — but see Critical Finding: this data never reaches the runner regardless |
-| **Claim-gate conditions** (`BUSINESS_EXECUTION_ENABLED` + full sandbox + resolvable secrets, all four, before a business mission is claimed) | m4b-07 | `tests/test_seeded_mission_queue.py` on `feature/m4b/claim-gate-lift` — 10 net new tests (57 vs 47 on `main`), incl. every refusal path (`test_claim_refused_when_*` ×6) and the full-config claim path (`test_claim_allowed_when_fully_configured`); full suite 1790 passed on that branch | None — branch not merged, `BUSINESS_EXECUTION_ENABLED` unset in prod, so this code has never run against real data | **Tested only, not merged, not live** |
-| **Deploy targeting** (deploys/polling must target the business's own Vercel project+token, never bucks-ai's, and never silently fall back) | m4b-06 | `tests/test_business_vercel_target.py` — 20 tests incl. `test_deploy_if_needed_refuses_fallback_on_partial_sandbox_config`, `test_resolve_business_target_never_returns_bucks_ai_fallback` | None — no business has ever had a `vercel_project_id` configured | **Tested only** |
+---
 
-All four guarantees are real at the unit-test level (mocked git/HTTP/Vercel
-API, deterministic). None has fired against a live repo, live deploy, or
-live claim, because the Critical Finding above means no business's sandbox
-config has ever actually reached the runner's read path, and (independently)
-`BUSINESS_EXECUTION_ENABLED` has never been on in production.
+## 6. Test suite status
 
-## Migrations wiring (m4b-01): founder-applied, not auto-applied
+| Suite | Result |
+|---|---|
+| Runner — `python -m pytest tests/ -q` | **2282 passed**, 0 failed |
+| App — `npx vitest run` | **367 passed, 8 skipped**, 1 file failed (flaky, see below) |
 
-Code (merged, PR #84): `graph.py:350-423`
-(`check_pending_migrations_if_needed`), wired between
-`check_launch_readiness_if_needed` and `load_next_task`
-(`graph.py:2876,2920`). Runs every loop start when `DATABASE_URL` or
-`DIRECT_DATABASE_URL` is configured (confirmed set in prod `.env`). Always
-logs a loud `migrations_pending` event listing un-applied files, regardless
-of the auto-apply flag. Tests: `tests/test_migrations_wiring_node.py` (11
-tests) + the migration-specific subset of `tests/test_db_tools.py` (42
-tests) — pending-detection, auto-apply happy path, guard-blocked refusal,
-non-additive refusal, no-database no-op. All pass.
+**One flaky test, characterized not dismissed.**
+`src/lib/supabase/rls.integration.test.ts` failed in the full run with
+`Hook timed out in 10000ms` (suite duration 26.7s), then **passed in
+isolation: 6 passed, 1 skipped, 5.5s**. It is a live-network test against
+real Supabase with a 10s hook timeout that is insufficient under full-suite
+load. This is a genuine flake, not a logic failure — but it means
+`npx vitest run` is not reliably green, and the guarantee it covers
+(cross-tenant RLS denial on `business_sandbox`) is therefore not
+continuously enforced. **Recommended fix:** raise the hook timeout for this
+file, or gate it behind an explicit integration-test flag so the default
+suite is deterministic. Not changed in this pass — a verification pass
+should not alter what it measures.
 
-`AUTO_APPLY_MIGRATIONS` defaults `false` (`config.py:178-180`) and is
-**unset in the live `.env`**, so this environment has never taken the
-auto-apply branch for real. (Do not confuse with `AUTO_APPLY_SQL`,
-`config.py:166-167` — a separate, pre-existing flag for worker-issued ad hoc
-SQL, defaulting `true`; unrelated to migration files.)
+---
 
-**Live confirmation of what actually happened:** all 6 migrations
-(`0001_runner_migrations` through `0005_business_sandbox_config_vercel_target`)
-are present in the production `_runner_migrations` ledger, every row with
-identical `applied_at` (`2026-07-22T19:51:44Z`) and `sha256:
-"manual-apply-2026-07-22"` — a sentinel value, not a computed hash, matching
-the header comment in the (untracked, local-only)
-`supabase/APPLY_ALL_PENDING_2026-07-22.sql` combined script found in the
-working tree. **This is founder-manual application via the SQL Editor, not
-the runner's automated path** — the automated path exists, is unit-tested,
-and is correctly gated off by default, but has never fired in production.
-Live schema now confirms: `missions.runner_target` exists,
-`agent_runs.cost_usd`/`duration_seconds` exist, `business_sandbox` exists
-(RLS enabled, 0 rows), `businesses.sandbox_config` exists (JSONB, null for
-TestFlow AI) — all of M4a's and M4b's schema gaps are closed at the schema
-level.
+## 7. Security finding: token materialized in plaintext on disk
 
-Also checked, since the local `CHAT_HANDOFF_2026-07-11.md` (uncommitted,
-founder's own working notes, not part of this task's scope) records a
-2026-07-22 incident requiring transient DB errors to fail open rather than
-halt the loop: `check_pending_migrations_if_needed`'s error path
-(`graph.py:373-383`) only logs an `"error"` event and returns state without
-ever setting `stop_reason` — already matches that doctrine. No gap found
-here; noted for completeness, not fixed (nothing needed fixing).
+**Severity: low blast radius, must still be rotated.**
 
-## Execute CTA and approvals UX (m4b-02)
+The business workspace's git remote embeds a live GitHub token in cleartext:
 
-Merged (PR #85, `978102e`). `ExecutePanel` promoted to the primary CTA in
-`OverviewTab.tsx`; approvals empty-state disambiguation shipped in
-`src/lib/approvals.ts` / `src/app/api/approvals/route.ts` /
-`src/components/workspace/tabs/ApprovalsPanel.tsx` — `approvals_schema_missing`
-is a distinct, typed state (`src/types/approval-ui.ts`) rendered as an amber
-human-required notice, separate from genuine "No approvals pending." Given
-this pass's live probe confirms the `approvals` table now exists in
-production (`GET approvals?select=id&limit=1` → `200`, one real row) — the
-schema-missing branch is currently dormant in prod (a good sign, not a
-gap), and the "genuinely empty" / real-approvals-present branches are the
-ones live traffic will hit. Unit tests (`ApprovalsPanel.test.ts`,
-`route.test.ts`) and the e2e extension in `e2e/business-tabs.spec.ts` all
-pass as part of the 370-passed app suite (see below).
+```
+runner/langgraph/.workspaces/931f4a57-…/.git/config
+  → https://x-access-token:ghp_<REDACTED>@github.com/rangasatvik/testflow-demo.git
+```
 
-## What was verified live in this pass
+**Blast radius, verified this pass:**
+- `.workspaces/` is gitignored (`.gitignore:72`) and **untracked** —
+  `git ls-files` returns nothing. The token **never entered git history**.
+- No hardcoded `ghp_` values exist in tracked source. The only matches are a
+  documentation placeholder, test fakes, and the redaction regex in
+  `tools/slack_approvals.py:58`.
 
-1. **Full runner suite**, after the fix above: `python -m pytest tests/ -x
-   -q` → **1780 passed**, 0 failed.
-2. **Full app suite**: `npx vitest run` → **370 passed, 2 skipped**, 0
-   failed, including the live RLS integration test for `business_sandbox`
-   (`src/lib/supabase/rls.integration.test.ts` → 6 passed, 1 skipped,
-   against real Supabase).
-3. **`feature/m4b/claim-gate-lift` branch, standalone**: `python -m pytest
-   tests/ -x -q` → **1790 passed**, confirming m4b-07's own code is correct
-   and ready to merge independent of the sandbox-config-split finding above.
-4. **Read-only live probes against production Supabase**
-   (`SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` from `.env`, no writes):
-   `_runner_migrations` ledger contents, `missions.runner_target` column
-   existence and values, `agent_runs.cost_usd`/`duration_seconds` existence,
-   `business_sandbox` row count, `businesses.sandbox_config` value for
-   TestFlow AI, `approvals` table existence, full `missions` table contents
-   (7 rows) cross-referenced by `business_id`/`runner_target`/`status`.
-5. **Static verification of every containment guarantee's actual code path**
-   (not just its tests): read `tools/foreign_repo_workspace.py`,
-   `tools/vercel_tools.py`, `graph.py` (`resolve_business_repo_if_needed`,
-   `check_pending_migrations_if_needed`), `src/lib/sandbox.ts`,
-   `src/app/api/businesses/[id]/sandbox/route.ts`, and the unmerged
-   `tools/seeded_mission_queue.py` claim-gate resolver, line-by-line against
-   their own tests to confirm the tests exercise the real logic (this is how
-   the Critical Finding and the test regression were both found — neither
-   was visible from a green test run alone).
-6. **`src/lib/mission-compiler.ts` diff on the unmerged branch**
-   (`main...feature/m4b/claim-gate-lift`) read in full: confirms the
-   fresh-repo starter-task rewrite (landing page section, analytics stub,
-   deploy) matches m4b-07's spec exactly.
+**This does not contradict the secret-name-only guarantee**, which is about
+the *database* — and there it holds structurally (§2). But an auditor should
+understand the distinction precisely: **names-only in Supabase, plaintext on
+disk.** The token must materialize somewhere to clone; embedding it in the
+remote URL persists it in `.git/config` for the workspace's lifetime, which
+is broader than necessary.
 
-## What could not be verified
+The code shows real awareness here — `_run_git` deliberately avoids
+`tools.shell_tools.run_command` and redacts the token from all logged output,
+precisely because git echoes credentialed URLs on failure
+(`tools/foreign_repo_workspace.py:94-104`). The remaining gap is persistence
+at rest, not logging.
 
-- **The M4 pivot itself, live**: a business mission created via Execute,
-  claimed by the runner, executed against a real foreign repo, deployed to
-  a real business Vercel project, smoke-checked, and reflected in the
-  Operating Team UI. Not possible in this pass: `m4b-07` isn't merged,
-  `BUSINESS_EXECUTION_ENABLED` is off, no business has ever had sandbox
-  config populated on the runner's read path, and no credentials for
-  TestFlow AI's repo/Vercel project exist in `.env`. Per this task's own
-  scope (verification/reporting, not resource provisioning or infra setup),
-  none of these were provisioned as part of this pass.
-- **Wrong-repo refusal, secret resolution, deploy targeting, and the claim
-  gate, live.** All four are unit-tested only, as detailed in the matrix
-  above; none has run against a real repo, real Vercel project, or real
-  claim attempt.
-- **Whether fixing the sandbox-config storage split alone is sufficient**
-  for `m4b-08` to succeed once merged/credentialed — this pass did not
-  attempt the fix (a cross-stack schema/code decision, not a small patch,
-  and outside a verification task's scope), only diagnosed and documented
-  it precisely enough to be actionable.
+**Recommended:** rotate the token in `TESTFLOW_GITHUB_TOKEN`; prefer a
+credential helper or per-invocation `-c http.extraheader` over an embedded
+remote URL.
 
-## Recommended M5 business selection criteria, grounded in what the pipeline can build today
+---
 
-`STRATEGY.md` §6.2 already records a founder decision (2026-07-21): the
-confirmed first M5 wedge is **the security-hardening sprint service**,
-scored clean against all seven §6.1 criteria — including criterion 4,
-"buildable by the engine today (fits the M4b pipeline)."
+## 8. The false-completion problem
 
-This pass's finding: **criterion 4 is not actually true yet for that
-specific product**, independent of the credential/merge blockers above.
-Reading the mission-compiler output that will actually run once the pipeline
-unblocks (`src/lib/mission-compiler.ts` on `feature/m4b/claim-gate-lift`):
-every business mission compiles to exactly three fixed starter tasks — a
-landing-page section, an analytics stub, and a deploy — generic Next.js
-scaffold work, not a security-hardening deliverable. The real asset that
-would make the hardening-sprint wedge buildable (M1's auth/zod/rate-limit/
-RLS/security-headers/route-inventory-test playbook) exists and is
-battle-tested against the bucks-ai repo itself, but nothing wires it into
-`mission-compiler.ts` for foreign business repos — that wiring is
-explicitly M4d's scope (per `STRATEGY.md` §8 and the M4c/M4d plan recorded
-in `CHAT_HANDOFF_2026-07-11.md`), not yet built.
+The most audit-relevant defect found. Task states in
+`runner/langgraph/.runtime/tasks.local.json`:
 
-Recommendation:
-1. **Do not select or launch an M5 business against the current pipeline.**
-   Treat this report's Critical Finding as a P0 blocker ahead of any M5
-   work: fix the sandbox-config storage split (pick one location — recommend
-   keeping `business_sandbox`, since RLS and the founder UI are already
-   built on it, and pointing the runner's reads there instead).
-2. **Merge `feature/m4b/claim-gate-lift`** (m4b-07) — it is complete,
-   tested, and blocking `m4b-08` for no remaining code reason.
-3. **Re-run `m4b-08` end-to-end** against a real, disposable test repo
-   (TestFlow AI or a fresh throwaway) once (1) and (2) land, before
-   `BUSINESS_EXECUTION_ENABLED` is ever set `true` against a real customer's
-   repo. This is the one thing that would let this report's "what could not
-   be verified" section collapse to nothing.
-4. **Re-score the security-hardening wedge's criterion 4 specifically**
-   once M4d (hardening-by-default in the mission compiler) lands — today
-   the pipeline can build a generic SaaS landing page for any business, not
-   a hardening sprint for this one. Until then, criterion 4 should read
-   "fails" for this wedge, not "clean," on the founder's own rubric.
-5. Everything else in `STRATEGY.md` §6.1's scoring algorithm remains sound
-   and unaffected by this pass's findings — this is a capability-readiness
-   correction, not a doctrine change.
+| Task | Status | Summary |
+|---|---|---|
+| ai-infra-01 | complete | *(empty)* |
+| ai-infra-02 | complete | `created none; modified none` |
+| **ai-infra-03** (deploy) | **complete** | `created none; modified none; Check: unknown` |
+| ai-infra-04 | complete | *(GTM summary)* |
+| ai-infra-05 | complete | **copy of ai-infra-04's summary — wrong title** |
+| ai-infra-06 | complete | `created docs/competitive-risk-mitigation…` |
+| ai-infra-07 | complete | *(empty)* |
+| ai-infra-08 | complete | `created none; modified none; Check: pass` |
 
-## Known limitations
+All 8 marked `complete`; only 2 carry any evidence of work; one (`ai-infra-05`)
+carries *another task's* summary. Meanwhile the repo holds 5 real commits.
 
-- This report reflects a single point-in-time, read-only snapshot
-  (2026-07-26). No production data was written; the one code change made
-  during this pass (the 6-test fixture fix) touches only
-  `tests/test_foreign_repo_workspace.py`.
-- The Critical Finding's fix is deliberately not attempted here — it's a
-  cross-stack schema/code decision (which storage wins, and how existing
-  code that reads the other one gets updated) that belongs to its own task,
-  not a verification pass.
-- `CHAT_HANDOFF_2026-07-11.md` and
-  `supabase/APPLY_ALL_PENDING_2026-07-22.sql` are pre-existing, uncommitted
-  local files (founder's own working notes and the manual-apply script
-  referenced above) — read for context in this pass, left untouched, not
-  part of this task's file changes.
-- The M4a report's still-open item ("a business mission sits queued forever
-  with no UI path out") remains true and is now corroborated by a second,
-  independent live example (`d49b2a95-...`, 11 days queued as of this pass)
-  — still an open product decision, not addressed by M4b.
-- `launch_readiness_scorecard.txt` in `outbox/` (dated 2026-07-26, same
-  session) separately reports `credentials_available: 0.80` — "missing:
-  Anthropic / Claude" — unrelated to this task's findings, not investigated
-  further as out of scope.
+**Both facts are true simultaneously**: real autonomous work happened, *and*
+the ledger cannot tell you which task did it or whether a task did anything.
+The runner marks `complete` on worker exit-success, not on evidence of work.
+
+**For the proof corpus this means: cite the customer repo's git history,
+never the task ledger.** This is M4c item 10(b), and the founder's own note
+is the right framing — *"silent false success is worse than a crash; every
+other failure was loud, this one looked like a win."*
+
+`ai-infra-03` additionally carries a `dedupe_note` recording that a prior
+`failed` state was a transient Supabase lookup failure during degraded
+network, requiring hand-editing of runtime JSON to recover (M4c item 11;
+partially mitigated by the `fetch_business_by_id` retry, which this pass
+confirms is present at `tools/foreign_repo_workspace.py:183`).
+
+---
+
+## 9. Recommended M5 business selection criteria
+
+`STRATEGY.md` §6.2 records the founder decision (2026-07-21) that the first
+M5 wedge is the **security-hardening sprint service**, scored clean on all
+seven §6.1 criteria — including criterion 4, *"buildable by the engine today."*
+
+**Criterion 4 is still not satisfied, and `m4b-08` did not change this.**
+
+Reading `src/lib/mission-compiler.ts` as it stands, every business mission
+compiles to the same fixed generic starter set: `Build landing page section`
+(:90), `Wire analytics stub` (:103), `Deploy the scaffolded app` (:119),
+`Execute go-to-market` (:135), `Mitigate top risk` (:147). The file's own
+header comment (:15-16) states the intent plainly — *"concrete, self-contained
+starter work… rather than bucks-ai-specific tasks."*
+
+**A trap for the reader, worth stating explicitly:** the AI Infra demo built
+a *security assessment tool* and produced `docs/security-best-practices.md`.
+That is the **business idea** being security-themed. It is **not** the engine
+applying its own hardening playbook to a customer's repo. Those are different
+capabilities, and only the first exists today.
+
+The asset that would make the hardening wedge buildable — M1's
+auth/zod/rate-limit/RLS/security-headers/route-inventory playbook — exists
+and is battle-tested against bucks-ai itself, but **nothing wires it into
+`mission-compiler.ts` for foreign repos**. That wiring is M4d scope.
+
+### Recommendations
+
+1. **Do not launch an M5 business until M4c item 12 (worker dispatch) lands.**
+   This is the binding constraint, not business selection. Until a business
+   task can execute unattended with cwd in the right workspace, every M5
+   engagement requires a founder babysitting session — which does not scale
+   to a customer and cannot be sold.
+2. **Add "positive completion evidence" (M4c item 10b) as a hard gate.**
+   Selling execution against a customer repo while the system can report
+   success for work it did not do is the single largest reputational risk in
+   the current design.
+3. **Re-score criterion 4 for the hardening wedge as `fails`, not `clean`,**
+   until M4d ships. This is a capability-readiness correction on the
+   founder's own rubric, not a doctrine change.
+4. **Revise selection criteria to match demonstrated capability.** What the
+   pipeline provably builds today is a *greenfield scaffold into an empty or
+   near-empty customer repo*: React frontend, Express/Postgres backend,
+   Docker, deploy config, analytics stub. Therefore prefer, for M5:
+   - **Greenfield over brownfield.** All five commits landed in a fresh repo.
+     The engine has **never** modified a mature codebase with existing
+     conventions, and nothing in this corpus supports that claim.
+   - **Buyers who accept feature branches.** The engine pushed 9 branches and
+     merged none; the repo's `origin/HEAD` points at a feature branch, not
+     `main`. There is no demonstrated merge/review path.
+   - **Tolerant of a manual deploy step**, until item 12 lands.
+   - **Small, well-specified scope** matching the five fixed compiler tasks.
+5. **Rotate `TESTFLOW_GITHUB_TOKEN`** (§7) before this repo is shown externally.
+6. **Apply `0006`** and resolve the duplicate-`0004` numbering (§4.1).
+7. **De-flake the RLS integration test** (§6) so cross-tenant denial is
+   continuously enforced rather than intermittently skipped.
+
+---
+
+## 10. What could not be verified
+
+Stated explicitly, per the audit standard for this document:
+
+- **Unattended end-to-end execution.** Never demonstrated. The deploy was
+  manual; worker dispatch for business tasks is broken.
+- **Wrong-repo refusal on the DB-sourced path.** `prepare_business_repo`
+  reads `repo_full_name` from `business_sandbox`, so exercising the
+  `forbidden_repo` branch live would require writing a hostile value to
+  production. Refused as out of scope for a read-only pass. Covered by unit
+  tests and by live verification of both underlying primitives (§2).
+- **The runner's auto-apply migration path.** Never fired in production;
+  unit-tested only.
+- **Which task produced which commit.** Unrecoverable from the ledger (§8).
+- **Whether the deployed site is served from the runner's commits.** The
+  HTTP 200 and matching title are strong circumstantial evidence, but the
+  founder's notes record an earlier incident of a Vercel project not being
+  git-connected and serving stale code. Not re-verified at the deployment-SHA
+  level this pass.
+- **Any claim about repeatability.** `m4b-08` is **n=1**, on one business,
+  one repo, with six hours of human intervention. Nothing here supports a
+  claim about the success rate of a second attempt.
+
+---
+
+## 11. Known limitations of this report
+
+- Point-in-time snapshot, 2026-08-03, read-only. No production writes.
+- Live probes used the service-role key and therefore bypass RLS; RLS
+  enforcement itself is evidenced by the integration test (§6), not by these
+  probes.
+- Task-ledger data is read from local `.runtime/tasks.local.json`, which is
+  gitignored, local-only, and has been hand-edited during incident recovery
+  (§8) — treat it as narrative, not as an audit record.
+- `CHAT_HANDOFF_2026-07-11.md` is the founder's working notes, not a
+  verified artifact; where this report cites it (the six-hour debugging
+  session, the manual deploy, dispatch root cause) the claims are the
+  founder's own and are corroborated where possible by prompt artifacts and
+  task state, but the transcripts themselves were not re-read this pass.
+- The build-metric correction (§1.1) supersedes the handoff's headline
+  numbers; if any external material already cites "1,819 insertions / 19
+  files," it should be updated.

@@ -15,6 +15,7 @@ Covers:
 import os
 import sys
 import traceback
+from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -376,6 +377,13 @@ def _disable_other_guards():
     graph.cfg.codex_usage_limit_guard_enabled = False
     graph.cfg.claude_subscription_cooldown_enabled = False
     graph.cfg.seeded_mission_queue_enabled = True
+    # The M4c completion-evidence gate resolves claimed files against
+    # cfg.repo_path. That defaults to a hard-coded developer home directory,
+    # which exists locally and does NOT exist on a CI runner — so _REAL_FILE
+    # was found here and missing in CI, and the run was (correctly, given the
+    # inputs it saw) blocked instead of completed. Pin repo_path to this
+    # checkout so the test asserts the gate's logic, not the machine's layout.
+    graph.cfg.repo_path = str(_REPO_ROOT)
 
 
 def test_resolve_model_starts_run_for_seeded_task():
@@ -407,12 +415,22 @@ def test_resolve_model_skips_non_seeded_task():
         _restore_agent_run_sync(orig)
 
 
+#: A path that really exists under ``cfg.repo_path``. The M4c completion
+#: evidence gate resolves claimed files against disk before a run may sync as
+#: complete, so a made-up "a.py" would now (correctly) block instead.
+_REAL_FILE = "runner/langgraph/graph.py"
+
+#: This checkout's root, derived from __file__ rather than from cfg.repo_path's
+#: developer-machine default — see the note in _disable_other_guards().
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
 def _seeded_state(success, run_id="run-uuid-9", api_cost=1.23, elapsed=42.0):
     return RunnerState(
         current_task_id="task-1",
         current_task=dict(_SEEDED_TASK),
         worker_result={"success": success, "api_cost": api_cost, "error": None if success else "boom"},
-        worker_summary={"files_modified": ["a.py"]} if success else None,
+        worker_summary={"files_modified": [_REAL_FILE]} if success else None,
         worker_elapsed_seconds=elapsed,
         current_agent_run_id=run_id,
     )
@@ -432,7 +450,7 @@ def test_update_logs_completes_run_on_success():
             assert run_id == "run-uuid-9"
             assert kw["cost_usd"] == 1.23
             assert kw["duration_seconds"] == 42.0
-            assert kw["output"] == {"files_modified": ["a.py"]}
+            assert kw["output"] == {"files_modified": [_REAL_FILE]}
             assert calls["fail"] == []
             assert out.current_agent_run_id is None
         _with_stubbed_task_io(body)

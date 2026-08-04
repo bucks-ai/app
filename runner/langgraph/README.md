@@ -244,6 +244,49 @@ Files are collected from **both** the git diff and the worker's summary so a wor
 
 ---
 
+## Completion Evidence Gate (M4c)
+
+> **Completion must be earned with positive, independently verified evidence. A worker whose output is a question is blocked by definition.**
+
+The runner used to mark a task complete on a single signal: the worker process exited successfully. Nothing checked whether the worker had actually *done* anything. `ai-infra-03` ("Deploy the scaffolded app") was marked complete **twice** while the worker had refused and deployed nothing — `deploy_result` was null, zero files created or modified, and the final output was a question ("do you want me to: 1. Execute it... 2. Just summarize..."). That false success was then synced to Supabase, leaving the mission marked done with its core deliverable missing.
+
+Silent false success is worse than a crash. This gate runs in `update_logs_and_state` — the only place that can say "complete" — and applies two independent tests:
+
+**1. Refusal / question / no-op detection** (`detect_refusal`)
+
+| Kind | Blocks on its own? | Examples |
+|------|--------------------|----------|
+| `refusal` | yes | "I am not going to", "I cannot complete", "I did not actually deploy" |
+| `question` | yes | "do you want me to", "should I proceed", output whose final line ends in `?` |
+| `no_op` | no — deferred to evidence | zero files created **and** zero modified, `Commit Result: skipped`, "no new commit" |
+
+Patterns inside fenced code blocks are ignored, so a quoted sample does not read as the worker's own voice.
+
+**2. Positive evidence** (`verify_evidence`), verified against the world rather than the worker's self-report:
+
+| Evidence | Required by | How it is verified |
+|----------|-------------|--------------------|
+| `files` | — | Claimed paths must exist on disk under the repo path |
+| `commit` | — | Sha must exist as an object **and** be contained in an `origin/` branch (`nothing_to_commit` never counts — that sha predates the task) |
+| `artifact` | all non-deploy tasks | Satisfied by *either* `files` or `commit` |
+| `deployment` | deploy/release tasks (by type, or a deploy **verb** in the title/description) | Deployment must have an id/URL, have reached READY, and answer a real HTTP request (<500) |
+
+Deploy classification is verb-shaped: "Deploy the scaffolded app" owes a live deployment, but "fix the deploy script" or "document the release process" are tasks *about* deploy tooling and owe only an artifact. When deploys are structurally unavailable (`AUTO_DEPLOY=false` or no `VERCEL_TOKEN`), `deploy_if_needed` never runs, so a deploy task falls back to owing an artifact rather than being blocked by a gate it could never satisfy — it still has to prove *something*, so a refusal is caught either way. A **business mission** deploy task is exempt from that fallback: it deploys with the business's own scoped token, never the runner's, so a missing `VERCEL_TOKEN` says nothing about whether its deploy was possible — it always owes a live deployment.
+
+Evidence beats self-report in **both** directions: a `Commit Result: skipped` does not block a task whose commit is provably in the remote, and a summary full of confident claims does not complete a task whose files are not on disk.
+
+A task that fails the gate is marked **blocked, never complete and never failed** — nothing broke, the work was simply never done, so the failure counters stay untouched (a refusal must not trip the circuit breaker) and the block is task-scoped so the loop continues. Blocked tasks are never synced to Supabase as done.
+
+**Config:**
+- `COMPLETION_EVIDENCE_GATE_ENABLED=true` (default) — enable the gate. There is deliberately **no warn-only mode**: the definition-of-done gate had one, defaulted to it, and that is precisely how `ai-infra-03` shipped twice.
+
+**Logged events:**
+- `task_completion_evidence_verified` — the task earned its completion.
+- `task_completion_evidence_missing` — no verifiable evidence (task marked blocked). Routed to Slack.
+- `task_completion_no_op_overridden_by_evidence` — the summary reported no work but the evidence proved otherwise; usually a worker under-reporting itself.
+
+---
+
 ## Roles
 
 | Component | Role |
@@ -334,6 +377,7 @@ Copy `.env.example` to `.env` and fill in:
 | `AUTO_APPLY_MIGRATIONS` | Auto-apply pending `supabase/migrations/*.sql` files at loop startup (default: false — see **Startup Migration Check**). Un-applied migrations are always logged loudly via `migrations_pending` regardless of this flag; setting it `true` additionally applies additive-only, guard/gate-passing files automatically. |
 | `ACCEPTANCE_CRITERIA_GATE_ENABLED` | Validate that tasks include concrete acceptance criteria before executing the worker (default: true) |
 | `ACCEPTANCE_CRITERIA_STRICT_MODE` | Block task execution when criteria are missing; false (default) logs a warning but proceeds |
+| `COMPLETION_EVIDENCE_GATE_ENABLED` | Require positive, independently verified evidence (a file on disk, a commit in the remote, a deployment that answers) before a task may be scored complete; refusals, questions, and unproven no-ops are marked blocked instead (default: true — see **Completion Evidence Gate**) |
 | `CLAUDE_SUBAGENT_PACK_ENABLED` | Inject specialised subagent context into Claude worker prompts based on task type/title (default: true) |
 | `CLAUDE_HOOKS_SAFETY_PACK_ENABLED` | Install and validate runner-safety PreToolUse hooks in .claude/settings.json before each Claude CLI dispatch (default: true) |
 | `CLAUDE_HOOKS_SAFETY_PACK_AUTO_INSTALL` | Auto-write the safety hook when it is missing; false only validates and logs a warning (default: true) |
