@@ -6,7 +6,7 @@ import { HomeHero } from "@/components/landing/HomeHero";
 import { WorkflowSteps } from "@/components/landing/WorkflowSteps";
 import { ExecutionLoop } from "@/components/landing/ExecutionLoop";
 import { SystemPreview } from "@/components/landing/SystemPreview";
-import { AgentTeamPreview } from "@/components/landing/AgentTeamPreview";
+import { PhaseExplorer } from "@/components/landing/PhaseExplorer";
 import { ClosingCTA } from "@/components/landing/ClosingCTA";
 
 export default function LandingPage() {
@@ -22,7 +22,7 @@ export default function LandingPage() {
         <WorkflowSteps />
         <ExecutionLoop />
         <SystemPreview />
-        <AgentTeamPreview />
+        <PhaseExplorer />
         <ClosingCTA />
       </main>
       <Footer />

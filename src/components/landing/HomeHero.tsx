@@ -20,7 +20,11 @@ export function HomeHero() {
     // No local background or aurora: <PageField /> owns the atmosphere for the
     // whole route, so the hero dissolves into the page instead of sitting in
     // its own lit box.
-    <section className="relative px-6 pb-24 pt-36 sm:pb-32 sm:pt-44">
+    //
+    // overflow-clip: the decorative object below is positioned past the right
+    // edge on purpose, and without clipping it widened the document past the
+    // viewport, giving every page a horizontal scrollbar at mobile widths.
+    <section className="relative overflow-clip px-6 pb-24 pt-36 sm:pb-32 sm:pt-44">
       {/* The one soft, organic form in an otherwise structured page. It
           bleeds off the right edge so it reads as an object in the field
           rather than an illustration in a slot.

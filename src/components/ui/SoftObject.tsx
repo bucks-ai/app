@@ -4,6 +4,13 @@ type SoftObjectProps = {
   className?: string;
   /** Drift speed in seconds. 0 disables the float. */
   drift?: number;
+  /**
+   * Varies the form between instances: rotates the silhouette and moves the
+   * key light. Deliberately does NOT change hue — the palette is one teal
+   * family, so variety comes from shape and lighting, not from introducing a
+   * second brand colour.
+   */
+  seed?: number;
 };
 
 /**
@@ -33,7 +40,18 @@ export function SoftObject({
   size = 22,
   className = "",
   drift = 9,
+  seed = 0,
 }: SoftObjectProps) {
+  // Filter ids are document-global. Several of these render on one page, so a
+  // fixed id would make every instance reuse whichever filter mounted first.
+  // Derived from the seed rather than useId() so this stays a server
+  // component and the markup is stable across SSR and hydration.
+  const fid = `soft-inflate-${seed}`;
+  const gid = `soft-body-${seed}`;
+  const rotate = (seed % 4) * 22 - 33;
+  const lightX = 58 + ((seed * 13) % 26) - 13;
+  const lightY = 30 + ((seed * 7) % 18) - 9;
+
   return (
     <div
       aria-hidden
@@ -47,6 +65,7 @@ export function SoftObject({
     >
       <svg
         viewBox="0 0 200 200"
+        style={{ transform: `rotate(${rotate}deg)` }}
         width="100%"
         height="100%"
         role="presentation"
@@ -54,7 +73,7 @@ export function SoftObject({
       >
         <defs>
           <filter
-            id="soft-inflate"
+            id={fid}
             x="-25%"
             y="-25%"
             width="150%"
@@ -75,7 +94,7 @@ export function SoftObject({
               lightingColor="var(--soft-object-light)"
               result="body"
             >
-              <fePointLight x="58" y="38" z="120" />
+              <fePointLight x={lightX} y={lightY + 8} z="120" />
             </feSpecularLighting>
 
             {/* Tight hotspot — this is the whole "wet/glossy" read. A high
@@ -88,7 +107,7 @@ export function SoftObject({
               lightingColor="#ffffff"
               result="gloss"
             >
-              <fePointLight x="74" y="30" z="62" />
+              <fePointLight x={lightX + 16} y={lightY} z="62" />
             </feSpecularLighting>
 
             {/* Clip both lighting passes back to the shape. */}
@@ -124,7 +143,7 @@ export function SoftObject({
             <feComposite in="shiny" in2="SourceAlpha" operator="in" />
           </filter>
 
-          <radialGradient id="soft-body" cx="36%" cy="30%" r="78%">
+          <radialGradient id={gid} cx="36%" cy="30%" r="78%">
             <stop offset="0%" stopColor="var(--soft-object-hi)" />
             <stop offset="55%" stopColor="var(--soft-object-mid)" />
             <stop offset="100%" stopColor="var(--soft-object-lo)" />
@@ -134,8 +153,8 @@ export function SoftObject({
         {/* A soft, slightly irregular silhouette — a perfect circle reads as
             a button, not an object. */}
         <path
-          filter="url(#soft-inflate)"
-          fill="url(#soft-body)"
+          filter={`url(#${fid})`}
+          fill={`url(#${gid})`}
           d="M100 18c30 0 46 12 58 30s24 34 18 58-28 34-48 46-42 16-62 6-34-30-40-52 2-46 18-62S70 18 100 18Z"
         />
       </svg>
