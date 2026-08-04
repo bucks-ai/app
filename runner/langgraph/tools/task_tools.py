@@ -379,13 +379,23 @@ def mark_task_blocked(task_id: str, reason: str):
     _set_status(task_id, "blocked", {"error": reason})
 
 
-def requeue_task(task_id: str, retry_count: int, retry_not_before: Optional[str] = None):
+def requeue_task(
+    task_id: str,
+    retry_count: int,
+    retry_not_before: Optional[str] = None,
+    fields: Optional[dict] = None,
+):
     """Requeue a failed task for another attempt (status → ``queued``).
 
     Records ``retry_count`` so the failure guard can cap how many times a task is
     retried before it is marked permanently ``failed``.  When ``retry_not_before``
     is supplied (an ISO-8601 UTC timestamp), ``get_next_queued_task`` skips this
     task until that time has passed — implementing backoff for degraded workers.
+
+    ``fields`` carries extra values to persist alongside the requeue — used by
+    the transient-failure path (m4c-03) to bump ``transient_retry_count``, which
+    is counted separately from ``retry_count`` precisely so an unreachable
+    network never spends the budget that decides whether a task may be failed.
     """
     tasks = load_tasks()
     changed = False
@@ -394,6 +404,7 @@ def requeue_task(task_id: str, retry_count: int, retry_not_before: Optional[str]
             continue
         task["status"] = "queued"
         task["retry_count"] = retry_count
+        task.update(fields or {})
         task["updated_at"] = _now()
         task.pop("owner_pid", None)
         task.pop("owner_host", None)
@@ -414,6 +425,28 @@ def update_task_branch(task_id: str, branch: str):
             task["branch"] = branch
             task["updated_at"] = _now()
     save_tasks(tasks)
+
+
+def remove_tasks(task_ids) -> list[str]:
+    """Delete tasks by id, refusing to delete one a worker is running.
+
+    Used by the m4c-03 self-healing paths that prune records rather than
+    repair them: fixture placeholders, and local rows whose Supabase
+    ``mission_tasks`` parent no longer exists. Returns the ids actually
+    removed, so the caller logs what happened rather than what it asked for.
+    """
+    wanted = {t for t in (task_ids or []) if t}
+    if not wanted:
+        return []
+    tasks = load_tasks()
+    removed = [
+        t.get("id") for t in tasks
+        if t.get("id") in wanted and t.get("status") != "running"
+    ]
+    if not removed:
+        return []
+    save_tasks([t for t in tasks if t.get("id") not in set(removed)])
+    return removed
 
 
 def add_task(task: dict):
