@@ -576,6 +576,35 @@ STOP_HANDLERS: dict[str, StopHandler] = dict([
         gate="acceptance_criteria",
     )),
     _h(StopHandler(
+        reason="no_completion_evidence",
+        headline="The worker exited successfully but proved no work",
+        cause=(
+            "Task {task_id} ran to a clean exit, but nothing outside the worker's own "
+            "summary confirmed the work happened — no claimed file on disk, no new "
+            "commit in the remote, no deployment that answered a request — or the "
+            "output was a refusal or a question rather than a report. The task was "
+            "marked blocked, never complete. With GATE_BLOCK_SCOPE={gate_block_scope} "
+            "that block halted the loop."
+        ),
+        action=(
+            "Read the issues in the gate_blocked event below: each one names the "
+            "evidence that was missing or the refusal pattern that matched. If the "
+            "worker genuinely refused or asked a question, fix the task description or "
+            "the prompt so the work is unambiguous and re-run. If the work really did "
+            "land and the gate is wrong, the evidence detail says which check failed — "
+            "most often a commit that was never pushed, which "
+            "`git -C {repo_path} branch -r --contains <sha>` will confirm. "
+            "COMPLETION_EVIDENCE_GATE_ENABLED=false disables the gate, but that "
+            "restores the M4b behaviour where a refusal scored as a success."
+        ),
+        config_keys=(
+            "completion_evidence_gate_enabled",
+            "gate_block_scope",
+        ),
+        evidence_events=("gate_blocked", "task_completion_evidence_missing"),
+        gate="completion_evidence",
+    )),
+    _h(StopHandler(
         reason="definition_of_done_not_met",
         headline="The worker's output missed the definition of done",
         cause=(

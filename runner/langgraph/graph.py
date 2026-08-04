@@ -81,6 +81,7 @@ from tools.task_quality_guard import guard_planner_task
 from tools.claude_hooks_safety_pack import write_hooks
 from tools.acceptance_criteria_gate import guard_acceptance_criteria
 from tools.definition_of_done import guard_definition_of_done
+from tools.completion_evidence import guard_completion_evidence
 from tools.independent_code_review import guard_code_review, get_diff_text
 from tools.high_risk_claude_review import guard_high_risk_claude_review
 from tools.codex_to_claude_escalation import should_escalate, build_repair_prompt
@@ -553,6 +554,12 @@ def check_pending_migrations_if_needed(state: RunnerState) -> RunnerState:
 _TASK_SCOPED_STATE_DEFAULTS = {
     "acceptance_criteria_status": None,
     "definition_of_done_status": None,
+    # M4c: completion evidence is per-task. A stale `last_commit_result` would
+    # let a task that committed nothing be "proved" complete by the *previous*
+    # task's commit — exactly the false success the gate exists to stop.
+    "last_commit_result": None,
+    "completion_evidence": None,
+    "completion_evidence_status": None,
     "code_review_status": None,
     "high_risk_review_status": None,
     "codex_escalation_status": None,
@@ -1893,6 +1900,11 @@ def commit_push_merge_if_needed(state: RunnerState) -> RunnerState:
     # already committed its own changes (clean tree -> "nothing to commit"). In both
     # cases HEAD is deployable, so record it and run push/merge — otherwise
     # deploy_if_needed wrongly skips with "no committed changes to deploy".
+    # Keep the full commit dict: `nothing_to_commit` is the difference between
+    # "the worker committed its own work" and "the tree was clean and this sha
+    # predates the task", and only the completion-evidence gate can tell them
+    # apart (M4c).
+    state.last_commit_result = commit
     if commit.get("committed"):
         state.last_commit = commit["sha"]
         push_branch(repo_path, branch)
@@ -2558,7 +2570,33 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
                 max_task_attempts=cfg.max_task_attempts,
             ), task_id=task_id)
 
-    if result.get("success"):
+    # ── Completion evidence gate (M4c) ───────────────────────────────────────
+    # A successful worker exit is not evidence that the work happened. Score the
+    # run against the world — files on disk, the commit in the remote, a
+    # deployment that answers — before anything is allowed to say "complete".
+    evidence_blocked = False
+    if result.get("success") and cfg.completion_evidence_gate_enabled:
+        verdict = guard_completion_evidence(
+            summary=state.worker_summary,
+            task=task,
+            raw_output=result.get("output") or "",
+            context="update_logs_and_state",
+            repo_path=_effective_repo_path(state),
+            commit=state.last_commit_result,
+            deploy_result=state.deploy_result,
+            # Only hold a deploy task to deployment evidence when a deploy could
+            # actually have happened. With AUTO_DEPLOY off or no Vercel token,
+            # deploy_if_needed never runs, so requiring a live deployment would
+            # block such a task forever with no way to satisfy the gate.
+            deploy_available=cfg.auto_deploy and cfg.has_vercel,
+        )
+        state.completion_evidence = verdict
+        state.completion_evidence_status = "verified" if verdict["complete"] else "blocked"
+        evidence_blocked = verdict["blocked"]
+    elif result.get("success"):
+        state.completion_evidence_status = "skipped"
+
+    if result.get("success") and not evidence_blocked:
         digest = state.worker_summary_digest or build_run_summary_digest(state.worker_summary, task=task, max_chars=500)
         mark_task_complete(task_id, digest[:500])
         log_event("task_completed", {"task_id": task_id}, task_id=task_id)
@@ -2567,6 +2605,30 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
         state.retry_pending = False
         state.last_task_completed_at = datetime.utcnow().isoformat()
         state.stale_run_warning_sent = False
+    elif evidence_blocked:
+        # Blocked, not failed: nothing broke, the work simply was not done. The
+        # failure counters stay untouched so a refusal neither trips the
+        # circuit breaker nor resets a real failure streak, and the task is left
+        # in a state a human can act on.
+        reasons = (state.completion_evidence or {}).get("reasons") or []
+        mark_task_blocked(
+            task_id,
+            "no evidence of completion: " + "; ".join(reasons),
+        )
+        state.retry_pending = False
+        state.last_task_completed_at = datetime.utcnow().isoformat()
+        state.stale_run_warning_sent = False
+        _record_gate_block(
+            state,
+            "completion_evidence",
+            event="gate_blocked",
+            payload={"task_id": task_id, "issues": reasons},
+            stop_reason="no_completion_evidence",
+            task_id=task_id,
+            # This gate runs inside update_logs_and_state, so the task has
+            # already run and been counted — nothing is skipped by it.
+            pre_completion=False,
+        )
     else:
         err = result.get("error") or "worker returned no output"
         state.retry_pending = False
@@ -2829,7 +2891,7 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
     seeded_task_id = task.get("seeded_task_id")
     seeded_mission_id = task.get("seeded_mission_id")
     if seeded_task_id and seeded_mission_id and cfg.seeded_mission_queue_enabled and cfg.has_supabase:
-        if result.get("success"):
+        if result.get("success") and not evidence_blocked:
             _sync_digest = state.worker_summary_digest or build_run_summary_digest(
                 state.worker_summary, task=task, max_chars=500
             )
@@ -2843,7 +2905,16 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
                     duration_seconds=state.worker_elapsed_seconds,
                 )
         else:
-            _sync_err = result.get("error") or "worker returned no output"
+            # A task blocked for lack of evidence must never sync as complete —
+            # that is how ai-infra-03 left its mission marked done with nothing
+            # deployed. Supabase has no "blocked" task state, so it syncs as not
+            # done, with the reason, which keeps the mission out of `completed`.
+            if evidence_blocked:
+                _sync_err = "blocked: no evidence of completion: " + "; ".join(
+                    (state.completion_evidence or {}).get("reasons") or []
+                )
+            else:
+                _sync_err = result.get("error") or "worker returned no output"
             mark_seeded_task_failed(seeded_task_id, _sync_err[:500])
             if state.current_agent_run_id:
                 fail_agent_run(
@@ -2864,7 +2935,8 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
             "task_id": task_id,
             "seeded_task_id": seeded_task_id,
             "seeded_mission_id": seeded_mission_id,
-            "success": bool(result.get("success")),
+            "success": bool(result.get("success")) and not evidence_blocked,
+            "evidence_blocked": evidence_blocked,
             "mission_status": completion.get("status"),
         }, task_id=task_id)
 

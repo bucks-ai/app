@@ -163,6 +163,10 @@ def test_node_success_resets_consecutive_failures():
             current_task_id="t1",
             current_task={"id": "t1"},
             worker_result={"success": True},
+            # A bare success no longer completes anything: the M4c completion
+            # evidence gate wants a claimed file that is really on disk before
+            # the streak counts as broken.
+            worker_summary={"files_modified": ["runner/langgraph/graph.py"]},
             consecutive_failures=2,
         )
         out = graph.update_logs_and_state(s)

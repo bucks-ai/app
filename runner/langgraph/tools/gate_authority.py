@@ -118,6 +118,19 @@ GATE_REGISTRY: dict[str, dict] = {
             "DoD heuristic is a second opinion about one task's output."
         ),
     },
+    "completion_evidence": {
+        "authority": "worker_artifacts",
+        "external": True,
+        "assesses": "task",
+        "scope": SCOPE_TASK,
+        "destructive": False,
+        "rationale": (
+            "The filesystem, the git remote, and the deployment endpoint are "
+            "the authorities on whether work happened — not the worker's exit "
+            "code. One task that produced nothing says nothing about the next, "
+            "so it is set aside as blocked and the loop continues."
+        ),
+    },
     "independent_code_review": {
         "authority": "ci_and_branch_protection",
         "external": True,

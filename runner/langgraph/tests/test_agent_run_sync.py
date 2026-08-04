@@ -407,12 +407,18 @@ def test_resolve_model_skips_non_seeded_task():
         _restore_agent_run_sync(orig)
 
 
+#: A path that really exists under ``cfg.repo_path``. The M4c completion
+#: evidence gate resolves claimed files against disk before a run may sync as
+#: complete, so a made-up "a.py" would now (correctly) block instead.
+_REAL_FILE = "runner/langgraph/graph.py"
+
+
 def _seeded_state(success, run_id="run-uuid-9", api_cost=1.23, elapsed=42.0):
     return RunnerState(
         current_task_id="task-1",
         current_task=dict(_SEEDED_TASK),
         worker_result={"success": success, "api_cost": api_cost, "error": None if success else "boom"},
-        worker_summary={"files_modified": ["a.py"]} if success else None,
+        worker_summary={"files_modified": [_REAL_FILE]} if success else None,
         worker_elapsed_seconds=elapsed,
         current_agent_run_id=run_id,
     )
@@ -432,7 +438,7 @@ def test_update_logs_completes_run_on_success():
             assert run_id == "run-uuid-9"
             assert kw["cost_usd"] == 1.23
             assert kw["duration_seconds"] == 42.0
-            assert kw["output"] == {"files_modified": ["a.py"]}
+            assert kw["output"] == {"files_modified": [_REAL_FILE]}
             assert calls["fail"] == []
             assert out.current_agent_run_id is None
         _with_stubbed_task_io(body)

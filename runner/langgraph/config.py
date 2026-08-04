@@ -37,6 +37,9 @@ _DEFAULT_SLACK_EVENTS = frozenset({
     "loop_blocked_on_codex_usage_limit",
     "task_definition_of_done_rejected",
     "task_definition_of_done_warned",
+    # A task that exited clean but proved nothing. The whole point of M4c is
+    # that this is louder than a crash, not quieter.
+    "task_completion_evidence_missing",
     "auto_repair_failed",
     "merge_approval_required",
     "pr_checks_failed",
@@ -393,6 +396,12 @@ class RunnerConfig:
     definition_of_done_strict_mode: bool = field(
         default_factory=lambda: os.getenv("DEFINITION_OF_DONE_STRICT_MODE", "false").lower() == "true"
     )
+    # M4c: completion requires positive, verified evidence. Intentionally has no
+    # strict/warn split — the DoD gate's warn-only default is how ai-infra-03
+    # was scored complete twice with nothing deployed.
+    completion_evidence_gate_enabled: bool = field(
+        default_factory=lambda: os.getenv("COMPLETION_EVIDENCE_GATE_ENABLED", "true").lower() == "true"
+    )
     claude_subagent_pack_enabled: bool = field(
         default_factory=lambda: os.getenv("CLAUDE_SUBAGENT_PACK_ENABLED", "true").lower() == "true"
     )
@@ -716,6 +725,7 @@ class RunnerConfig:
             "acceptance_criteria_strict_mode": self.acceptance_criteria_strict_mode,
             "definition_of_done_gate_enabled": self.definition_of_done_gate_enabled,
             "definition_of_done_strict_mode": self.definition_of_done_strict_mode,
+            "completion_evidence_gate_enabled": self.completion_evidence_gate_enabled,
             "claude_subagent_pack_enabled": self.claude_subagent_pack_enabled,
             "claude_hooks_safety_pack_enabled": self.claude_hooks_safety_pack_enabled,
             "claude_hooks_safety_pack_auto_install": self.claude_hooks_safety_pack_auto_install,
