@@ -244,6 +244,49 @@ Files are collected from **both** the git diff and the worker's summary so a wor
 
 ---
 
+## Completion Evidence Gate (M4c)
+
+> **Completion must be earned with positive, independently verified evidence. A worker whose output is a question is blocked by definition.**
+
+The runner used to mark a task complete on a single signal: the worker process exited successfully. Nothing checked whether the worker had actually *done* anything. `ai-infra-03` ("Deploy the scaffolded app") was marked complete **twice** while the worker had refused and deployed nothing — `deploy_result` was null, zero files created or modified, and the final output was a question ("do you want me to: 1. Execute it... 2. Just summarize..."). That false success was then synced to Supabase, leaving the mission marked done with its core deliverable missing.
+
+Silent false success is worse than a crash. This gate runs in `update_logs_and_state` — the only place that can say "complete" — and applies two independent tests:
+
+**1. Refusal / question / no-op detection** (`detect_refusal`)
+
+| Kind | Blocks on its own? | Examples |
+|------|--------------------|----------|
+| `refusal` | yes | "I am not going to", "I cannot complete", "I did not actually deploy" |
+| `question` | yes | "do you want me to", "should I proceed", output whose final line ends in `?` |
+| `no_op` | no — deferred to evidence | zero files created **and** zero modified, `Commit Result: skipped`, "no new commit" |
+
+Patterns inside fenced code blocks are ignored, so a quoted sample does not read as the worker's own voice.
+
+**2. Positive evidence** (`verify_evidence`), verified against the world rather than the worker's self-report:
+
+| Evidence | Required by | How it is verified |
+|----------|-------------|--------------------|
+| `files` | — | Claimed paths must exist on disk under the repo path |
+| `commit` | — | Sha must exist as an object **and** be contained in an `origin/` branch (`nothing_to_commit` never counts — that sha predates the task) |
+| `artifact` | all non-deploy tasks | Satisfied by *either* `files` or `commit` |
+| `deployment` | deploy/release tasks (by type, or a deploy **verb** in the title/description) | Deployment must have an id/URL, have reached READY, and answer a real HTTP request (<500) |
+
+Deploy classification is verb-shaped: "Deploy the scaffolded app" owes a live deployment, but "fix the deploy script" or "document the release process" are tasks *about* deploy tooling and owe only an artifact. When deploys are structurally unavailable (`AUTO_DEPLOY=false` or no `VERCEL_TOKEN`), `deploy_if_needed` never runs, so a deploy task falls back to owing an artifact rather than being blocked by a gate it could never satisfy — it still has to prove *something*, so a refusal is caught either way. A **business mission** deploy task is exempt from that fallback: it deploys with the business's own scoped token, never the runner's, so a missing `VERCEL_TOKEN` says nothing about whether its deploy was possible — it always owes a live deployment.
+
+Evidence beats self-report in **both** directions: a `Commit Result: skipped` does not block a task whose commit is provably in the remote, and a summary full of confident claims does not complete a task whose files are not on disk.
+
+A task that fails the gate is marked **blocked, never complete and never failed** — nothing broke, the work was simply never done, so the failure counters stay untouched (a refusal must not trip the circuit breaker) and the block is task-scoped so the loop continues. Blocked tasks are never synced to Supabase as done.
+
+**Config:**
+- `COMPLETION_EVIDENCE_GATE_ENABLED=true` (default) — enable the gate. There is deliberately **no warn-only mode**: the definition-of-done gate had one, defaulted to it, and that is precisely how `ai-infra-03` shipped twice.
+
+**Logged events:**
+- `task_completion_evidence_verified` — the task earned its completion.
+- `task_completion_evidence_missing` — no verifiable evidence (task marked blocked). Routed to Slack.
+- `task_completion_no_op_overridden_by_evidence` — the summary reported no work but the evidence proved otherwise; usually a worker under-reporting itself.
+
+---
+
 ## Roles
 
 | Component | Role |
@@ -305,14 +348,20 @@ Copy `.env.example` to `.env` and fill in:
 | `BUCKS_AI_REPO_PATH` | Path to repo (default: `/home/arnavt/bucks-ai`) |
 | `RUNNER_MODE` | `browser_or_cli` (default) |
 | `MAX_LOOP_TASKS` | Max tasks per run (default: 10) |
-| `MAX_RUNTIME_MINUTES` | Max runtime (default: 480) |
+| `MAX_RUNTIME_MINUTES` | Max session runtime in minutes; must stay above `MAX_STALE_TASK_MINUTES` so a stuck loop reports `stale_run` rather than `max_runtime` (default: 480 — calibrated: observed sessions spanned at most 203 min, see `docs/M4C0-THRESHOLD-CALIBRATION.md`) |
 | `AUTO_MERGE` | Auto-merge on check pass (default: true) |
 | `AUTO_CLEANUP_BRANCHES` | Delete local and remote feature branches after successful auto-merge (default: true) |
 | `MERGE_VIA_PR` | Merge through a GitHub pull request + the checks/merge API instead of a local `git merge` + direct push to `main` (default: true — required when `main` has branch protection with required status checks). Set `false` only for lab repos without branch protection, to fall back to the old direct-merge path unchanged. |
-| `PR_CHECKS_TIMEOUT_S` | Max seconds to poll a PR's check runs before giving up (default: 900) |
+| `PR_CHECKS_TIMEOUT_S` | Max seconds to poll a PR's check runs before giving up (default: 1200 — calibrated from observed check completion p95 681.6s / max 695.5s) |
 | `PR_CHECKS_POLL_INTERVAL_S` | Seconds between check-run polls (default: 20) |
-| `PR_CHECKS_EMPTY_GRACE_S` | Seconds to wait with zero check runs scheduled before attempting recovery (querying mergeable state and refreshing the branch); a further wait of the same length with still-zero runs fails fast with `pr_checks_no_runs` (default: 180) |
+| `PR_CHECKS_EMPTY_GRACE_S` | Seconds to wait with zero check runs scheduled before attempting recovery (querying mergeable state and refreshing the branch); a further wait of the same length with still-zero runs fails fast with `pr_checks_no_runs`; must satisfy `PR_CHECKS_EMPTY_GRACE_S * 2 < PR_CHECKS_TIMEOUT_S` (default: 120 — calibrated from observed check-registration latency, max 22.6s over 67 samples) |
 | `PR_CHECKS_NON_BLOCKING` | Comma-separated, case-insensitive substrings; any check run whose **name** contains one is advisory — its conclusion is logged (`pr_checks_advisory_failed`) but never blocks a merge (default: `[informational]`). Branch protection remains the authority on what actually gates merges |
+| `PR_CHECKS_WAKE_ATTEMPTS` | How many times to *wake* a PR that reported no check runs — push a fresh head SHA on top of latest `main` and re-poll — before failing with `pr_checks_no_runs` (default: 1; `0` disables the recovery and restores the pre-M4c behaviour of failing immediately) |
+| `PR_CHECKS_WAKE_STRATEGIES` | Ordered, comma-separated wake ladder (default: `update_branch,rebase,merge_base,empty_commit`). `update_branch` = GitHub's update-branch API; `rebase` = rebase onto `origin/main` + `--force-with-lease` push (inert unless `GIT_ALLOW_FORCE_WITH_LEASE=true`); `merge_base` = merge `origin/main` into the branch and push (same end state, no history rewrite); `empty_commit` = last-resort empty commit to change the head SHA |
+| `GIT_PREFER_REBASE` | Sync a branch with its base using `pull --rebase` semantics instead of a merge commit (default: true). Also drops local commits whose content is already upstream and auto-resolves formatting-only conflicts; `false` restores the plain `git pull origin main --no-edit` |
+| `GIT_AUTO_RESOLVE_TRIVIAL_CONFLICTS` | Auto-resolve merge/rebase conflicts that are provably formatting-only — identical code after line-wrap and whitespace normalisation, with string and comment contents compared verbatim (default: true). Anything semantic, or any file outside the task's `allowed_scope`, is always escalated to a human regardless of this flag |
+| `GIT_TRIVIAL_CONFLICT_SUFFIXES` | Comma-separated file suffixes eligible for trivial-conflict auto-resolution (default: `.py,.ts,.tsx,.js,.jsx,.mjs,.cjs,.css,.scss,.go,.rs,.java,.kt,.c,.h,.cpp,.hpp,.sql`). Deliberately excludes formats where whitespace or a trailing comma *is* content — `.md`, `.json`, `.yaml`, `.sh`, `.txt` |
+| `GIT_ALLOW_FORCE_WITH_LEASE` | Permit the `rebase` wake rung to push a rewritten branch with `--force-with-lease` (default: **false**). `AGENTS.md` forbids `git push --force`; with this off the ladder reaches the same end state via `merge_base` without rewriting history. Even when on, `--force-with-lease` refuses if origin moved since the last fetch, so a human's push to the branch is never clobbered |
 | `AUTO_DEPLOY` | Auto-trigger Vercel (default: true) |
 | `AUTO_DEPLOY_POLL` | Poll the triggered deployment until it finishes (default: true) |
 | `BLOCK_ON_DEPLOY_FAILURE` | Stop the loop when a polled deploy fails or times out (default: true) |
@@ -328,6 +377,7 @@ Copy `.env.example` to `.env` and fill in:
 | `AUTO_APPLY_MIGRATIONS` | Auto-apply pending `supabase/migrations/*.sql` files at loop startup (default: false — see **Startup Migration Check**). Un-applied migrations are always logged loudly via `migrations_pending` regardless of this flag; setting it `true` additionally applies additive-only, guard/gate-passing files automatically. |
 | `ACCEPTANCE_CRITERIA_GATE_ENABLED` | Validate that tasks include concrete acceptance criteria before executing the worker (default: true) |
 | `ACCEPTANCE_CRITERIA_STRICT_MODE` | Block task execution when criteria are missing; false (default) logs a warning but proceeds |
+| `COMPLETION_EVIDENCE_GATE_ENABLED` | Require positive, independently verified evidence (a file on disk, a commit in the remote, a deployment that answers) before a task may be scored complete; refusals, questions, and unproven no-ops are marked blocked instead (default: true — see **Completion Evidence Gate**) |
 | `CLAUDE_SUBAGENT_PACK_ENABLED` | Inject specialised subagent context into Claude worker prompts based on task type/title (default: true) |
 | `CLAUDE_HOOKS_SAFETY_PACK_ENABLED` | Install and validate runner-safety PreToolUse hooks in .claude/settings.json before each Claude CLI dispatch (default: true) |
 | `CLAUDE_HOOKS_SAFETY_PACK_AUTO_INSTALL` | Auto-write the safety hook when it is missing; false only validates and logs a warning (default: true) |
@@ -369,25 +419,53 @@ Copy `.env.example` to `.env` and fill in:
 | `MAX_TASK_RETRIES` | Times a failed task is requeued before giving up (default: 1) |
 | `MAX_CONSECUTIVE_FAILURES` | Consecutive failures that trip the circuit breaker and halt the loop (default: 3) |
 | `MAX_TASK_ATTEMPTS` | Times a single task ID can be run within one run-loop session before the repeated-task guard halts the loop; counts reset at the start of every run-loop session, so a task never carries attempts over from a previous session; 0 disables the guard (default: 3) |
+| `WORKER_TIMEOUT_GUARD` | Classify an over-long worker run as a timeout and halt after `MAX_WORKER_TIMEOUTS` of them (default: true) |
+| `MAX_WORKER_TIMEOUTS` | Worker timeouts in one session before the guard halts the loop (default: 3) |
+| `WORKER_TIMEOUT_THRESHOLD` | Elapsed seconds at or above which a finished worker run is *classified* as a timeout. Must exceed `CLAUDE_CLI_TIMEOUT_S` — otherwise it labels healthy long runs the CLI never killed (default: 2700 — the old 570 did exactly that to 12.2% of successful runs) |
+| `CLAUDE_CLI_TIMEOUT_S` | Seconds before the Claude CLI subprocess is hard-killed — the real ceiling on a worker run (default: 2400 — calibrated from worker p95 755.1s overall, 1653.4s for `test` tasks) |
 | `MAX_REPEATED_ERRORS` | Occurrences of the same (or near-identical) error message within one session before the repeated-error guard halts the loop; 0 disables the guard (default: 3) |
 | `REPEATED_ERROR_WINDOW` | How many recent failures the repeated-error guard looks back across when counting matches; 0 means unbounded (default: 10) |
 | `FAILURE_RETRY_BACKOFF` | Apply exponential backoff before retrying under degraded worker conditions (timeout, health-probe failure, or sustained consecutive failures) (default: true) |
 | `FAILURE_RETRY_BACKOFF_BASE_S` | Base backoff delay in seconds for the first degraded retry (default: 30.0) |
 | `FAILURE_RETRY_BACKOFF_MULTIPLIER` | Exponential multiplier applied per retry attempt (default: 2.0) |
-| `FAILURE_RETRY_BACKOFF_MAX_S` | Maximum backoff delay cap in seconds (default: 300.0) |
+| `FAILURE_RETRY_BACKOFF_MAX_S` | Maximum backoff delay cap in seconds; the worst case `WORKER_TIMEOUT_THRESHOLD + this * (MAX_TASK_ATTEMPTS - 1)` must fit inside the stale-run window (default: 300.0) |
 | `LOOP_START_PREFLIGHT` | Refuse `run-loop` when the runner repo is on a non-main branch or has a dirty working tree; workers inherit that tree and cannot tell intended state from in-flight edits. Set false only for deliberate local experiments (default: true) |
+| `STARTUP_PREFLIGHT` | Verify production assumptions once at loop start, before any task is claimed: pending migrations vs the `_runner_migrations` ledger, deployed production SHA vs `origin/main`, Vercel project reachable and git-connected, `GITHUB_REPO` reachable, required tables present, and every credential the config names resolvable. Emits one `preflight_report` event with per-check status. **Reports, does not halt** — the only halting condition is a dirty tree / wrong branch (`LOOP_START_PREFLIGHT`) (default: true) |
+| `PREFLIGHT_REQUIRED_TABLES` | Comma-separated tables `STARTUP_PREFLIGHT` verifies exist; empty (default) uses the built-in set: `missions`, `mission_tasks`, `agent_runs`, `businesses`, `business_sandbox` |
 | `WORKER_HEALTH_PROBE` | Check that the chosen worker's CLI binary and credentials are available before each dispatch; halts the loop immediately if the worker cannot start (default: true) |
 | `WORKER_HEALTH_LIVE_PING` | After the static binary/credential check passes, run the worker CLI with `--version` in a subprocess to confirm it actually starts; adds ~100–500 ms per dispatch; default off — enable when diagnosing flaky worker startups (default: false) |
 | `WORKER_HEALTH_LIVE_PING_TIMEOUT_S` | Seconds before the live-ping subprocess is forcibly killed; applies only when `WORKER_HEALTH_LIVE_PING=true` (default: 10.0) |
 | `STALE_RUN_WATCHDOG` | Halt the loop when no task has completed within `MAX_STALE_TASK_MINUTES` of the previous completion, preventing infinite spin during overnight runs (default: true) |
-| `MAX_STALE_TASK_MINUTES` | Minutes of task-completion inactivity before the stale run watchdog trips; 0 disables the watchdog (default: 60) |
-| `STALE_RUN_WARN_MINUTES` | Minutes of inactivity before a Slack warning fires ahead of the hard stop; 0 disables the warning (default: 30) |
+| `MAX_STALE_TASK_MINUTES` | Minutes of task-completion inactivity before the stale run watchdog trips; 0 disables the watchdog (default: 120 — calibrated: observed end-to-end task duration reaches 41.1 min, and the old 60 killed sessions that were working correctly) |
+| `STALE_RUN_WARN_MINUTES` | Minutes of inactivity before a Slack warning fires ahead of the hard stop; must be below `MAX_STALE_TASK_MINUTES` or it never fires; 0 disables the warning (default: 75 — the old 30 fired on legitimate 30.0 and 34.0 min gaps) |
+
 | `LIVE_BATCH_VALIDATION_REPORT` | Emit a final structured report (task outcomes, session metrics, per-task digest) to outbox/ when the loop stops; logged as `live_batch_validation_complete` and forwarded to Slack when enabled (default: true) |
 | `CONTEXT_COMPRESSION_MAX_TOKENS` | Soft token ceiling for persisted runner messages before older context is compressed (default: 12000) |
 | `CONTEXT_COMPRESSION_KEEP_RECENT` | Number of newest messages to preserve verbatim during compression (default: 4) |
 | `CLAUDE_SUBSCRIPTION_COOLDOWN` | When Claude in subscription mode returns a rate-limit/cooldown response, automatically wait until the cooldown expires and resume rather than failing the task (default: true) |
 | `CLAUDE_SUBSCRIPTION_COOLDOWN_WAIT_S` | Default cooldown wait in seconds when the reset time cannot be parsed from the Claude response (default: 3600) |
 | `CLAUDE_SUBSCRIPTION_COOLDOWN_MAX_WAITS` | Maximum number of auto-resume cooldown waits per session before halting the loop; 0 disables the limit (default: 3) |
+
+#### Threshold ordering invariants
+
+These timeouts are nested windows, not independent knobs, so `setup`,
+`run-once` and `run-loop` validate their ordering at startup and **refuse to
+start** — printing the exact fix — when one is violated
+(`tools/config_invariants.py`):
+
+1. `CLAUDE_CLI_TIMEOUT_S < WORKER_TIMEOUT_THRESHOLD`
+2. `WORKER_TIMEOUT_THRESHOLD < MAX_STALE_TASK_MINUTES * 60`
+3. `PR_CHECKS_EMPTY_GRACE_S * 2 < PR_CHECKS_TIMEOUT_S`
+4. `STALE_RUN_WARN_MINUTES < MAX_STALE_TASK_MINUTES`
+5. `MAX_STALE_TASK_MINUTES < MAX_RUNTIME_MINUTES`
+6. `WORKER_TIMEOUT_THRESHOLD + FAILURE_RETRY_BACKOFF_MAX_S * (MAX_TASK_ATTEMPTS - 1) < MAX_STALE_TASK_MINUTES * 60`
+
+A violation does not raise anything at the time — it mis-behaves hours later
+somewhere that points nowhere near the cause, which is why it is a startup
+error rather than a warning. The defaults are derived from observed run
+history; regenerate the analysis with `python -m tools.threshold_calibration`
+and see `docs/M4C0-THRESHOLD-CALIBRATION.md` for the data behind each value.
+
 
 ---
 
@@ -407,9 +485,11 @@ Key differences from the standard defaults:
 | `MAX_CONSECUTIVE_FAILURES` | 2 | 3 | Fail fast to avoid wasting the night |
 | `MAX_TASK_RETRIES` | 2 | 1 | Extra retry for transient failures |
 | `FAILURE_RETRY_BACKOFF_MAX_S` | 600 | 300 | Up to 10 min between retries |
+| `CLAUDE_CLI_TIMEOUT_S` | 2400 | 2400 | Pinned explicitly so the profile's worker-timeout ordering is self-evident |
+| `WORKER_TIMEOUT_THRESHOLD` | 2700 | 2700 | Same as default since M4c.0 calibration |
 | `WORKER_HEALTH_LIVE_PING` | true | false | Catch broken environments immediately |
-| `STALE_RUN_WARN_MINUTES` | 45 | 30 | Earlier Slack warning |
-| `MAX_STALE_TASK_MINUTES` | 90 | 60 | Allow longer individual tasks |
+| `STALE_RUN_WARN_MINUTES` | 75 | 75 | Same as default since M4c.0 calibration |
+| `MAX_STALE_TASK_MINUTES` | 120 | 120 | Same as default since M4c.0 calibration |
 | `MAX_SESSION_COST_DOLLARS` | 25.0 | 0 | Overnight cost ceiling |
 | `STRATEGIC_PAUSE_INTERVAL` | 5 | 0 | Re-evaluate direction every 5 tasks |
 | `HTTP_RETRY_ATTEMPTS` | 5 | 3 | Ride out overnight network blips |
@@ -620,10 +700,10 @@ merges through a pull request instead:
    retried task), that PR is reused instead of creating a duplicate.
 3. `poll_pr_checks` — poll `GET /repos/{repo}/commits/{sha}/check-runs` every
    `PR_CHECKS_POLL_INTERVAL_S` seconds (default 20) until every check run is
-   `completed`, or `PR_CHECKS_TIMEOUT_S` seconds (default 900) elapse.
+   `completed`, or `PR_CHECKS_TIMEOUT_S` seconds (default 1200) elapse.
    Success requires every run's conclusion to be `success` or `skipped`. If
    check runs are still empty (never scheduled — e.g. a dropped GitHub Actions
-   webhook) after `PR_CHECKS_EMPTY_GRACE_S` seconds (default 180), the PR's
+   webhook) after `PR_CHECKS_EMPTY_GRACE_S` seconds (default 120), the PR's
    mergeable state is queried; if it is `dirty` (conflicting) or `behind`, the
    branch is refreshed once via `PUT /pulls/{number}/update-branch` (logged as
    `pr_branch_updated`) to re-trigger workflows, and polling continues. If
@@ -631,9 +711,13 @@ merges through a pull request instead:
    seconds, polling fails fast with the distinct reason `pr_checks_no_runs`
    (logged and returned instead of the generic timeout) so the failure guard
    sees an actionable, specific cause rather than an ambiguous timeout.
-4. `merge_pull_request` — merge the PR via `PUT
+4. **Wake the checks** (M4c) — when step 3 returns `pr_checks_no_runs`, the
+   runner does what the founder used to do by hand: push a fresh head SHA on
+   top of latest `main` so Actions schedules a run, then re-poll (up to
+   `PR_CHECKS_WAKE_ATTEMPTS` times, default 1). See **Git & PR autonomy** below.
+5. `merge_pull_request` — merge the PR via `PUT
    /repos/{repo}/pulls/{number}/merge`, only once checks are green.
-5. `fetch_pull_main` + local feature-branch cleanup — unchanged from before.
+6. `fetch_pull_main` + local feature-branch cleanup — unchanged from before.
 
 **Failure handling:** a failed or timed-out check run, or a rejected merge
 (405 — branch protection unmet, 409 — branch changed since checks ran), is
@@ -653,6 +737,101 @@ without merge rights will see the same 405/409 rejections a human would.
 Set `MERGE_VIA_PR=false` to fall back to the old direct-merge path
 (`merge_feature.sh`, local `git merge` + push to `main`) unchanged — an
 escape hatch for lab/sandbox repos that don't have branch protection.
+
+---
+
+## Git & PR autonomy (`tools/git_autonomy.py`)
+
+During M4b the founder personally ran `gh pr create` → `gh pr checks` →
+`gh pr merge` for every PR, hand-chose rebase vs reset on a diverged `main`,
+and resolved six identical-formatting conflicts. This module removes each of
+those interventions.
+
+**Waking a PR with no checks.** `wake_pr_checks` pushes a fresh head SHA using
+an escalating ladder (`PR_CHECKS_WAKE_STRATEGIES`), stopping at the first rung
+that moves the branch:
+
+| Rung | What it does | Rewrites history? |
+| --- | --- | --- |
+| `update_branch` | GitHub's `PUT /pulls/{n}/update-branch` API | no |
+| `rebase` | rebase onto `origin/main`, push `--force-with-lease` | yes — **off unless `GIT_ALLOW_FORCE_WITH_LEASE=true`** |
+| `merge_base` | merge `origin/main` into the branch, normal push | no |
+| `empty_commit` | last-resort empty commit to change the head SHA | no |
+
+`AGENTS.md` forbids `git push --force`, so the `rebase` rung is inert by
+default and the ladder reaches the same end state — the branch on top of latest
+`main` with a new head SHA — via `merge_base`, which is exactly what GitHub's
+own "Update branch" button does. When the rung *is* enabled, a
+`--force-with-lease` refusal (origin moved since our fetch — i.e. a human
+pushed) is treated as a stop signal and never escalated to a bare `--force`.
+
+**Divergence.** `sync_with_base` (used by `fetch_pull_main` when
+`GIT_PREFER_REBASE=true`, the default) always rebases, never resets. A local
+commit whose content is already upstream is dropped cleanly — git reports this
+as `dropping <sha> <subject> -- patch contents already upstream`, or, on the
+apply backend, stops with `No changes - did you forget to use 'git add'?`, and
+both are recognised and answered with `git rebase --skip`.
+
+**Trivial conflict resolution.** A conflict is auto-resolved only when both
+sides are *provably* the same code: physical lines are joined where the join
+falls inside an open bracket (mirroring Python's implicit line joining),
+whitespace outside string literals is collapsed, and the resulting logical
+lines must match with identical indentation. String and comment contents are
+compared verbatim. That accepts the M4b case — a call wrapped across three
+lines vs kept on one — and rejects everything else, including the traps that
+defeat naive whitespace-stripping: moving a statement in or out of an `if`
+body, `"hello  world"` vs `"hello world"`, and `not x` vs `notx`. Ineligible
+file types (`GIT_TRIVIAL_CONFLICT_SUFFIXES`) and any file outside the task's
+`acceptance_criteria.allowed_scope` are escalated even when textually trivial.
+A file resolves only if *every* hunk in it is trivial; otherwise the whole
+rebase aborts and `git_conflict_escalated` goes to Slack.
+
+**Never discard founder work.** During M4b a routine branch operation reverted
+uncommitted local doc edits. Every entry point here — including
+`git_tools.create_branch` and `cleanup_feature_branch` — stashes uncommitted
+work (untracked files included) under a labelled `runner-autonomy:<label>`
+message *before* any checkout, rebase, or pull, and restores it afterwards.
+Nothing in the module runs `git reset --hard`, `git checkout -- .`,
+`git clean`, or `git stash drop`. If a stash cannot be popped cleanly it is
+**left in the stash list** and reported via `git_work_restore_failed` (a
+curated Slack event) rather than discarded. `wake_pr_checks` also refuses to
+act when `HEAD` is not on the branch it was asked to wake.
+
+---
+
+## Startup Preflight
+
+The recurring failure shape this exists for: the runner assumes something about
+the world that is only true on the founder's laptop, then discovers it 40
+minutes into a task, or never. `run_startup_preflight_if_needed` runs **once per
+session**, immediately after hook installation and before any task is claimed,
+and emits a single consolidated PASS/WARN/FAIL summary. Every check is a real
+incident:
+
+| Check | Verifies | Incident |
+|---|---|---|
+| `git_state` | Clean tree, on `main` | Workers inherit the runner's tree (m4c-01) |
+| `pending_migrations` | `supabase/migrations/*.sql` all recorded in the `_runner_migrations` ledger | Three merged additive files were never applied to production; Execute 500'd for a whole mission (M4a) |
+| `production_sha` | Deployed production commit == `origin/main` | `main` merged for hours while production served stale code (M4b) |
+| `vercel_project` | Project reachable **and git-connected** | An unlinked project deploys nothing on merge and reports no error (M4b) |
+| `github_repo` | `GET /repos/{owner}/{repo}` succeeds | `testflow` vs `testflow-demo` burned a full run before failing at clone |
+| `required_tables` | `PREFLIGHT_REQUIRED_TABLES` exist | Same assumption class, one layer down |
+| `credentials` | Every credential the config *names* resolves | Reported by env-var **name** only, never value |
+
+**It reports, it does not halt.** The sole exception is `git_state` (dirty tree
+/ wrong branch), the one condition under which work is actively unsafe. A repo
+that doesn't exist or a Vercel project that isn't git-connected is a loud Slack
+warning and the loop continues — a preflight that blocked would just become a
+new source of stops, which is exactly what this mission exists to reduce.
+
+Per-check status vocabulary: `pass` (verified true), `fail` (verified FALSE),
+`warn` (could *not* verify — an unreachable API is worth saying out loud too),
+`skip` (integration not configured, so there is nothing to check; does not
+affect the verdict). The overall verdict is the worst per-check status.
+
+The `preflight_report` event carries every check's status, so a failure hours
+later can be traced back to a warning that was already visible at startup. The
+rendered report is also written to `outbox/startup_preflight.txt`.
 
 ---
 
@@ -1116,6 +1295,103 @@ The validator runs in the `run_ui_flow_validation_if_needed` node, immediately a
 
 ---
 
+## Loop Stop Diagnostics (M4c.0)
+
+A bare stop reason (`stale_run`, `chatgpt_no_task`, `awaiting_resources`) says
+which guard fired, not what happened or what to do next — recovering that meant
+grepping `logs/runs.jsonl` and reading `graph.py`, and twice it produced the
+wrong answer: `chatgpt_no_task` read as a broken planner when the queue was
+strict-mode exhausted, and `stale_run` read as a hang when the watchdog was
+measuring against a 4106-minute-old timestamp from a previous session.
+
+`tools/stop_diagnostics.py` closes that gap. Whenever the loop stops, the
+terminal node `report_loop_stop_diagnostics` writes **one** structured record to
+`outbox/loop_stop_report.txt` and fires **one** Slack message (the
+`loop_stop_report` event), each containing:
+
+- the stop reason and the **EXPECTED / ANOMALOUS** classification;
+- the triggering task — id, title, status, type, branch, worker, error;
+- the **5 events immediately before the stop**, with their payloads;
+- the config that produced the stop, printed as `ENV_NAME = value` next to the
+  observed value that crossed it (`stale_minutes` vs `MAX_STALE_TASK_MINUTES`,
+  both labelled — when a guard's payload repeats a configured threshold the
+  config value wins, so one variable never shows two numbers);
+- a plain-language **CAUSE** sentence;
+- a **RECOMMENDED ACTION** naming the exact command or config change that
+  resolves it.
+
+**Suspect stops.** Where the arithmetic can be checked, it is. A `stop_reason`
+left in `.runtime/state.local.json` by a previous session reproduces a real stop
+exactly — `run-loop` clears it on start (`start_fresh_session`), `run-once` and
+`dry-run` do not — so a stop whose own numbers do not support it (e.g.
+`max_loop_tasks` at `loop_count=0` with `MAX_LOOP_TASKS=2`) gets a **SUSPECT —
+READ THIS FIRST** block above the cause, naming `python main.py reset-state` as
+the fix.
+
+**Classification.** EXPECTED means the run ended the way it was configured to:
+`seeded_queue_exhausted`, `max_loop_tasks`, `claude_subscription_cooldown`, and
+the two empty-queue finishes (`no_more_tasks`, `no_queued_tasks`). Everything
+else — including any reason nobody has registered — is ANOMALOUS. This is the
+field m4c-06's watchdog reads to decide whether to auto-restart, so an unknown
+stop is deliberately treated as "wake a human".
+
+**Every stop reason must have a handler.** `STOP_HANDLERS` maps each reason to
+its cause/action text, and `tests/test_stop_diagnostics.py` scans `graph.py` and
+`tools/*.py` for stop reasons and fails on any that is missing. A new stop
+reason cannot ship without diagnostics. Adding one means:
+
+1. add a `StopHandler(reason=..., headline=..., cause=..., action=...)` to
+   `STOP_HANDLERS`, with the `config_keys` that govern it and the
+   `evidence_events` that carry its observed numbers;
+2. add it to `EXPECTED_STOP_REASONS` only if it is a normal finish;
+3. if its env var is not simply the upper-cased config key, add it to
+   `_ENV_NAME_OVERRIDES` (a test asserts every name is really read by
+   `config.py`).
+
+Config values are read from `cfg.report()`, and any key that looks like a
+credential is rendered `[redacted]` — the report is a file and a Slack message,
+so the rule is enforced in code rather than trusted to the handler table.
+
+Reporting a stop never changes how the run ended: a formatting or write failure
+is swallowed and recorded as `stop_diagnostics_degraded`, and a failed file
+write still sends the Slack message.
+
+| Stop reason | Class | In one line |
+|---|---|---|
+| `no_queued_tasks` | EXPECTED | Queue empty and nothing (compiler / seeded queue / planner) refilled it |
+| `no_more_tasks` | EXPECTED | Planner had no follow-up and the queue was empty |
+| `seeded_queue_exhausted` | EXPECTED | Strict seeded mode; no `queued` mission left in Supabase |
+| `max_loop_tasks` | EXPECTED | The batch ran its full `MAX_LOOP_TASKS` budget |
+| `claude_subscription_cooldown` | EXPECTED | Claude rate-limited and the session's cooldown waits are used up |
+| `chatgpt_no_task` | ANOMALOUS | Planner returned nothing usable — check the queue before the planner |
+| `max_runtime` | ANOMALOUS | Wall-clock passed `MAX_RUNTIME_MINUTES` (cooldowns excluded) |
+| `stale_run` | ANOMALOUS | No task completed inside `MAX_STALE_TASK_MINUTES` |
+| `consecutive_failures` | ANOMALOUS | The failure circuit breaker opened |
+| `repeated_errors` | ANOMALOUS | The same error repeated inside the error window |
+| `repeated_task` | ANOMALOUS | One task hit `MAX_TASK_ATTEMPTS` this session |
+| `worker_timeouts` | ANOMALOUS | Too many dispatches past `WORKER_TIMEOUT_THRESHOLD` |
+| `worker_health_probe_failed` | ANOMALOUS | The worker CLI is missing / unauthenticated on this host |
+| `codex_usage_limit` | ANOMALOUS | Codex usage limit hit `MAX_CODEX_USAGE_LIMIT_ERRORS` times |
+| `cost_budget_exceeded` | ANOMALOUS | Session spend reached the cost cap |
+| `awaiting_resources` | ANOMALOUS | A task needs a credential/resource only a human can provide |
+| `awaiting_merge_approval` | ANOMALOUS | A merge needs human approval under `MERGE_APPROVAL_POLICY` |
+| `awaiting_strategic_review` | ANOMALOUS | The strategic gate paused for a direction decision |
+| `missing_acceptance_criteria` | ANOMALOUS | Task had no acceptance criteria in strict mode |
+| `definition_of_done_not_met` | ANOMALOUS | Worker output missed the definition of done in strict mode |
+| `code_review_rejected` | ANOMALOUS | Independent diff review rejected the change in strict mode |
+| `high_risk_review_rejected` | ANOMALOUS | High-risk Claude review rejected the change in strict mode |
+| `product_eval_failed` | ANOMALOUS | Post-deploy product evals failed with `PRODUCT_EVAL_STRICT=true` |
+| `deploy_failed` | ANOMALOUS | Vercel reached a terminal failure state |
+| `deploy_timed_out` | ANOMALOUS | Polling gave up after `VERCEL_POLL_TIMEOUT` |
+| `preflight_unsafe` | ANOMALOUS | Startup preflight refused: dirty tree / wrong branch |
+| `launch_readiness_failed` | ANOMALOUS | Readiness scorecard below threshold in strict mode |
+| `business_not_found` | ANOMALOUS | Task targets a business row that does not exist |
+| `business_repo_remote_mismatch` | ANOMALOUS | Sandbox workspace origin is not the business's repo |
+| `business_repo_forbidden` | ANOMALOUS | A business sandbox resolves to the bucks-ai repo itself |
+| `unspecified` | ANOMALOUS | The loop stopped without recording a reason (a node bug) |
+
+---
+
 ## Slack Notifications
 
 The runner can push **notable** lifecycle events to a Slack channel via an
@@ -1131,7 +1407,12 @@ off the flight recorder: every call to `log_event(...)` is offered to
   default curated set is: `task_completed`, `error`, `loop_stopped`,
   `loop_blocked_on_deploy`, `deploy_poll_failed`, `deploy_poll_timeout`,
   `rollback_revert_policy_required`, `sql_scan_blocked`, `sql_approval_pending`,
-  `resource_request_pending`, `check_failed`.
+  `resource_request_pending`, `check_failed`, `loop_stop_report` (see
+  `_DEFAULT_SLACK_EVENTS` in `config.py` for the full list).
+- `loop_stopped` and `loop_stop_report` are a pair: the first is the alert that
+  the loop stopped, the second is the diagnosis of why and what to do about it
+  (see **Loop Stop Diagnostics (M4c.0)**). Its message is composed by
+  `tools/stop_diagnostics.py` and passed through verbatim.
 - Reaching Slack failing (network error, non-2xx) **never** interrupts the
   runner — the failure is swallowed and recorded as a `slack_degraded` event, so
   the flight recorder keeps the full trail. `slack_degraded` is intentionally not
@@ -1253,6 +1534,7 @@ Allowed with warnings: `DROP TABLE IF EXISTS`, `DROP POLICY IF EXISTS`, `DROP TR
 
 ## LangGraph Nodes
 
+0a. `run_startup_preflight_if_needed` — verifies production assumptions once per session, before any task is claimed: pending migrations vs the ledger, deployed production SHA vs `origin/main`, Vercel reachable and git-connected, `GITHUB_REPO` reachable, required tables present, credentials resolvable. Emits one `preflight_report` event and writes `outbox/startup_preflight.txt`. Reports and continues — it halts only on the dirty-tree / wrong-branch condition, because workers inherit the runner's tree (see **Startup Preflight**)
 0b. `check_launch_readiness_if_needed` — scores the runner system across four dimensions (config completeness, credentials available, safety gates active, operational health) immediately after hook installation; writes a human-readable report to `outbox/launch_readiness_scorecard.txt`; in strict mode a failing score halts the loop before any task is dispatched
 0c. `check_pending_migrations_if_needed` — compares `supabase/migrations/` against the `_runner_migrations` ledger and loudly alerts on any un-applied files; auto-applies additive-only ones when `AUTO_APPLY_MIGRATIONS=true` (see **Startup Migration Check**)
 1. `load_next_task` — fetch next queued task from `.runtime/tasks.local.json`; rewrites protected branch names to `feature/<task-id>` and persists the rewritten branch back to the task queue before dispatch
@@ -1278,6 +1560,8 @@ Allowed with warnings: `DROP TABLE IF EXISTS`, `DROP POLICY IF EXISTS`, `DROP TR
 14. `update_logs_and_state` — mark task complete/failed, log
 15. `ask_chatgpt_next_task` — send summary back to ChatGPT
 16. `decide_continue_or_stop` — check loop limits, decide to continue or stop
+17. `generate_live_batch_validation_report` — once the loop decides to stop, summarise the batch (task outcomes, session health) to `outbox/live_batch_validation_report.txt`
+18. `report_loop_stop_diagnostics` — terminal node: write the one stop record to `outbox/loop_stop_report.txt` and fire the one Slack message naming the cause, the fix, and whether the stop was EXPECTED or ANOMALOUS (see **Loop Stop Diagnostics (M4c.0)**)
 
 ---
 

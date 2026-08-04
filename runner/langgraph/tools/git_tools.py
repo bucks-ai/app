@@ -33,21 +33,77 @@ def current_commit_sha(repo_path: str) -> str:
     return r.output.strip() if r.success else ""
 
 
-def fetch_pull_main(repo_path: str) -> dict:
+def fetch_pull_main(repo_path: str, allowed_paths=None) -> dict:
+    """Bring the current branch up to date with ``origin/main``.
+
+    Prefers a rebase (``GIT_PREFER_REBASE``, on by default) via
+    ``tools.git_autonomy.sync_with_base``, which also stashes uncommitted work
+    first, drops local commits whose content is already upstream, and
+    auto-resolves formatting-only conflicts. M4b needed the founder to
+    hand-choose rebase vs reset on a diverged main and to recover from a stale
+    origin/main no-op merge; the merge-based ``git pull`` below is kept only as
+    an explicit opt-out (``GIT_PREFER_REBASE=false``).
+    """
     log_event("git_sync", {"step": "fetch_pull_main"})
+    from config import get_config
+    from tools.git_autonomy import sync_with_base
+
+    cfg = get_config()
+    if getattr(cfg, "git_prefer_rebase", True):
+        result = sync_with_base(repo_path, base="main", allowed_paths=allowed_paths, cfg=cfg)
+        return {
+            "fetch": result.get("reason") != "fetch_failed",
+            "pull": result["success"],
+            "rebased": result["success"],
+            "reason": result.get("reason"),
+            "skipped_commits": result.get("skipped_commits", 0),
+            "escalated": result.get("escalated", []),
+            "stash_stranded": result.get("stash_stranded", False),
+            "output": result.get("output", ""),
+        }
+
     fetch = _git(["fetch", "origin"], repo_path)
     pull = _git(["pull", "origin", "main", "--no-edit"], repo_path)
     return {"fetch": fetch.success, "pull": pull.success, "output": pull.output}
 
 
 def create_branch(repo_path: str, branch: str) -> dict:
+    """Check out ``branch`` (creating it if new), carrying uncommitted work across.
+
+    M4c safety: the checkout is wrapped in stash/pop rather than run bare. A
+    routine branch operation reverted the founder's uncommitted doc edits during
+    M4b; here anything uncommitted is stashed under a labelled message first and
+    popped back onto the target branch — so the worker's changes still reach the
+    commit that follows, and a human's edits are never silently dropped.
+
+    If the pop conflicts the work stays in the stash list and this returns
+    failure: committing a half-restored tree would be worse than not committing.
+    """
+    from tools.git_autonomy import restore_protected_work, safe_checkout
+
     existing = _git(["branch", "--list", branch], repo_path)
-    if branch in (existing.output or ""):
-        r = _git(["checkout", branch], repo_path)
-    else:
-        r = _git(["checkout", "-b", branch], repo_path)
-    log_event("branch_created", {"branch": branch, "success": r.success})
-    return {"success": r.success, "output": r.output}
+    create = branch not in (existing.output or "")
+    checkout = safe_checkout(repo_path, branch, create=create, label=f"create-branch:{branch}")
+    guard = checkout["guard"]
+
+    if not checkout["success"]:
+        restore_protected_work(repo_path, guard)
+        log_event("branch_created", {"branch": branch, "success": False, "output": checkout["output"][-500:]})
+        return {"success": False, "output": checkout["output"]}
+
+    restore_protected_work(repo_path, guard)
+    if guard.has_stash:
+        message = (
+            f"branch '{branch}' checked out but stashed local work could not be "
+            f"restored — it is preserved in the stash list as '{guard.stash_message}'"
+        )
+        log_event("branch_created", {"branch": branch, "success": False, "output": message})
+        return {"success": False, "output": message, "stash_stranded": True}
+
+    log_event("branch_created", {
+        "branch": branch, "success": True, "preserved_files": len(guard.files),
+    })
+    return {"success": True, "output": checkout["output"]}
 
 
 def run_check(repo_path: str) -> dict:
@@ -128,15 +184,19 @@ def cleanup_feature_branch(repo_path: str, branch: str, force: bool = False) -> 
         return result
 
     current = current_branch(repo_path)
-    checkout = None
     if current == branch:
-        checkout = _git(["checkout", "main"], repo_path)
-        if not checkout.success:
+        # M4c safety: never checkout over uncommitted work. Anything dirty is
+        # stashed under a labelled message and popped back onto main.
+        from tools.git_autonomy import restore_protected_work, safe_checkout
+
+        checkout = safe_checkout(repo_path, "main", label=f"cleanup:{branch}")
+        restore_protected_work(repo_path, checkout["guard"])
+        if not checkout["success"]:
             result = {
                 "success": False,
                 "local_deleted": False,
                 "remote_deleted": False,
-                "output": checkout.output,
+                "output": checkout["output"],
             }
             log_event("branch_cleanup_completed", {"branch": branch, **result})
             return result

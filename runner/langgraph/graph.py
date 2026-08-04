@@ -19,6 +19,7 @@ from tools.task_tools import (
     mark_task_failed,
     mark_task_blocked,
     next_retry_eta,
+    remove_tasks,
     requeue_fulfilled_blocked_tasks,
     requeue_task,
     add_task,
@@ -31,7 +32,10 @@ from tools.worker_timeout_guard import evaluate_worker_timeout
 from tools.worker_health_probe import probe_worker_health
 from tools.stale_run_watchdog import evaluate_stale_run
 from tools.codex_usage_limit_guard import evaluate_codex_usage_limit
-from tools.claude_subscription_cooldown import evaluate_subscription_cooldown
+from tools.claude_subscription_cooldown import (
+    evaluate_subscription_cooldown,
+    _is_cooldown_error,
+)
 from tools.cost_budget_guard import evaluate_cost_budget
 from tools.summary_tools import build_run_summary_digest, parse_worker_summary
 from tools.context_compression import compress_messages
@@ -58,6 +62,7 @@ from tools.git_tools import (
     current_branch,
     current_commit_sha,
 )
+from tools.git_autonomy import scope_from_task, wake_pr_checks
 from tools.sql_guard import scan_sql_text
 from tools.sql_environment_gate import evaluate_sql_approval_policy, infer_environment
 from tools.supabase_tools import apply_sql_file
@@ -77,6 +82,7 @@ from tools.task_quality_guard import guard_planner_task
 from tools.claude_hooks_safety_pack import write_hooks
 from tools.acceptance_criteria_gate import guard_acceptance_criteria
 from tools.definition_of_done import guard_definition_of_done
+from tools.completion_evidence import guard_completion_evidence
 from tools.independent_code_review import guard_code_review, get_diff_text
 from tools.high_risk_claude_review import guard_high_risk_claude_review
 from tools.codex_to_claude_escalation import should_escalate, build_repair_prompt
@@ -104,7 +110,9 @@ from tools.strategic_decision_gate import (
 )
 from tools.model_routing_policy import evaluate_model_routing_policy
 from tools.launch_readiness_scorecard import guard_launch_readiness
+from tools.startup_preflight import guard_startup_preflight
 from tools.live_batch_validation_report import generate_live_batch_report
+from tools.stop_diagnostics import report_loop_stop
 from tools.mission_compiler import (
     parse_mission_file,
     validate_mission,
@@ -126,8 +134,14 @@ from tools.agent_run_sync import start_agent_run, complete_agent_run, fail_agent
 from tools.business_sandbox import fetch_business_sandbox
 from tools.foreign_repo_workspace import (
     fetch_business_by_id,
+    lookup_business,
     prepare_business_repo,
     resolve_scoped_github_token,
+)
+from tools.state_self_healing import (
+    decide_failure_disposition,
+    plan_mission_seeding,
+    run_startup_heal,
 )
 from tools.dispatch_preflight import verify_origin_remote
 from workers.chatgpt_worker import ChatGPTWorker
@@ -371,6 +385,49 @@ def install_hooks(state: RunnerState) -> RunnerState:
     return _persist(state, "install_hooks")
 
 
+def run_startup_preflight_if_needed(state: RunnerState) -> RunnerState:
+    """M4c.0 startup preflight — verify production assumptions ONCE, loudly,
+    before any task is claimed.
+
+    Runs a single consolidated pass over the assumptions that have historically
+    only been true on the founder's laptop (pending migrations, deployed
+    production SHA vs origin/main, Vercel git-connection, GitHub repo
+    reachability, required tables, resolvable credentials) and emits one
+    ``preflight_report`` event carrying every check's status — so a failure 40
+    minutes later can be traced back to a warning that was already visible at
+    startup.
+
+    It REPORTS, it does not halt. The sole exception is the halting condition
+    owned by m4c-01 (dirty tree / wrong branch), under which workers would
+    inherit an unsafe tree. Anything else — a repo that doesn't exist, a Vercel
+    project that isn't git-connected — is a loud Slack warning and the loop
+    continues: a preflight that blocked would just become a new source of
+    stops, which is what this mission exists to reduce.
+
+    Guarded to once per session by ``session_started_at``, so a multi-loop run
+    pays for these network round-trips exactly once.
+    """
+    if not cfg.startup_preflight_enabled:
+        return state
+
+    previous = state.preflight_report or {}
+    if previous.get("session_started_at") and previous["session_started_at"] == state.started_at:
+        return state
+
+    summary = guard_startup_preflight(cfg)
+    summary["session_started_at"] = state.started_at
+    state.preflight_report = summary
+
+    report_path = _RUNNER_DIR / "outbox" / "startup_preflight.txt"
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(summary["report"])
+
+    if summary["unsafe"]:
+        state.stop_reason = "preflight_unsafe"
+
+    return _persist(state, "run_startup_preflight_if_needed")
+
+
 def check_launch_readiness_if_needed(state: RunnerState) -> RunnerState:
     """Launch Readiness Scorecard.
 
@@ -504,6 +561,12 @@ def check_pending_migrations_if_needed(state: RunnerState) -> RunnerState:
 _TASK_SCOPED_STATE_DEFAULTS = {
     "acceptance_criteria_status": None,
     "definition_of_done_status": None,
+    # M4c: completion evidence is per-task. A stale `last_commit_result` would
+    # let a task that committed nothing be "proved" complete by the *previous*
+    # task's commit — exactly the false success the gate exists to stop.
+    "last_commit_result": None,
+    "completion_evidence": None,
+    "completion_evidence_status": None,
     "code_review_status": None,
     "high_risk_review_status": None,
     "codex_escalation_status": None,
@@ -524,6 +587,30 @@ def _reset_task_scoped_state(state: RunnerState) -> None:
     """Clear the previous task's verdicts before a new task starts."""
     for field_name, default in _TASK_SCOPED_STATE_DEFAULTS.items():
         setattr(state, field_name, default)
+
+
+def self_heal_task_state(state: RunnerState) -> RunnerState:
+    """m4c-03 startup self-heal — recover the queue before the first claim.
+
+    Runs once per run, immediately before ``load_next_task``. Requeues tasks
+    left ``running`` by an interrupted run (four separate M4b incidents, each
+    hand-fixed in the JSON: the loop saw zero queued work and exited
+    ``seeded_queue_exhausted``, looking finished while actually stalled),
+    prunes fixture placeholder rows, and parks a task that has been orphaned
+    on ``MAX_ORPHAN_REQUEUES`` restarts in a row rather than feeding it back
+    into the crash that keeps killing it.
+
+    ``load_tasks`` already repairs these on read. The point of doing it here as
+    well is that it is *reported*: one ``startup_self_heal`` event says what the
+    run started with, instead of the repair happening invisibly inside whichever
+    node read the queue first.
+    """
+    if not cfg.state_self_healing_enabled:
+        return state
+
+    summary = run_startup_heal()
+    state.startup_self_heal = summary
+    return _persist(state, "self_heal_task_state")
 
 
 def load_next_task(state: RunnerState) -> RunnerState:
@@ -712,9 +799,61 @@ def seed_mission_queue_if_needed(state: RunnerState) -> RunnerState:
         })
         return state
 
-    tasks = seed_tasks_from_mission(mission, tasks_rows)
-    for task in tasks:
-        add_task(task)
+    candidates = seed_tasks_from_mission(mission, tasks_rows)
+
+    if cfg.state_self_healing_enabled:
+        # m4c-03: seeding is idempotent. "Execute: AI Infra" was seeded three
+        # times because nothing asked whether the mission was already in the
+        # local queue — 15 rows, ids ai-infra-1..5 repeated three times, and
+        # status writes landing on whichever row matched the id first. Identity
+        # is the Supabase mission_tasks row id (the source of truth), never the
+        # locally-derived id, which is identical on every re-seed by design.
+        plan = plan_mission_seeding(mission_id, candidates, load_tasks(), remote_rows=tasks_rows)
+        tasks = plan["to_add"]
+        for task in tasks:
+            add_task(task)
+
+        # Local rows whose mission_tasks parent has gone: Supabase decides what
+        # the mission contains. Terminal rows are history and are kept.
+        prunable = [s["task_id"] for s in plan["stale_local"] if s["prunable"]]
+        pruned = remove_tasks(prunable) if prunable else []
+
+        if plan["skipped"] or plan["reassignments"] or pruned:
+            log_event("seeded_mission_reconciled", {
+                "mission_id": mission_id,
+                "mission_name": mission_name,
+                "remote_task_count": len(tasks_rows),
+                "added": [t["id"] for t in tasks],
+                "already_present": plan["skipped"],
+                "id_reassignments": plan["reassignments"],
+                "pruned": pruned,
+                "stale_kept": [s for s in plan["stale_local"] if not s["prunable"]],
+            })
+
+        if not tasks:
+            # Every mission_tasks row is already in the local queue, and none of
+            # them is queued (or load_next_task would have claimed one). Move
+            # the mission off 'queued' regardless: leaving it there means the
+            # next poll fetches the same mission again, forever.
+            completion = check_mission_completion(mission_id)
+            if completion.get("status") == "completed":
+                mark_mission_completed(mission_id)
+            elif completion.get("status") == "failed":
+                mark_mission_failed(mission_id)
+            else:
+                mark_mission_running(mission_id)
+            log_event("seeded_mission_already_present", {
+                "mission_id": mission_id,
+                "mission_name": mission_name,
+                "task_count": len(plan["skipped"]),
+                "mission_status": completion.get("status"),
+                "message": "mission already seeded locally; claimed without re-seeding",
+            })
+            return _persist(state, "seed_mission_queue_if_needed")
+    else:
+        tasks = candidates
+        for task in tasks:
+            add_task(task)
 
     mark_mission_running(mission_id)
 
@@ -788,6 +927,75 @@ def choose_worker(state: RunnerState) -> RunnerState:
     return _persist(state, "choose_worker")
 
 
+def _park_transient_failure(
+    state: RunnerState,
+    task_id: str,
+    task: dict,
+    *,
+    error: str,
+    event: str,
+    payload: Optional[dict] = None,
+) -> str:
+    """Requeue — or finally park — a task whose failure was infrastructure.
+
+    m4c-03's single rule for a transient error: it never makes a task terminal.
+    The work was never attempted, so nothing about it has been proven wrong.
+    Until the transient budget (``MAX_TRANSIENT_RETRIES``) is spent the task is
+    requeued with the same exponential backoff a degraded worker gets; after
+    that it parks as ``blocked``, which a human — or a fulfillment file — can
+    lift, unlike ``failed``, which nothing lifts without editing the queue by
+    hand. The transient count lives in its own field so an unreachable network
+    never spends the ``MAX_TASK_RETRIES`` budget that decides whether the task
+    may be failed for a *genuine* reason later.
+
+    Returns ``"retry"`` or ``"park"``.
+    """
+    disposition = decide_failure_disposition(
+        error, task, max_transient_retries=cfg.max_transient_retries
+    )
+    base_payload = {
+        "task_id": task_id,
+        "error": error,
+        "error_class": disposition["error_class"],
+        "signal": disposition["signal"],
+        "transient_retry_count": disposition["transient_retry_count"],
+        "max_transient_retries": cfg.max_transient_retries,
+        **(payload or {}),
+    }
+
+    if disposition["action"] == "retry":
+        retry_not_before = (
+            compute_retry_not_before(
+                disposition["transient_retry_count"],
+                cfg.failure_retry_backoff_base_s,
+                cfg.failure_retry_backoff_multiplier,
+                cfg.failure_retry_backoff_max_s,
+            )
+            if cfg.failure_retry_backoff_enabled
+            else None
+        )
+        requeue_task(
+            task_id,
+            task.get("retry_count", 0) or 0,
+            retry_not_before,
+            fields={"transient_retry_count": disposition["transient_retry_count"]},
+        )
+        state.retry_pending = True
+        log_event(event, {**base_payload, "retry_not_before": retry_not_before}, task_id=task_id)
+        return "retry"
+
+    mark_task_blocked(
+        task_id,
+        f"transient failure not clearing after "
+        f"{disposition['transient_retry_count']} retries: {error[:200]}",
+    )
+    # Parked, not failed. Routed like any other task-scoped block so the loop
+    # moves on to the next task instead of ending the run.
+    state.resource_request_status = "pending"
+    log_event("transient_failure_parked", base_payload, task_id=task_id)
+    return "park"
+
+
 def resolve_business_repo_if_needed(state: RunnerState) -> RunnerState:
     """M4b: runner executes missions against a foreign (business) repo.
 
@@ -827,7 +1035,24 @@ def resolve_business_repo_if_needed(state: RunnerState) -> RunnerState:
 
     task_id = state.current_task_id or task.get("id", "unknown")
 
-    business = fetch_business_by_id(str(business_id))
+    lookup = lookup_business(str(business_id))
+    if lookup["status"] == "unreachable" and cfg.state_self_healing_enabled:
+        # m4c-03: the database was unreachable, which says nothing about this
+        # business. Marking the task failed here (as this node did until M4c)
+        # is terminal, so every relaunch exhausted the queue in 30s until the
+        # founder hand-edited the JSON. Requeue with backoff instead — and park
+        # as 'blocked', never 'failed', once the transient budget is spent.
+        _park_transient_failure(
+            state,
+            task_id,
+            task,
+            error=lookup.get("error") or "business lookup unreachable",
+            event="business_lookup_unreachable_requeued",
+            payload={"business_id": business_id, "signal": lookup.get("signal")},
+        )
+        return _persist(state, "resolve_business_repo_if_needed")
+
+    business = lookup["business"]
     if business is None:
         state.stop_reason = "business_not_found"
         mark_task_failed(task_id, f"business {business_id} not found for sandboxed mission")
@@ -1844,6 +2069,11 @@ def commit_push_merge_if_needed(state: RunnerState) -> RunnerState:
     # already committed its own changes (clean tree -> "nothing to commit"). In both
     # cases HEAD is deployable, so record it and run push/merge — otherwise
     # deploy_if_needed wrongly skips with "no committed changes to deploy".
+    # Keep the full commit dict: `nothing_to_commit` is the difference between
+    # "the worker committed its own work" and "the tree was clean and this sha
+    # predates the task", and only the completion-evidence gate can tell them
+    # apart (M4c).
+    state.last_commit_result = commit
     if commit.get("committed"):
         state.last_commit = commit["sha"]
         push_branch(repo_path, branch)
@@ -1918,14 +2148,51 @@ def _merge_via_pull_request(state: RunnerState, task: dict, branch: str) -> None
     state.pr_url = pr.get("url")
 
     sha = current_commit_sha(repo_path)
-    checks = poll_pr_checks(
-        github_repo,
-        sha,
-        timeout_s=cfg.pr_checks_timeout_s,
-        interval_s=cfg.pr_checks_poll_interval_s,
-        pr_number=state.pr_number,
-        token=github_token,
-    )
+
+    def _poll(head_sha: str) -> dict:
+        return poll_pr_checks(
+            github_repo,
+            head_sha,
+            timeout_s=cfg.pr_checks_timeout_s,
+            interval_s=cfg.pr_checks_poll_interval_s,
+            pr_number=state.pr_number,
+            token=github_token,
+        )
+
+    checks = _poll(sha)
+
+    # M4c: "no checks reported" was the single most common state the founder had
+    # to clear by hand — Actions never scheduled a run for the head SHA, and
+    # putting the branch back on top of latest main woke them. Do that here and
+    # re-poll, instead of failing the task and waiting for a human.
+    wake_attempts = 0
+    while (
+        checks.get("reason") == "pr_checks_no_runs"
+        and wake_attempts < max(0, cfg.pr_checks_wake_attempts)
+    ):
+        wake_attempts += 1
+        wake = wake_pr_checks(
+            repo_path,
+            branch,
+            github_repo=github_repo,
+            pr_number=state.pr_number,
+            token=github_token,
+            allowed_paths=scope_from_task(task),
+            strategies=cfg.pr_checks_wake_strategies,
+            allow_force_with_lease=cfg.git_allow_force_with_lease,
+            cfg=cfg,
+        )
+        log_event("pr_checks_wake", {
+            "task_id": task_id, "pr_number": state.pr_number, "attempt": wake_attempts,
+            "success": wake.get("success"), "strategy": wake.get("strategy"),
+            "reason": wake.get("reason"),
+        }, task_id=task_id)
+        if not wake.get("success"):
+            break
+        # The wake pushed a new head commit; checks are scheduled against that
+        # SHA, not the one we polled.
+        sha = current_commit_sha(repo_path)
+        checks = _poll(sha)
 
     if checks.get("timed_out"):
         _mark_merge_step_failed(
@@ -1937,7 +2204,8 @@ def _merge_via_pull_request(state: RunnerState, task: dict, branch: str) -> None
     if checks.get("reason") == "pr_checks_no_runs":
         _mark_merge_step_failed(
             state,
-            f"pr_checks_no_runs: PR #{state.pr_number} never had any check runs scheduled",
+            f"pr_checks_no_runs: PR #{state.pr_number} never had any check runs scheduled"
+            + (f" (after {wake_attempts} wake attempt(s))" if wake_attempts else ""),
         )
         return
 
@@ -2454,8 +2722,23 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
     result = state.worker_result or {}
     task_id = task.get("id", "")
 
+    # A Claude subscription cooldown is a PAUSE, not an attempt and not a
+    # failure. Computed once here because two separate guards below would
+    # otherwise both punish it: the repeated-TASK guard (attempt counting,
+    # immediately after this) and the repeated-ERROR guard (further down).
+    # Observed 2026-08-04 05:25 on m4c-03: four cooldowns became four
+    # "attempts", tripping MAX_TASK_ATTEMPTS=3 and halting a task that had
+    # never actually failed — the second instance of this exact bug shape.
+    _is_cooldown_failure = (
+        not result.get("success")
+        and cfg.claude_subscription_cooldown_enabled
+        and result.get("worker") == "claude"
+        and cfg.claude_auth_mode == "subscription"
+        and _is_cooldown_error(result.get("output"), result.get("error"))
+    )
+
     # ── Repeated-task guard ──────────────────────────────────────────────────
-    if task_id:
+    if task_id and not _is_cooldown_failure:
         rep_task = evaluate_task_repetition(
             task_id, state.task_attempt_counts, cfg.max_task_attempts
         )
@@ -2471,7 +2754,49 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
                 max_task_attempts=cfg.max_task_attempts,
             ), task_id=task_id)
 
-    if result.get("success"):
+    # Set when a failure is classified transient (m4c-03); read by the seeded-
+    # mission sync below, which must not report a network blip to Supabase as a
+    # failed mission task.
+    _transient_failure = False
+
+    # ── Completion evidence gate (M4c) ───────────────────────────────────────
+    # A successful worker exit is not evidence that the work happened. Score the
+    # run against the world — files on disk, the commit in the remote, a
+    # deployment that answers — before anything is allowed to say "complete".
+    evidence_blocked = False
+    if result.get("success") and cfg.completion_evidence_gate_enabled:
+        verdict = guard_completion_evidence(
+            summary=state.worker_summary,
+            task=task,
+            raw_output=result.get("output") or "",
+            context="update_logs_and_state",
+            repo_path=_effective_repo_path(state),
+            commit=state.last_commit_result,
+            deploy_result=state.deploy_result,
+            # Only hold a deploy task to deployment evidence when a deploy could
+            # actually have happened. With AUTO_DEPLOY off or no Vercel token,
+            # deploy_if_needed never runs, so requiring a live deployment would
+            # block such a task forever with no way to satisfy the gate.
+            #
+            # A business mission deploys with the *business's* own scoped token
+            # (_resolve_business_deploy_target), never cfg.vercel_token — so
+            # `has_vercel` says nothing about whether its deploy was possible.
+            # Reading it as "no deploy available" would drop ai-infra-03 — a
+            # business deploy task — back to artifact evidence, which one stray
+            # edited file satisfies. A business deploy task always owes a
+            # deployment; if its sandbox target is missing, blocked is the
+            # honest verdict, not a softer bar.
+            deploy_available=cfg.auto_deploy and (
+                cfg.has_vercel or bool(task.get("business_id"))
+            ),
+        )
+        state.completion_evidence = verdict
+        state.completion_evidence_status = "verified" if verdict["complete"] else "blocked"
+        evidence_blocked = verdict["blocked"]
+    elif result.get("success"):
+        state.completion_evidence_status = "skipped"
+
+    if result.get("success") and not evidence_blocked:
         digest = state.worker_summary_digest or build_run_summary_digest(state.worker_summary, task=task, max_chars=500)
         mark_task_complete(task_id, digest[:500])
         log_event("task_completed", {"task_id": task_id}, task_id=task_id)
@@ -2480,15 +2805,56 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
         state.retry_pending = False
         state.last_task_completed_at = datetime.utcnow().isoformat()
         state.stale_run_warning_sent = False
+    elif evidence_blocked:
+        # Blocked, not failed: nothing broke, the work simply was not done. The
+        # failure counters stay untouched so a refusal neither trips the
+        # circuit breaker nor resets a real failure streak, and the task is left
+        # in a state a human can act on.
+        reasons = (state.completion_evidence or {}).get("reasons") or []
+        mark_task_blocked(
+            task_id,
+            "no evidence of completion: " + "; ".join(reasons),
+        )
+        state.retry_pending = False
+        state.last_task_completed_at = datetime.utcnow().isoformat()
+        state.stale_run_warning_sent = False
+        _record_gate_block(
+            state,
+            "completion_evidence",
+            event="gate_blocked",
+            payload={"task_id": task_id, "issues": reasons},
+            stop_reason="no_completion_evidence",
+            task_id=task_id,
+            # This gate runs inside update_logs_and_state, so the task has
+            # already run and been counted — nothing is skipped by it.
+            pre_completion=False,
+        )
     else:
         err = result.get("error") or "worker returned no output"
         state.retry_pending = False
 
         # ── Repeated-error guard ─────────────────────────────────────────────
+        # A subscription cooldown is NOT a repeated error. The cooldown guard
+        # further down handles it by sleeping until the window resets, but it
+        # runs ~120ms later — so without this exemption every cooldown also
+        # incremented the repeated-error counter, and three cooldowns in one
+        # session killed the loop with `repeated_errors` while the cooldown
+        # guard was busy correctly waiting them out (observed 2026-08-03
+        # 18:39:41 on m4c0-05: blocked at match_count 3 / cooldown_count 3).
+        # Waiting out a rate limit is the designed behaviour; it must never
+        # accumulate toward a failure ceiling.
+        if _is_cooldown_failure:
+            log_event("repeated_error_guard_skipped", {
+                "task_id": task_id,
+                "reason": "claude subscription cooldown — not a task failure",
+                "error": err,
+            }, task_id=task_id)
+
         rep_err = evaluate_error_repetition(
             err, state.error_history, cfg.max_repeated_errors, cfg.repeated_error_window
-        )
-        state.error_history = list(state.error_history) + [{"error": err, "task_id": task_id}]
+        ) if not _is_cooldown_failure else {"blocked": False, "match_count": 0, "stop_reason": None}
+        if not _is_cooldown_failure:
+            state.error_history = list(state.error_history) + [{"error": err, "task_id": task_id}]
         if rep_err["blocked"] and not state.stop_reason:
             state.stop_reason = rep_err["stop_reason"]
             log_event("loop_blocked_on_repeated_error", authority_payload(
@@ -2606,6 +2972,18 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
                     state.retry_pending = True
 
         if not _cooldown_detected:
+            # m4c-03: an infrastructure failure (network, DNS, rate limit, 5xx)
+            # is never allowed to make a task terminal — the work was never
+            # attempted, so nothing about it has been proven wrong. Decided
+            # ahead of the failure guard because it overrides the guard's
+            # give-up decision, and applies just the same when the guard is off.
+            _transient_failure = (
+                cfg.state_self_healing_enabled
+                and decide_failure_disposition(
+                    err, task, max_transient_retries=cfg.max_transient_retries
+                )["error_class"] == "transient"
+            )
+
             if cfg.failure_guard_enabled:
                 decision = evaluate_failure(
                     task,
@@ -2615,8 +2993,19 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
                 )
                 state.consecutive_failures = decision["consecutive_failures"]
 
-                if decision["action"] == "retry":
-                    # Transient failure: requeue the task for another attempt.
+                if _transient_failure:
+                    # The circuit breaker below still sees this failure and can
+                    # still halt the run; only the task's own fate changes.
+                    _park_transient_failure(
+                        state,
+                        task_id,
+                        task,
+                        error=err,
+                        event="transient_failure_requeued",
+                        payload={"worker": result.get("worker")},
+                    )
+                elif decision["action"] == "retry":
+                    # Recoverable failure: requeue the task for another attempt.
                     # Under degraded conditions (timeout, health-probe failure,
                     # sustained consecutive failures) apply exponential backoff so
                     # the runner doesn't immediately hammer the same broken wall.
@@ -2668,6 +3057,15 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
                         consecutive_failures=state.consecutive_failures,
                         max_consecutive_failures=cfg.max_consecutive_failures,
                     ), task_id=task_id)
+            elif _transient_failure:
+                _park_transient_failure(
+                    state,
+                    task_id,
+                    task,
+                    error=err,
+                    event="transient_failure_requeued",
+                    payload={"worker": result.get("worker")},
+                )
             else:
                 mark_task_failed(task_id, err)
                 log_event("error", {"task_id": task_id, "error": err})
@@ -2719,7 +3117,7 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
     seeded_task_id = task.get("seeded_task_id")
     seeded_mission_id = task.get("seeded_mission_id")
     if seeded_task_id and seeded_mission_id and cfg.seeded_mission_queue_enabled and cfg.has_supabase:
-        if result.get("success"):
+        if result.get("success") and not evidence_blocked:
             _sync_digest = state.worker_summary_digest or build_run_summary_digest(
                 state.worker_summary, task=task, max_chars=500
             )
@@ -2732,8 +3130,36 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
                     cost_usd=result.get("api_cost"),
                     duration_seconds=state.worker_elapsed_seconds,
                 )
+        elif _transient_failure:
+            # m4c-03: the local task is queued or blocked, never failed — so
+            # telling Supabase it failed would open a divergence that outlives
+            # the outage and, once every row is "failed", completes the mission
+            # as failed. The agent_run still records what happened.
+            log_event("seeded_mission_failure_sync_skipped", {
+                "task_id": task_id,
+                "seeded_task_id": seeded_task_id,
+                "reason": "transient_failure",
+                "error": (result.get("error") or "")[:200],
+            }, task_id=task_id)
+            if state.current_agent_run_id:
+                fail_agent_run(
+                    state.current_agent_run_id,
+                    (result.get("error") or "transient failure")[:2000],
+                    output=state.worker_summary,
+                    cost_usd=result.get("api_cost"),
+                    duration_seconds=state.worker_elapsed_seconds,
+                )
         else:
-            _sync_err = result.get("error") or "worker returned no output"
+            # A task blocked for lack of evidence must never sync as complete —
+            # that is how ai-infra-03 left its mission marked done with nothing
+            # deployed. Supabase has no "blocked" task state, so it syncs as not
+            # done, with the reason, which keeps the mission out of `completed`.
+            if evidence_blocked:
+                _sync_err = "blocked: no evidence of completion: " + "; ".join(
+                    (state.completion_evidence or {}).get("reasons") or []
+                )
+            else:
+                _sync_err = result.get("error") or "worker returned no output"
             mark_seeded_task_failed(seeded_task_id, _sync_err[:500])
             if state.current_agent_run_id:
                 fail_agent_run(
@@ -2754,7 +3180,8 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
             "task_id": task_id,
             "seeded_task_id": seeded_task_id,
             "seeded_mission_id": seeded_mission_id,
-            "success": bool(result.get("success")),
+            "success": bool(result.get("success")) and not evidence_blocked,
+            "evidence_blocked": evidence_blocked,
             "mission_status": completion.get("status"),
         }, task_id=task_id)
 
@@ -2985,6 +3412,38 @@ def generate_live_batch_validation_report(state: RunnerState) -> RunnerState:
     return _persist(state, "generate_live_batch_validation_report")
 
 
+def report_loop_stop_diagnostics(state: RunnerState) -> RunnerState:
+    """Explain the stop (M4c.0) — the last thing that runs before the graph ends.
+
+    Writes ONE structured record to outbox/loop_stop_report.txt and fires ONE
+    Slack message naming the stop reason, the triggering task, the five events
+    before it, the observed-vs-configured numbers that produced it, a CAUSE
+    sentence and a RECOMMENDED ACTION. Also classifies the stop EXPECTED
+    (finished) or ANOMALOUS (broke) — the field m4c-06's watchdog reads to
+    decide whether to auto-restart.
+
+    Placed on the terminal edge so it sees the whole run, and runs exactly once
+    per stop. Reporting a stop must never change how the run ended, so every
+    failure here is swallowed: the diagnosis is the deliverable, not a gate.
+    """
+    try:
+        report_loop_stop(
+            stop_reason=state.stop_reason,
+            session_state=_state_dict(state),
+            config_report=cfg.report(),
+            outbox_dir=_RUNNER_DIR / "outbox",
+            task=state.current_task,
+        )
+    except Exception as e:  # pragma: no cover - defensive
+        log_event("stop_diagnostics_degraded", {
+            "stop_reason": state.stop_reason,
+            "error": str(e),
+        })
+    # Persisted after the report is built, so the record quotes the last node
+    # that did real work rather than this one.
+    return _persist(state, "report_loop_stop_diagnostics")
+
+
 def decide_continue_or_stop(state: RunnerState) -> RunnerState:
     # ── Claude subscription cooldown auto-resume ─────────────────────────────
     # When the Claude subscription rate-limiter fired this iteration, sleep
@@ -3090,8 +3549,10 @@ def _route_after_business_repo(state: RunnerState) -> str:
     # resource_request_status is checked alongside stop_reason because a
     # task-scoped resource block (M4c.0) deliberately leaves stop_reason clear
     # so the loop continues — but this task still has no usable repo, so it must
-    # not fall through to acceptance criteria and worker dispatch.
-    if state.stop_reason or state.resource_request_status == "pending":
+    # not fall through to acceptance criteria and worker dispatch. retry_pending
+    # is the same situation for a transient lookup failure (m4c-03): the task
+    # has been requeued for a later attempt and must not be dispatched now.
+    if state.stop_reason or state.resource_request_status == "pending" or state.retry_pending:
         return "decide_continue_or_stop"
     return "check_acceptance_criteria"
 
@@ -3153,8 +3614,10 @@ def build_graph():
     builder = StateGraph(RunnerState)
 
     builder.add_node("install_hooks", install_hooks)
+    builder.add_node("run_startup_preflight_if_needed", run_startup_preflight_if_needed)
     builder.add_node("check_launch_readiness_if_needed", check_launch_readiness_if_needed)
     builder.add_node("check_pending_migrations_if_needed", check_pending_migrations_if_needed)
+    builder.add_node("self_heal_task_state", self_heal_task_state)
     builder.add_node("load_next_task", load_next_task)
     builder.add_node("compile_mission_if_needed", compile_mission_if_needed)
     builder.add_node("seed_mission_queue_if_needed", seed_mission_queue_if_needed)
@@ -3187,9 +3650,22 @@ def build_graph():
     builder.add_node("ask_chatgpt_next_task", ask_chatgpt_next_task)
     builder.add_node("decide_continue_or_stop", decide_continue_or_stop)
     builder.add_node("generate_live_batch_validation_report", generate_live_batch_validation_report)
+    builder.add_node("report_loop_stop_diagnostics", report_loop_stop_diagnostics)
 
     builder.set_entry_point("install_hooks")
-    builder.add_edge("install_hooks", "check_launch_readiness_if_needed")
+    builder.add_edge("install_hooks", "run_startup_preflight_if_needed")
+    # The preflight reports and continues. The single exception is a halting
+    # check (dirty tree / wrong branch, m4c-01) — routed to the normal stop
+    # path rather than raising, so the run ends the same way every other guard
+    # ends one.
+    builder.add_conditional_edges(
+        "run_startup_preflight_if_needed",
+        lambda s: "decide_continue_or_stop" if s.stop_reason == "preflight_unsafe" else "check_launch_readiness_if_needed",
+        {
+            "check_launch_readiness_if_needed": "check_launch_readiness_if_needed",
+            "decide_continue_or_stop": "decide_continue_or_stop",
+        },
+    )
     builder.add_conditional_edges(
         "check_launch_readiness_if_needed",
         lambda s: "decide_continue_or_stop" if s.stop_reason == "launch_readiness_failed" else "check_pending_migrations_if_needed",
@@ -3198,7 +3674,8 @@ def build_graph():
             "decide_continue_or_stop": "decide_continue_or_stop",
         },
     )
-    builder.add_edge("check_pending_migrations_if_needed", "load_next_task")
+    builder.add_edge("check_pending_migrations_if_needed", "self_heal_task_state")
+    builder.add_edge("self_heal_task_state", "load_next_task")
 
     builder.add_conditional_edges("load_next_task", _route_after_load, {
         "compile_mission_if_needed": "compile_mission_if_needed",
@@ -3273,7 +3750,8 @@ def build_graph():
         "generate_live_batch_validation_report": "generate_live_batch_validation_report",
         "load_next_task": "load_next_task",
     })
-    builder.add_edge("generate_live_batch_validation_report", END)
+    builder.add_edge("generate_live_batch_validation_report", "report_loop_stop_diagnostics")
+    builder.add_edge("report_loop_stop_diagnostics", END)
 
     return builder.compile()
 

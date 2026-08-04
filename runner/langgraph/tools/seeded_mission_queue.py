@@ -44,7 +44,11 @@ from typing import Optional
 from tools.mission_compiler import _slug
 from tools.log_tools import log_event
 from tools.business_sandbox import fetch_business_sandbox
-from tools.foreign_repo_workspace import fetch_business_by_id, resolve_scoped_github_token
+from tools.foreign_repo_workspace import (
+    fetch_business_by_id,  # noqa: F401 - re-exported for tests that patch it
+    lookup_business,
+    resolve_scoped_github_token,
+)
 from tools.vercel_tools import resolve_scoped_vercel_token
 
 _REQUIRED_SANDBOX_FIELDS = (
@@ -79,7 +83,10 @@ def evaluate_business_mission_claim(mission: dict) -> dict:
 
       - ``business_execution_disabled`` — ``BUSINESS_EXECUTION_ENABLED`` is not set.
       - ``missing_business_id`` — the mission row carries no ``business_id``.
-      - ``business_not_found`` — the business row could not be fetched.
+      - ``business_not_found`` — the query succeeded and no business row matched.
+      - ``business_lookup_unreachable`` — the lookup itself failed (network,
+        DNS, 5xx). Says nothing about the mission: it stays queued and the next
+        poll tries again (m4c-03).
       - ``sandbox_not_configured`` — one or more of the four required
         ``business_sandbox`` fields is missing; ``missing_fields`` names which.
       - ``secret_unresolved`` — a named secret is not set in the runner env;
@@ -97,9 +104,19 @@ def evaluate_business_mission_claim(mission: dict) -> dict:
     if not business_id:
         return {"allowed": False, "reason": "missing_business_id"}
 
-    business = fetch_business_by_id(str(business_id))
-    if business is None:
+    lookup = lookup_business(str(business_id))
+    if lookup["status"] == "unreachable":
+        # m4c-03: an unreachable database says nothing about this mission. Leave
+        # it queued under a reason of its own so the next poll retries it,
+        # rather than reporting a healthy business as missing.
+        return {
+            "allowed": False,
+            "reason": "business_lookup_unreachable",
+            "signal": lookup.get("signal"),
+        }
+    if lookup["status"] != "found":
         return {"allowed": False, "reason": "business_not_found"}
+    business = lookup["business"]
 
     sandbox_config = fetch_business_sandbox(str(business_id)) or {}
     missing_fields = [

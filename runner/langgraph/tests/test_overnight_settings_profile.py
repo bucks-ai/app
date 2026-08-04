@@ -137,5 +137,11 @@ def test_profile_loads_as_runner_config(monkeypatch):
     assert cfg.max_loop_tasks == 50
     assert cfg.worker_health_live_ping_enabled is True
     assert cfg.max_session_cost_dollars == 25.0
-    assert cfg.stale_run_warn_minutes == 45
-    assert cfg.max_stale_task_minutes == 90
+    # M4c.0 calibration (docs/M4C0-THRESHOLD-CALIBRATION.md): raised from
+    # 45/90 because observed end-to-end task duration reaches 41.1 min and the
+    # worker ceiling alone is now 45 min.
+    assert cfg.stale_run_warn_minutes == 75
+    assert cfg.max_stale_task_minutes == 120
+    # The profile is copied verbatim to .env, so it must satisfy the startup
+    # ordering invariants or an unattended run refuses to start at 2am.
+    assert cfg.threshold_violations() == []

@@ -37,11 +37,22 @@ _DEFAULT_SLACK_EVENTS = frozenset({
     "loop_blocked_on_codex_usage_limit",
     "task_definition_of_done_rejected",
     "task_definition_of_done_warned",
+    # A task that exited clean but proved nothing. The whole point of M4c is
+    # that this is louder than a crash, not quieter.
+    "task_completion_evidence_missing",
     "auto_repair_failed",
     "merge_approval_required",
     "pr_checks_failed",
     "pr_checks_timeout",
     "pr_checks_no_runs",
+    "pr_checks_wake_exhausted",
+    # A conflict the runner refused to guess at, and — most important — work
+    # that was stashed for safety but could not be restored. The latter is the
+    # only way founder edits can end up somewhere unexpected, so it must always
+    # reach a human.
+    "git_conflict_escalated",
+    "git_work_restore_failed",
+    "git_work_protect_failed",
     "product_eval_failed",
     "worker_dispatch_crash",
     "loop_blocked_on_stale_run",
@@ -55,6 +66,13 @@ _DEFAULT_SLACK_EVENTS = frozenset({
     "migrations_pending",
     "migration_applied",
     "gate_blocked",
+    "config_invariant_violated",
+    "preflight_report",
+    # The one message per stop that says what stopped the loop and what to do
+    # about it (M4c.0). Paired with the bare "loop_stopped" token above: that
+    # one is the alert, this one is the diagnosis.
+    "loop_stop_report",
+    "stop_diagnostics_degraded",
 })
 
 
@@ -134,6 +152,10 @@ class RunnerConfig:
     max_loop_tasks: int = field(
         default_factory=lambda: int(os.getenv("MAX_LOOP_TASKS", "10"))
     )
+    # M4c.0: measured and retained. Observed loop sessions (n=59) spanned at
+    # most 203.2 min with p95 145.3 — 480 has never been the binding stop, and
+    # it must stay well above MAX_STALE_TASK_MINUTES so a stuck loop reports
+    # `stale_run` rather than `max_runtime` (invariant 5).
     max_runtime_minutes: int = field(
         default_factory=lambda: int(os.getenv("MAX_RUNTIME_MINUTES", "480"))
     )
@@ -146,14 +168,20 @@ class RunnerConfig:
     merge_via_pr: bool = field(
         default_factory=lambda: os.getenv("MERGE_VIA_PR", "true").lower() == "true"
     )
+    # M4c.0 calibration (docs/M4C0-THRESHOLD-CALIBRATION.md): observed check
+    # completion over 61 samples was p95 681.6s / max 695.5s, so the old 900s
+    # left only 1.3x headroom and produced 8 pr_checks_timeout events.
     pr_checks_timeout_s: int = field(
-        default_factory=lambda: int(os.getenv("PR_CHECKS_TIMEOUT_S", "900"))
+        default_factory=lambda: int(os.getenv("PR_CHECKS_TIMEOUT_S", "1200"))
     )
     pr_checks_poll_interval_s: int = field(
         default_factory=lambda: int(os.getenv("PR_CHECKS_POLL_INTERVAL_S", "20"))
     )
+    # M4c.0: check runs register within one poll interval — 67 samples, max
+    # 22.6s. 120s is 5x that ceiling and fast-fails a check-less PR at 240s
+    # instead of 360s.
     pr_checks_empty_grace_s: int = field(
-        default_factory=lambda: int(os.getenv("PR_CHECKS_EMPTY_GRACE_S", "180"))
+        default_factory=lambda: int(os.getenv("PR_CHECKS_EMPTY_GRACE_S", "120"))
     )
     # Check runs whose NAME contains any of these (case-insensitive) substrings
     # are advisory: their conclusion is reported but never blocks a merge.
@@ -165,6 +193,55 @@ class RunnerConfig:
             for s in os.getenv("PR_CHECKS_NON_BLOCKING", "[informational]").split(",")
             if s.strip()
         ]
+    )
+    # M4c git/PR autonomy (tools/git_autonomy.py). A PR whose head SHA never got
+    # check runs scheduled is woken by pushing a fresh head SHA on top of latest
+    # main, then re-polled — instead of failing the task and waiting for the
+    # founder to do it by hand. 0 disables the recovery entirely.
+    pr_checks_wake_attempts: int = field(
+        default_factory=lambda: int(os.getenv("PR_CHECKS_WAKE_ATTEMPTS", "1"))
+    )
+    # Ordered ladder of wake strategies; see git_autonomy.DEFAULT_WAKE_STRATEGIES.
+    pr_checks_wake_strategies: list = field(
+        default_factory=lambda: [
+            s.strip().lower()
+            for s in os.getenv(
+                "PR_CHECKS_WAKE_STRATEGIES", "update_branch,rebase,merge_base,empty_commit"
+            ).split(",")
+            if s.strip()
+        ]
+    )
+    # Auto-resolve conflicts that are provably formatting-only (identical code
+    # after line-wrap/whitespace normalisation). Anything semantic is always
+    # escalated regardless of this flag.
+    git_auto_resolve_trivial_conflicts: bool = field(
+        default_factory=lambda: os.getenv("GIT_AUTO_RESOLVE_TRIVIAL_CONFLICTS", "true").lower() == "true"
+    )
+    # File suffixes eligible for trivial-conflict auto-resolution. The default
+    # (git_autonomy._DEFAULT_AUTO_RESOLVE_SUFFIXES) deliberately excludes
+    # formats where whitespace or a trailing comma IS content (.md, .json,
+    # .yaml, .sh).
+    git_trivial_conflict_suffixes: list = field(
+        default_factory=lambda: [
+            s.strip().lower() if s.strip().startswith(".") else f".{s.strip().lower()}"
+            for s in os.getenv("GIT_TRIVIAL_CONFLICT_SUFFIXES", "").split(",")
+            if s.strip()
+        ]
+    )
+    # AGENTS.md forbids `git push --force`. The rebase rung of the check-wake
+    # ladder rewrites an already-pushed branch and so is inert unless this is
+    # on; even then it pushes with --force-with-lease, which refuses when origin
+    # moved since our fetch (i.e. when a human pushed to the branch). Off by
+    # default: the merge_base rung reaches the same end state without any
+    # history rewrite.
+    git_allow_force_with_lease: bool = field(
+        default_factory=lambda: os.getenv("GIT_ALLOW_FORCE_WITH_LEASE", "false").lower() == "true"
+    )
+    # Prefer `pull --rebase` over a merge when syncing a branch with its base.
+    # M4b needed the founder to hand-choose rebase vs reset on a diverged main;
+    # rebase is now the standing answer and reset is never an option.
+    git_prefer_rebase: bool = field(
+        default_factory=lambda: os.getenv("GIT_PREFER_REBASE", "true").lower() == "true"
     )
     auto_deploy: bool = field(
         default_factory=lambda: os.getenv("AUTO_DEPLOY", "true").lower() == "true"
@@ -218,6 +295,21 @@ class RunnerConfig:
     max_consecutive_failures: int = field(
         default_factory=lambda: int(os.getenv("MAX_CONSECUTIVE_FAILURES", "3"))
     )
+    # m4c-03 state self-healing: the startup orphan/placeholder pass, idempotent
+    # mission seeding, and transient-vs-genuine error classification. Kept
+    # switchable only so a bad classification can be disabled without a code
+    # change; off restores the pre-M4c behaviour where a network blip could
+    # mark a task terminally failed.
+    state_self_healing_enabled: bool = field(
+        default_factory=lambda: os.getenv("STATE_SELF_HEALING", "true").lower() == "true"
+    )
+    # Transient failures are counted separately from MAX_TASK_RETRIES so an
+    # unreachable network never spends the budget that decides whether a task
+    # may be marked failed. Past this many, the task parks as ``blocked`` — a
+    # state a human can lift — and never as ``failed``, which nothing lifts.
+    max_transient_retries: int = field(
+        default_factory=lambda: int(os.getenv("MAX_TRANSIENT_RETRIES", "5"))
+    )
     max_repeated_errors: int = field(
         default_factory=lambda: int(os.getenv("MAX_REPEATED_ERRORS", "3"))
     )
@@ -233,11 +325,19 @@ class RunnerConfig:
     max_worker_timeouts: int = field(
         default_factory=lambda: int(os.getenv("MAX_WORKER_TIMEOUTS", "3"))
     )
+    # M4c.0 calibration: 570s sat below the observed p90 of healthy worker runs
+    # (606.4s), so 22/181 successful runs — 12.2% — were classified as timeouts
+    # the CLI never caused. The threshold now sits *above* the CLI ceiling, so
+    # only a genuine hard kill can be labelled a timeout. Invariant 1 in
+    # tools/config_invariants.py enforces that ordering.
     worker_timeout_threshold: int = field(
-        default_factory=lambda: int(os.getenv("WORKER_TIMEOUT_THRESHOLD", "570"))
+        default_factory=lambda: int(os.getenv("WORKER_TIMEOUT_THRESHOLD", "2700"))
     )
+    # M4c.0: worker p95 was 755.1s overall and 1653.4s for `test` tasks, and the
+    # old 1800s ceiling right-censored the distribution (a run finished at
+    # exactly 1800.3s). 2400s clears the `test` p95 with ~45% headroom.
     claude_cli_timeout_s: int = field(
-        default_factory=lambda: int(os.getenv("CLAUDE_CLI_TIMEOUT_S", "1800"))
+        default_factory=lambda: int(os.getenv("CLAUDE_CLI_TIMEOUT_S", "2400"))
     )
     cost_budget_guard_enabled: bool = field(
         default_factory=lambda: os.getenv("COST_BUDGET_GUARD", "true").lower() == "true"
@@ -310,6 +410,12 @@ class RunnerConfig:
     )
     definition_of_done_strict_mode: bool = field(
         default_factory=lambda: os.getenv("DEFINITION_OF_DONE_STRICT_MODE", "false").lower() == "true"
+    )
+    # M4c: completion requires positive, verified evidence. Intentionally has no
+    # strict/warn split — the DoD gate's warn-only default is how ai-infra-03
+    # was scored complete twice with nothing deployed.
+    completion_evidence_gate_enabled: bool = field(
+        default_factory=lambda: os.getenv("COMPLETION_EVIDENCE_GATE_ENABLED", "true").lower() == "true"
     )
     claude_subagent_pack_enabled: bool = field(
         default_factory=lambda: os.getenv("CLAUDE_SUBAGENT_PACK_ENABLED", "true").lower() == "true"
@@ -429,6 +535,18 @@ class RunnerConfig:
     loop_start_preflight_enabled: bool = field(
         default_factory=lambda: os.getenv("LOOP_START_PREFLIGHT", "true").lower() == "true"
     )
+    # M4c.0: verify production assumptions once, at loop start, before any task
+    # is claimed. Reports only — it never halts on its own (the one halting
+    # condition, dirty tree / wrong branch, belongs to LOOP_START_PREFLIGHT
+    # above and is re-reported here for a single consolidated summary).
+    startup_preflight_enabled: bool = field(
+        default_factory=lambda: os.getenv("STARTUP_PREFLIGHT", "true").lower() == "true"
+    )
+    preflight_required_tables: tuple = field(
+        default_factory=lambda: tuple(
+            t.strip() for t in os.getenv("PREFLIGHT_REQUIRED_TABLES", "").split(",") if t.strip()
+        )
+    )
     worker_health_probe_enabled: bool = field(
         default_factory=lambda: os.getenv("WORKER_HEALTH_PROBE", "true").lower() == "true"
     )
@@ -441,12 +559,23 @@ class RunnerConfig:
     stale_run_watchdog_enabled: bool = field(
         default_factory=lambda: os.getenv("STALE_RUN_WATCHDOG", "true").lower() == "true"
     )
+    # M4c.0: 60 min killed sessions that were working correctly — observed
+    # end-to-end task duration reached 41.1 min, and the worst legitimate
+    # single attempt (45 min worker ceiling + 11.6 min PR checks + deploy +
+    # backoff) is ~70 min. 120 min clears that and still bounds a dead loop.
     max_stale_task_minutes: int = field(
-        default_factory=lambda: int(os.getenv("MAX_STALE_TASK_MINUTES", "60"))
+        default_factory=lambda: int(os.getenv("MAX_STALE_TASK_MINUTES", "120"))
     )
+    # M4c.0: the old 30 min warning fired on legitimate 30.0 and 34.0 min gaps.
     stale_run_warn_minutes: int = field(
-        default_factory=lambda: int(os.getenv("STALE_RUN_WARN_MINUTES", "30"))
+        default_factory=lambda: int(os.getenv("STALE_RUN_WARN_MINUTES", "75"))
     )
+    # M4c.0: measured and retained. Retries are rare (30 task_retry_scheduled
+    # events across the whole log), so there is no duration distribution to fit
+    # — these bounds are governed by a budget instead: at MAX_TASK_ATTEMPTS=3
+    # the waits are 30s then 60s and the 300s cap is never reached, and the
+    # worst case (2700 + 300*2 = 3300s) fits inside the 7200s stale window.
+    # Invariant 6 in tools/config_invariants.py enforces that budget.
     failure_retry_backoff_enabled: bool = field(
         default_factory=lambda: os.getenv("FAILURE_RETRY_BACKOFF", "true").lower() == "true"
     )
@@ -559,6 +688,12 @@ class RunnerConfig:
             "pr_checks_poll_interval_s": self.pr_checks_poll_interval_s,
             "pr_checks_empty_grace_s": self.pr_checks_empty_grace_s,
             "pr_checks_non_blocking": self.pr_checks_non_blocking,
+            "pr_checks_wake_attempts": self.pr_checks_wake_attempts,
+            "pr_checks_wake_strategies": self.pr_checks_wake_strategies,
+            "git_auto_resolve_trivial_conflicts": self.git_auto_resolve_trivial_conflicts,
+            "git_trivial_conflict_suffixes": self.git_trivial_conflict_suffixes,
+            "git_allow_force_with_lease": self.git_allow_force_with_lease,
+            "git_prefer_rebase": self.git_prefer_rebase,
             "auto_deploy": self.auto_deploy,
             "auto_deploy_poll": self.auto_deploy_poll,
             "block_on_deploy_failure": self.block_on_deploy_failure,
@@ -575,6 +710,8 @@ class RunnerConfig:
             "failure_guard_enabled": self.failure_guard_enabled,
             "max_task_retries": self.max_task_retries,
             "max_consecutive_failures": self.max_consecutive_failures,
+            "state_self_healing_enabled": self.state_self_healing_enabled,
+            "max_transient_retries": self.max_transient_retries,
             "max_repeated_errors": self.max_repeated_errors,
             "repeated_error_window": self.repeated_error_window,
             "max_task_attempts": self.max_task_attempts,
@@ -605,6 +742,7 @@ class RunnerConfig:
             "acceptance_criteria_strict_mode": self.acceptance_criteria_strict_mode,
             "definition_of_done_gate_enabled": self.definition_of_done_gate_enabled,
             "definition_of_done_strict_mode": self.definition_of_done_strict_mode,
+            "completion_evidence_gate_enabled": self.completion_evidence_gate_enabled,
             "claude_subagent_pack_enabled": self.claude_subagent_pack_enabled,
             "claude_hooks_safety_pack_enabled": self.claude_hooks_safety_pack_enabled,
             "claude_hooks_safety_pack_auto_install": self.claude_hooks_safety_pack_auto_install,
@@ -643,6 +781,8 @@ class RunnerConfig:
             "fast_engineering_mode_enabled": self.fast_engineering_mode_enabled,
             "runner_dry_run": self.runner_dry_run,
             "loop_start_preflight_enabled": self.loop_start_preflight_enabled,
+            "startup_preflight_enabled": self.startup_preflight_enabled,
+            "preflight_required_tables": self.preflight_required_tables,
             "worker_health_probe_enabled": self.worker_health_probe_enabled,
             "worker_health_live_ping_enabled": self.worker_health_live_ping_enabled,
             "worker_health_live_ping_timeout_s": self.worker_health_live_ping_timeout_s,
@@ -658,6 +798,16 @@ class RunnerConfig:
             "claude_subscription_cooldown_wait_s": self.claude_subscription_cooldown_wait_s,
             "claude_subscription_cooldown_max_waits": self.claude_subscription_cooldown_max_waits,
         }
+
+    def threshold_violations(self) -> list:
+        """Ordering invariants between the nested timeout windows.
+
+        Imported lazily: ``tools/`` modules import ``config``, so a top-level
+        import here would close the cycle.
+        """
+        from tools.config_invariants import check_threshold_invariants
+
+        return check_threshold_invariants(self.report())
 
 
 _config: Optional[RunnerConfig] = None

@@ -100,6 +100,60 @@ def get_deployment_by_id(deployment_id: str, token: str = None) -> dict:
         return {"available": False, "error": str(e)}
 
 
+def get_project(project_id: str, token: str = None) -> dict:
+    """Fetch a project record by id or name (read-only).
+
+    Used by the startup preflight to answer two questions at once: is the
+    project reachable with this token, and does it carry a ``link`` (i.e. is it
+    git-connected)? An unlinked project deploys nothing on merge — see
+    ``startup_preflight.check_vercel_project``.
+    """
+    cfg = get_config()
+    if not (token or cfg.has_vercel):
+        log_event("vercel_degraded", {"reason": "no VERCEL_TOKEN"})
+        return {"available": False, "reason": "no VERCEL_TOKEN"}
+    if not project_id:
+        return {"available": False, "error": "no project_id"}
+    try:
+        url = f"{_BASE}/v9/projects/{project_id}"
+        r = retry_request(requests.get, url, headers=_headers(token), timeout=15)
+        r.raise_for_status()
+        return {"available": True, "project": r.json()}
+    except Exception as e:
+        log_event("error", {"tool": "vercel", "action": "get_project", "error": str(e)})
+        return {"available": False, "error": str(e)}
+
+
+def get_production_deployment(project_id: str, token: str = None) -> dict:
+    """Fetch the deployment currently serving production (read-only).
+
+    Unlike ``get_deployment_status``, this filters to ``target=production`` and
+    ``state=READY`` so the result is what users are actually being served —
+    not a preview build or an in-flight production deploy.
+    """
+    cfg = get_config()
+    if not (token or cfg.has_vercel):
+        log_event("vercel_degraded", {"reason": "no VERCEL_TOKEN"})
+        return {"available": False, "reason": "no VERCEL_TOKEN"}
+    if not project_id:
+        return {"available": False, "error": "no project_id"}
+    try:
+        url = f"{_BASE}/v6/deployments"
+        params = {
+            "projectId": project_id,
+            "target": "production",
+            "state": _STATE_READY,
+            "limit": 1,
+        }
+        r = retry_request(requests.get, url, headers=_headers(token), params=params, timeout=15)
+        r.raise_for_status()
+        deployments = r.json().get("deployments", [])
+        return {"available": True, "deployment": deployments[0] if deployments else None}
+    except Exception as e:
+        log_event("error", {"tool": "vercel", "action": "get_production_deployment", "error": str(e)})
+        return {"available": False, "error": str(e)}
+
+
 def poll_deployment_until_terminal(
     deployment_id: str = None,
     project_id: str = None,

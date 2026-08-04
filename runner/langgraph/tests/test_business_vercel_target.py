@@ -338,16 +338,16 @@ def test_deploy_if_needed_ignores_legacy_business_sandbox_config_column():
     graph.cfg.vercel_project_id = "prj_bucks_ai"
     graph.cfg.vercel_token = "bucks-ai-token"
 
-    original_fetch_by_id = graph.fetch_business_by_id
+    original_fetch_by_id = graph.lookup_business
     original_fetch_sandbox = graph.fetch_business_sandbox
     os.environ["TEST_BIZ_LEGACY_TOKEN"] = "biz-scoped-token"
-    graph.fetch_business_by_id = lambda bid: {
+    graph.lookup_business = lambda bid: {"status": "found", "business": {
         "id": bid,
         "sandbox_config": {
             "vercel_project_id": "prj_biz_legacy",
             "vercel_token_secret_name": "TEST_BIZ_LEGACY_TOKEN",
         },
-    }
+    }}
     graph.fetch_business_sandbox = lambda bid: None
     try:
         state = graph.deploy_if_needed(_landed_business_state("biz-legacy"))
@@ -355,7 +355,7 @@ def test_deploy_if_needed_ignores_legacy_business_sandbox_config_column():
         assert calls == [], "must never deploy using the deprecated sandbox_config column"
         assert state.deploy_result is None, state.deploy_result
     finally:
-        graph.fetch_business_by_id = original_fetch_by_id
+        graph.lookup_business = original_fetch_by_id
         graph.fetch_business_sandbox = original_fetch_sandbox
         del os.environ["TEST_BIZ_LEGACY_TOKEN"]
 

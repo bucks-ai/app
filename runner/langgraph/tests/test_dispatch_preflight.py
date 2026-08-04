@@ -173,13 +173,13 @@ def _state(task):
 
 
 def _run_node_with_remote(verify_result):
-    original_fetch = graph.fetch_business_by_id
+    original_fetch = graph.lookup_business
     original_prepare = graph.prepare_business_repo
     original_verify = graph.verify_origin_remote
     original_failed = graph.mark_task_failed
     failed = []
     graph.mark_task_failed = lambda task_id, reason: failed.append((task_id, reason))
-    graph.fetch_business_by_id = lambda bid: {"id": bid}
+    graph.lookup_business = lambda bid: {"status": "found", "business": {"id": bid}}
     graph.prepare_business_repo = lambda task, business: {
         "success": True,
         "repo_path": "/tmp/.workspaces/biz-x",
@@ -192,7 +192,7 @@ def _run_node_with_remote(verify_result):
             _state({"id": "t1", "business_id": "biz-x", "runner_target": "business"})
         )
     finally:
-        graph.fetch_business_by_id = original_fetch
+        graph.lookup_business = original_fetch
         graph.prepare_business_repo = original_prepare
         graph.verify_origin_remote = original_verify
         graph.mark_task_failed = original_failed

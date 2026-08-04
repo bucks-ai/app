@@ -28,6 +28,22 @@ def _no_live_slack(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _restore_git_tools_git():
+    """``tests/test_commit_node.py`` and friends are written to run standalone
+    without pytest, so they stub ``git_tools._git`` by plain module assignment
+    and never put it back. The stub is a fixed queue of canned responses, so it
+    raises IndexError for any later test that reaches real git through
+    ``git_tools`` — a failure that only appears in a full-suite run and points
+    at the innocent test rather than the leaking one. Restore the real function
+    after every test regardless of what an individual test does."""
+    import tools.git_tools as git_tools
+
+    original = git_tools._git
+    yield
+    git_tools._git = original
+
+
+@pytest.fixture(autouse=True)
 def _restore_has_supabase_property():
     """Some tests monkeypatch ``type(graph.cfg).has_supabase`` (a class-level
     property on the shared RunnerConfig class) to force a fixed value, and

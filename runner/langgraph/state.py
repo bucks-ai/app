@@ -98,6 +98,9 @@ class RunnerState(BaseModel):
     mission_compiled: Optional[bool] = None         # True when a mission was compiled this session
     acceptance_criteria_status: Optional[str] = None  # passed | warned | failed | None
     definition_of_done_status: Optional[str] = None  # passed | warned | failed | None
+    completion_evidence_status: Optional[str] = None  # verified | blocked | skipped | None (M4c)
+    completion_evidence: Optional[dict] = None  # evaluate_completion() verdict for the current task
+    last_commit_result: Optional[dict] = None  # git_tools.commit_all() dict for the current task; carries nothing_to_commit
     code_review_status: Optional[str] = None  # passed | warned | failed | None
     high_risk_review_status: Optional[str] = None  # passed | warned | skipped | failed | None
     codex_escalation_status: Optional[str] = None  # attempted | succeeded | failed | skipped | None
@@ -110,6 +113,7 @@ class RunnerState(BaseModel):
     ui_flow_result: Optional[dict] = None          # result dict from ui_flow_validator.run_ui_flow_validation
     product_eval_result: Optional[dict] = None     # result dict from product_eval_harness.run_product_eval_suite
     launch_readiness_result: Optional[dict] = None  # result dict from launch_readiness_scorecard
+    preflight_report: Optional[dict] = None         # consolidated startup_preflight summary; carries session_started_at so it runs once per session
     last_task_completed_at: Optional[str] = None    # ISO-8601 UTC timestamp of the last completed task loop
     stale_run_warning_sent: bool = False             # True once the stale-run Slack warning has fired this episode
     live_batch_validation_result: Optional[dict] = None  # result dict from live_batch_validation_report
@@ -117,3 +121,4 @@ class RunnerState(BaseModel):
     claude_subscription_cooldown_count: int = 0      # cumulative cooldown events this session
     cooldown_wait_seconds_total: float = 0.0         # cumulative wall-clock seconds slept on cooldown waits this session; excluded from the MAX_RUNTIME_MINUTES budget
     current_agent_run_id: Optional[str] = None       # Supabase agent_runs.id for the in-flight seeded-mission task, if any
+    startup_self_heal: Optional[dict] = None         # m4c-03 summary of what the startup heal requeued, parked, or pruned

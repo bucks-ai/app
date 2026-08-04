@@ -31,7 +31,6 @@ CRITICAL SAFETY invariants (all unit-tested in
 """
 import os
 import subprocess
-import time
 from pathlib import Path
 from typing import Optional
 
@@ -180,51 +179,74 @@ def guard_business_repo_path(repo_path: str, cfg=None) -> None:
         )
 
 
-def fetch_business_by_id(business_id: str, attempts: int = 3) -> Optional[dict]:
-    """Return the Supabase ``businesses`` row for *business_id*, or ``None``.
+def lookup_business(business_id: str, attempts: int = 3) -> dict:
+    """Look up a ``businesses`` row, keeping "missing" and "unreachable" apart.
 
-    Retries transient failures before giving up. This matters because the
-    caller cannot distinguish "this business does not exist" from "we could
-    not reach Supabase" — both surface as ``None``, and the graph reports the
-    latter to the founder as ``business_not_found``, which is actively
-    misleading (observed 2026-07-30: a degraded network turned a healthy
-    business into a hard ``Loop stopped: business_not_found``).
+    Returns one of:
 
-    A genuine empty result (query succeeded, zero rows) returns ``None``
-    immediately — only exceptions are retried, with linear backoff.
+      ``{"status": "found", "business": {...}}``
+      ``{"status": "not_found", "business": None}``
+      ``{"status": "unreachable", "business": None, "error": ..., "signal": ...}``
+
+    That distinction is the whole point. Collapsing both failures into ``None``
+    is what let a degraded network turn a healthy business into a hard
+    ``Loop stopped: business_not_found`` (observed 2026-07-30) — and because
+    ``failed`` is terminal, every relaunch after that exhausted the queue in
+    30 seconds until the founder hand-edited the JSON.
+
+    A query that succeeds and returns zero rows is ``not_found`` immediately;
+    only exceptions are retried, and only the transient ones
+    (``state_self_healing.call_with_transient_retry``).
     """
-    last_error: Optional[Exception] = None
-    for attempt in range(1, attempts + 1):
-        try:
-            from config import get_config
-            from supabase import create_client
-            cfg = get_config()
-            client = create_client(cfg.supabase_url, cfg.supabase_service_role_key)
-            result = (
-                client.table("businesses").select("*").eq("id", business_id).limit(1).execute()
-            )
-            rows = result.data or []
-            # Query succeeded. Zero rows genuinely means "not found" — do not retry.
-            return rows[0] if rows else None
-        except Exception as e:
-            last_error = e
-            log_event("foreign_repo_workspace_error", {
-                "op": "fetch_business_by_id",
-                "business_id": business_id,
-                "error": str(e),
-                "attempt": attempt,
-                "attempts": attempts,
-                "will_retry": attempt < attempts,
-            })
-            if attempt < attempts:
-                time.sleep(2 * attempt)  # 2s, 4s
+    from tools.state_self_healing import call_with_transient_retry
+
+    def _query():
+        from config import get_config
+        from supabase import create_client
+        cfg = get_config()
+        client = create_client(cfg.supabase_url, cfg.supabase_service_role_key)
+        result = (
+            client.table("businesses").select("*").eq("id", business_id).limit(1).execute()
+        )
+        return result.data or []
+
+    outcome = call_with_transient_retry(
+        _query,
+        op="fetch_business_by_id",
+        attempts=attempts,
+        business_id=business_id,
+    )
+
+    if outcome["ok"]:
+        rows = outcome["value"]
+        return {"status": "found", "business": rows[0]} if rows else {
+            "status": "not_found", "business": None,
+        }
 
     log_event("business_lookup_unreachable", {
         "business_id": business_id,
-        "error": str(last_error) if last_error else "unknown",
+        "error": outcome["error"],
+        "signal": outcome["signal"],
+        "attempts": outcome["attempts"],
         "note": "infrastructure failure, NOT a missing business — do not report as business_not_found",
     })
-    return None
+    return {
+        "status": "unreachable",
+        "business": None,
+        "error": outcome["error"],
+        "signal": outcome["signal"],
+    }
+
+
+def fetch_business_by_id(business_id: str, attempts: int = 3) -> Optional[dict]:
+    """Return the Supabase ``businesses`` row for *business_id*, or ``None``.
+
+    Thin compatibility wrapper over :func:`lookup_business` for callers that
+    only need the row. Anything that acts on the *absence* of a row — marking a
+    task failed, refusing to claim a mission — must call ``lookup_business``
+    instead, so an unreachable database is never mistaken for a missing one.
+    """
+    return lookup_business(business_id, attempts=attempts)["business"]
 
 
 def prepare_business_repo(task: dict, business: dict, cfg=None, git_run=None) -> dict:

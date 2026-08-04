@@ -72,6 +72,17 @@ def cmd_setup(args):
             print(f"  – {m}")
     else:
         print("All integrations configured. Full automatic mode available.")
+
+    # M4c.0: setup is the command an operator runs to find out whether this
+    # config will work, so it must surface a broken timeout ordering here
+    # rather than letting run-loop discover it overnight.
+    from tools.config_invariants import format_violations
+    violations = cfg.threshold_violations()
+    if violations:
+        print()
+        print(format_violations(violations))
+        sys.exit(1)
+
     print("\nSetup complete.")
 
 
@@ -115,6 +126,8 @@ def cmd_run_once(args):
     from state import RunnerState
     from tools.log_tools import read_state, update_state
     from datetime import datetime
+
+    threshold_invariants_or_exit("run-once")
 
     saved = read_state()
     init = RunnerState(**{k: v for k, v in saved.items() if k in RunnerState.model_fields})
@@ -194,11 +207,42 @@ def preflight_or_exit(command: str):
     sys.exit(1)
 
 
+def threshold_invariants_or_exit(command: str):
+    """M4c.0: refuse to start when the timeout windows are not properly nested.
+
+    The runner's timeouts are nested windows, not independent knobs, and an
+    inverted pair does not error — it mis-behaves hours later somewhere that
+    points nowhere near the cause. Two such inversions shipped in the defaults
+    (a worker guard below the observed p90, a watchdog below the observed max
+    task duration), and both surfaced as "the loop died overnight". Exits
+    rather than raising: this is an operator error to fix in `.env` before
+    starting, not a task failure to record.
+    """
+    from config import get_config
+    from tools.config_invariants import format_violations
+    from tools.log_tools import log_event
+
+    cfg = get_config()
+    violations = cfg.threshold_violations()
+    if not violations:
+        return
+
+    log_event("config_invariant_violated", {
+        "command": command,
+        "violations": [
+            {"invariant": v["invariant"], "values": v["values"]} for v in violations
+        ],
+    })
+    print(format_violations(violations))
+    sys.exit(1)
+
+
 def cmd_run_loop(args):
     from graph import graph
     from state import RunnerState
     from tools.log_tools import read_state, update_state
 
+    threshold_invariants_or_exit("run-loop")
     preflight_or_exit("run-loop")
 
     saved = read_state()
