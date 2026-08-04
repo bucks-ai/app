@@ -11,6 +11,8 @@ type SoftObjectProps = {
    * second brand colour.
    */
   seed?: number;
+  /** Draw Bucks' face. Off for purely ambient shapes. */
+  face?: boolean;
 };
 
 /**
@@ -41,6 +43,7 @@ export function SoftObject({
   className = "",
   drift = 9,
   seed = 0,
+  face = true,
 }: SoftObjectProps) {
   // Filter ids are document-global. Several of these render on one page, so a
   // fixed id would make every instance reuse whichever filter mounted first.
@@ -65,7 +68,6 @@ export function SoftObject({
     >
       <svg
         viewBox="0 0 200 200"
-        style={{ transform: `rotate(${rotate}deg)` }}
         width="100%"
         height="100%"
         role="presentation"
@@ -151,12 +153,39 @@ export function SoftObject({
         </defs>
 
         {/* A soft, slightly irregular silhouette — a perfect circle reads as
-            a button, not an object. */}
-        <path
-          filter={`url(#${fid})`}
-          fill={`url(#${gid})`}
-          d="M100 18c30 0 46 12 58 30s24 34 18 58-28 34-48 46-42 16-62 6-34-30-40-52 2-46 18-62S70 18 100 18Z"
-        />
+            a button, not an object.
+
+            Rotation lives on this group rather than on the <svg>, so the
+            per-seed variation tumbles the body while Bucks' face below stays
+            upright. Rotating the whole element tilted the smile. */}
+        <g transform={`rotate(${rotate} 100 100)`}>
+          <path
+            filter={`url(#${fid})`}
+            fill={`url(#${gid})`}
+            d="M100 18c30 0 46 12 58 30s24 34 18 58-28 34-48 46-42 16-62 6-34-30-40-52 2-46 18-62S70 18 100 18Z"
+          />
+        </g>
+
+        {/*
+          Bucks. Two dots and a smile, deliberately minimal — he reads at
+          13rem in a feature panel and at 17rem in the hero, so any more
+          detail would turn to mush at the small end.
+
+          Drawn outside the lighting filter: running the face through the
+          bump map would emboss and blur it. It sits flat on the surface,
+          which is also what keeps it legible.
+        */}
+        {face ? (
+          <g fill="none" stroke="var(--accent-contrast)" opacity="0.82">
+            <circle cx="82" cy="88" r="5.5" fill="var(--accent-contrast)" stroke="none" />
+            <circle cx="120" cy="86" r="5.5" fill="var(--accent-contrast)" stroke="none" />
+            <path
+              d="M79 112c7 9 17 13 27 12s18-7 22-16"
+              strokeWidth="6"
+              strokeLinecap="round"
+            />
+          </g>
+        ) : null}
       </svg>
     </div>
   );
