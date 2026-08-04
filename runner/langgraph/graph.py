@@ -2588,7 +2588,18 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
             # actually have happened. With AUTO_DEPLOY off or no Vercel token,
             # deploy_if_needed never runs, so requiring a live deployment would
             # block such a task forever with no way to satisfy the gate.
-            deploy_available=cfg.auto_deploy and cfg.has_vercel,
+            #
+            # A business mission deploys with the *business's* own scoped token
+            # (_resolve_business_deploy_target), never cfg.vercel_token — so
+            # `has_vercel` says nothing about whether its deploy was possible.
+            # Reading it as "no deploy available" would drop ai-infra-03 — a
+            # business deploy task — back to artifact evidence, which one stray
+            # edited file satisfies. A business deploy task always owes a
+            # deployment; if its sandbox target is missing, blocked is the
+            # honest verdict, not a softer bar.
+            deploy_available=cfg.auto_deploy and (
+                cfg.has_vercel or bool(task.get("business_id"))
+            ),
         )
         state.completion_evidence = verdict
         state.completion_evidence_status = "verified" if verdict["complete"] else "blocked"

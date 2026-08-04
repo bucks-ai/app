@@ -674,6 +674,43 @@ class TestUpdateLogsAndStateIntegration:
         assert len(calls["complete"]) == 1
         assert out.completion_evidence_status == "skipped"
 
+    def _busy_deploy_state(self, **task_over) -> RunnerState:
+        """A deploy task that edited one real file and deployed nothing. Its
+        artifact evidence verifies; only the deployment requirement can block it."""
+        task = {"id": "ai-infra-03", "type": "infra", "title": "Deploy the scaffolded app"}
+        task.update(task_over)
+        return RunnerState(
+            current_task_id=task["id"],
+            current_task=task,
+            worker_result={"success": True, "output": "Adjusted the deploy config file.\n- Check Result: pass"},
+            worker_summary=_good_summary(commit_result="abc1234"),
+            worker_summary_digest="Task: Deploy\nCheck: pass",
+            deploy_result=None,
+        )
+
+    def test_a_business_deploy_task_still_owes_a_deployment_without_a_runner_token(self, monkeypatch):
+        """A business mission deploys with the *business's* own scoped token, so
+        the runner's own VERCEL_TOKEN says nothing about whether its deploy was
+        possible. Reading its absence as 'no deploy available' would drop
+        ai-infra-03 back to artifact evidence, which one stray file satisfies."""
+        monkeypatch.setattr(graph.cfg, "auto_deploy", True)
+        monkeypatch.setattr(graph.cfg, "vercel_token", "")
+        state = self._busy_deploy_state(business_id="biz-1")
+        out, calls = self._run(state, monkeypatch)
+        assert calls["complete"] == [], "a business deploy task completed with nothing deployed"
+        assert len(calls["blocked"]) == 1
+        assert out.completion_evidence["required"] == [EVIDENCE_DEPLOYMENT]
+
+    def test_a_bucks_ai_deploy_task_falls_back_to_artifact_without_a_token(self, monkeypatch):
+        """The other side of the same condition: a non-business deploy task
+        genuinely cannot deploy without the runner's token, so it must not be
+        held to a bar it can never clear."""
+        monkeypatch.setattr(graph.cfg, "auto_deploy", True)
+        monkeypatch.setattr(graph.cfg, "vercel_token", "")
+        out, calls = self._run(self._busy_deploy_state(), monkeypatch)
+        assert len(calls["complete"]) == 1
+        assert out.completion_evidence["required"] == [EVIDENCE_ARTIFACT]
+
 
 class TestConfigAndRegistry:
     def test_the_gate_is_on_by_default(self, monkeypatch):
