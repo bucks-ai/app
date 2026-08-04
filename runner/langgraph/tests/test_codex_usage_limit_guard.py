@@ -204,9 +204,13 @@ def test_none_error_not_detected():
 def _with_stubbed_task_io(fn):
     calls = {"requeue": [], "failed": [], "complete": []}
     orig = (graph.requeue_task, graph.mark_task_failed, graph.mark_task_complete)
-    graph.requeue_task = lambda task_id, rc: calls["requeue"].append((task_id, rc))
-    graph.mark_task_failed = lambda task_id, err: calls["failed"].append((task_id, err))
-    graph.mark_task_complete = lambda task_id, s: calls["complete"].append((task_id, s))
+    # *a/**kw so the stubs keep working as the real signatures grow — m4c-03
+    # added requeue_task(..., retry_not_before, fields={...}) and this lambda
+    # (fixed arity) raised TypeError from inside the guard under test, which
+    # reads as a guard bug rather than a stale stub.
+    graph.requeue_task = lambda task_id, rc, *a, **kw: calls["requeue"].append((task_id, rc))
+    graph.mark_task_failed = lambda task_id, err, *a, **kw: calls["failed"].append((task_id, err))
+    graph.mark_task_complete = lambda task_id, s, *a, **kw: calls["complete"].append((task_id, s))
     try:
         return fn(calls)
     finally:
