@@ -295,6 +295,21 @@ class RunnerConfig:
     max_consecutive_failures: int = field(
         default_factory=lambda: int(os.getenv("MAX_CONSECUTIVE_FAILURES", "3"))
     )
+    # m4c-03 state self-healing: the startup orphan/placeholder pass, idempotent
+    # mission seeding, and transient-vs-genuine error classification. Kept
+    # switchable only so a bad classification can be disabled without a code
+    # change; off restores the pre-M4c behaviour where a network blip could
+    # mark a task terminally failed.
+    state_self_healing_enabled: bool = field(
+        default_factory=lambda: os.getenv("STATE_SELF_HEALING", "true").lower() == "true"
+    )
+    # Transient failures are counted separately from MAX_TASK_RETRIES so an
+    # unreachable network never spends the budget that decides whether a task
+    # may be marked failed. Past this many, the task parks as ``blocked`` — a
+    # state a human can lift — and never as ``failed``, which nothing lifts.
+    max_transient_retries: int = field(
+        default_factory=lambda: int(os.getenv("MAX_TRANSIENT_RETRIES", "5"))
+    )
     max_repeated_errors: int = field(
         default_factory=lambda: int(os.getenv("MAX_REPEATED_ERRORS", "3"))
     )
@@ -695,6 +710,8 @@ class RunnerConfig:
             "failure_guard_enabled": self.failure_guard_enabled,
             "max_task_retries": self.max_task_retries,
             "max_consecutive_failures": self.max_consecutive_failures,
+            "state_self_healing_enabled": self.state_self_healing_enabled,
+            "max_transient_retries": self.max_transient_retries,
             "max_repeated_errors": self.max_repeated_errors,
             "repeated_error_window": self.repeated_error_window,
             "max_task_attempts": self.max_task_attempts,

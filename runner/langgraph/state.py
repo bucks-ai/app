@@ -121,3 +121,4 @@ class RunnerState(BaseModel):
     claude_subscription_cooldown_count: int = 0      # cumulative cooldown events this session
     cooldown_wait_seconds_total: float = 0.0         # cumulative wall-clock seconds slept on cooldown waits this session; excluded from the MAX_RUNTIME_MINUTES budget
     current_agent_run_id: Optional[str] = None       # Supabase agent_runs.id for the in-flight seeded-mission task, if any
+    startup_self_heal: Optional[dict] = None         # m4c-03 summary of what the startup heal requeued, parked, or pruned

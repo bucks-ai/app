@@ -350,12 +350,12 @@ def test_node_noop_when_no_business_id():
 
 def test_node_business_not_found_hard_fails():
     def body(outbox, inbox, failed, blocked):
-        original = graph.fetch_business_by_id
-        graph.fetch_business_by_id = lambda bid: None
+        original = graph.lookup_business
+        graph.lookup_business = lambda bid: {"status": "not_found", "business": None}
         try:
             out = graph.resolve_business_repo_if_needed(_state({"id": "t1", "business_id": "biz-x", "runner_target": "business"}))
         finally:
-            graph.fetch_business_by_id = original
+            graph.lookup_business = original
         assert out.stop_reason == "business_not_found"
         assert failed and failed[0][0] == "t1"
     _with_temp_runner_dir(body)
@@ -363,10 +363,10 @@ def test_node_business_not_found_hard_fails():
 
 def test_node_success_overrides_repo_path():
     def body(outbox, inbox, failed, blocked):
-        original_fetch = graph.fetch_business_by_id
+        original_fetch = graph.lookup_business
         original_prepare = graph.prepare_business_repo
         original_verify = graph.verify_origin_remote
-        graph.fetch_business_by_id = lambda bid: {"id": bid}
+        graph.lookup_business = lambda bid: {"status": "found", "business": {"id": bid}}
         graph.prepare_business_repo = lambda task, business: {
             "success": True,
             "repo_path": "/tmp/.workspaces/biz-x",
@@ -382,7 +382,7 @@ def test_node_success_overrides_repo_path():
         try:
             out = graph.resolve_business_repo_if_needed(_state({"id": "t1", "business_id": "biz-x", "runner_target": "business"}))
         finally:
-            graph.fetch_business_by_id = original_fetch
+            graph.lookup_business = original_fetch
             graph.prepare_business_repo = original_prepare
             graph.verify_origin_remote = original_verify
         assert out.stop_reason is None
@@ -394,16 +394,16 @@ def test_node_success_overrides_repo_path():
 
 def test_node_forbidden_repo_hard_fails():
     def body(outbox, inbox, failed, blocked):
-        original_fetch = graph.fetch_business_by_id
+        original_fetch = graph.lookup_business
         original_prepare = graph.prepare_business_repo
-        graph.fetch_business_by_id = lambda bid: {"id": bid}
+        graph.lookup_business = lambda bid: {"status": "found", "business": {"id": bid}}
         graph.prepare_business_repo = lambda task, business: {
             "success": False, "reason": "forbidden_repo", "repo_full_name": "bucks-ai/bucks-ai",
         }
         try:
             out = graph.resolve_business_repo_if_needed(_state({"id": "t1", "business_id": "biz-x", "runner_target": "business"}))
         finally:
-            graph.fetch_business_by_id = original_fetch
+            graph.lookup_business = original_fetch
             graph.prepare_business_repo = original_prepare
         assert out.stop_reason == "business_repo_forbidden"
         assert out.current_task.get("repo_path") is None
@@ -413,16 +413,16 @@ def test_node_forbidden_repo_hard_fails():
 
 def test_node_missing_secret_blocks_and_writes_resource_request():
     def body(outbox, inbox, failed, blocked):
-        original_fetch = graph.fetch_business_by_id
+        original_fetch = graph.lookup_business
         original_prepare = graph.prepare_business_repo
-        graph.fetch_business_by_id = lambda bid: {"id": bid}
+        graph.lookup_business = lambda bid: {"status": "found", "business": {"id": bid}}
         graph.prepare_business_repo = lambda task, business: {
             "success": False, "reason": "missing_secret", "secret_name": "ACME_GH_TOKEN",
         }
         try:
             out = graph.resolve_business_repo_if_needed(_state({"id": "t1", "business_id": "biz-x", "runner_target": "business"}))
         finally:
-            graph.fetch_business_by_id = original_fetch
+            graph.lookup_business = original_fetch
             graph.prepare_business_repo = original_prepare
         # M4c.0: task-scoped — the task is set aside, the run continues.
         assert out.stop_reason is None, out.stop_reason
@@ -439,10 +439,10 @@ def test_node_missing_secret_blocks_and_writes_resource_request():
 def test_node_missing_secret_fulfilled_retries_successfully():
     def body(outbox, inbox, failed, blocked):
         (inbox / "t1_resources_provided.txt").write_text("ok")
-        original_fetch = graph.fetch_business_by_id
+        original_fetch = graph.lookup_business
         original_prepare = graph.prepare_business_repo
         original_verify = graph.verify_origin_remote
-        graph.fetch_business_by_id = lambda bid: {"id": bid}
+        graph.lookup_business = lambda bid: {"status": "found", "business": {"id": bid}}
         graph.prepare_business_repo = lambda task, business: {
             "success": True,
             "repo_path": "/tmp/.workspaces/biz-x",
@@ -455,7 +455,7 @@ def test_node_missing_secret_fulfilled_retries_successfully():
         try:
             out = graph.resolve_business_repo_if_needed(_state({"id": "t1", "business_id": "biz-x", "runner_target": "business"}))
         finally:
-            graph.fetch_business_by_id = original_fetch
+            graph.lookup_business = original_fetch
             graph.prepare_business_repo = original_prepare
             graph.verify_origin_remote = original_verify
         assert out.stop_reason is None, out.stop_reason
@@ -465,14 +465,14 @@ def test_node_missing_secret_fulfilled_retries_successfully():
 
 def test_node_no_sandbox_config_blocks_as_resource_request():
     def body(outbox, inbox, failed, blocked):
-        original_fetch = graph.fetch_business_by_id
+        original_fetch = graph.lookup_business
         original_prepare = graph.prepare_business_repo
-        graph.fetch_business_by_id = lambda bid: {"id": bid}
+        graph.lookup_business = lambda bid: {"status": "found", "business": {"id": bid}}
         graph.prepare_business_repo = lambda task, business: {"success": False, "reason": "no_sandbox_config"}
         try:
             out = graph.resolve_business_repo_if_needed(_state({"id": "t1", "business_id": "biz-x", "runner_target": "business"}))
         finally:
-            graph.fetch_business_by_id = original_fetch
+            graph.lookup_business = original_fetch
             graph.prepare_business_repo = original_prepare
         assert out.stop_reason is None, out.stop_reason
         assert out.resource_request_status == "pending", out.resource_request_status

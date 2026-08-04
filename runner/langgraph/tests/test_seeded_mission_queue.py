@@ -424,7 +424,7 @@ def test_fetch_next_queued_mission_claims_business_when_fully_configured():
     get_config().business_execution_enabled = True
     originals = _patch(
         smq,
-        fetch_business_by_id=lambda bid: {"id": "b-1"},
+        lookup_business=lambda bid: {"status": "found", "business": {"id": "b-1"}},
         fetch_business_sandbox=lambda bid: _FULL_SANDBOX_CONFIG,
         resolve_scoped_github_token=lambda name: {"success": True, "token": "x", "secret_name": name},
         resolve_scoped_vercel_token=lambda name: {"success": True, "token": "x", "secret_name": name},
@@ -468,7 +468,7 @@ def test_claim_refused_when_business_not_found():
     from config import get_config
     original = get_config().business_execution_enabled
     get_config().business_execution_enabled = True
-    originals = _patch(smq, fetch_business_by_id=lambda bid: None)
+    originals = _patch(smq, lookup_business=lambda bid: {"status": "not_found", "business": None})
     try:
         result = evaluate_business_mission_claim({"business_id": "b-1"})
         assert result == {"allowed": False, "reason": "business_not_found"}
@@ -483,7 +483,7 @@ def test_claim_refused_when_sandbox_not_configured():
     get_config().business_execution_enabled = True
     originals = _patch(
         smq,
-        fetch_business_by_id=lambda bid: {"id": "b-1"},
+        lookup_business=lambda bid: {"status": "found", "business": {"id": "b-1"}},
         fetch_business_sandbox=lambda bid: {
             "repo_full_name": "acme/landing",
             # github_token_secret_name missing
@@ -507,7 +507,7 @@ def test_claim_refused_when_sandbox_config_absent():
     get_config().business_execution_enabled = True
     originals = _patch(
         smq,
-        fetch_business_by_id=lambda bid: {"id": "b-1"},
+        lookup_business=lambda bid: {"status": "found", "business": {"id": "b-1"}},
         fetch_business_sandbox=lambda bid: None,
     )
     try:
@@ -530,7 +530,8 @@ def test_claim_refused_when_only_legacy_business_sandbox_config_populated():
     get_config().business_execution_enabled = True
     originals = _patch(
         smq,
-        fetch_business_by_id=lambda bid: {"id": "b-1", "sandbox_config": _FULL_SANDBOX_CONFIG},
+        lookup_business=lambda bid: {"status": "found",
+                                    "business": {"id": "b-1", "sandbox_config": _FULL_SANDBOX_CONFIG}},
         fetch_business_sandbox=lambda bid: None,
     )
     try:
@@ -549,7 +550,7 @@ def test_claim_refused_when_github_secret_unresolved():
     get_config().business_execution_enabled = True
     originals = _patch(
         smq,
-        fetch_business_by_id=lambda bid: {"id": "b-1"},
+        lookup_business=lambda bid: {"status": "found", "business": {"id": "b-1"}},
         fetch_business_sandbox=lambda bid: _FULL_SANDBOX_CONFIG,
         resolve_scoped_github_token=lambda name: {"success": False, "error": "missing_secret", "secret_name": name},
     )
@@ -567,7 +568,7 @@ def test_claim_refused_when_vercel_secret_unresolved():
     get_config().business_execution_enabled = True
     originals = _patch(
         smq,
-        fetch_business_by_id=lambda bid: {"id": "b-1"},
+        lookup_business=lambda bid: {"status": "found", "business": {"id": "b-1"}},
         fetch_business_sandbox=lambda bid: _FULL_SANDBOX_CONFIG,
         resolve_scoped_github_token=lambda name: {"success": True, "token": "x", "secret_name": name},
         resolve_scoped_vercel_token=lambda name: {"success": False, "error": "missing_secret", "secret_name": name},
@@ -586,7 +587,7 @@ def test_claim_allowed_when_fully_configured():
     get_config().business_execution_enabled = True
     originals = _patch(
         smq,
-        fetch_business_by_id=lambda bid: {"id": "b-1"},
+        lookup_business=lambda bid: {"status": "found", "business": {"id": "b-1"}},
         fetch_business_sandbox=lambda bid: _FULL_SANDBOX_CONFIG,
         resolve_scoped_github_token=lambda name: {"success": True, "token": "x", "secret_name": name},
         resolve_scoped_vercel_token=lambda name: {"success": True, "token": "x", "secret_name": name},
@@ -652,10 +653,16 @@ def _make_state(**kwargs) -> RunnerState:
     return RunnerState(**kwargs)
 
 
-def _stub_graph_seeded(mission=None, task_rows=None, captured_tasks=None):
-    """Patch graph module globals to stub Supabase and task_tools."""
+def _stub_graph_seeded(mission=None, task_rows=None, captured_tasks=None, existing_tasks=None):
+    """Patch graph module globals to stub Supabase and task_tools.
+
+    ``existing_tasks`` is what the local queue already holds — the input to
+    m4c-03's idempotent-seeding check. Stubbing ``load_tasks`` also keeps these
+    tests off the founder's real ``.runtime/tasks.local.json``.
+    """
     if captured_tasks is None:
         captured_tasks = []
+    existing_tasks = list(existing_tasks or [])
 
     graph.fetch_next_queued_mission = lambda: mission
     graph.fetch_mission_tasks = lambda mid: task_rows or []
@@ -673,8 +680,13 @@ def _stub_graph_seeded(mission=None, task_rows=None, captured_tasks=None):
         }
         for i, row in enumerate(t)
     ]
-    graph.mark_mission_running = lambda mid: {"success": True}
+    graph.mark_mission_running = lambda mid: _mission_writes.append(("running", mid))
+    graph.mark_mission_completed = lambda mid: _mission_writes.append(("completed", mid))
+    graph.mark_mission_failed = lambda mid: _mission_writes.append(("failed", mid))
+    graph.check_mission_completion = lambda mid: {"status": "in_progress"}
     graph.add_task = lambda t: captured_tasks.append(dict(t))
+    graph.load_tasks = lambda **kwargs: existing_tasks + captured_tasks
+    graph.remove_tasks = lambda ids: list(ids)
 
     _first = [None]
     def _get_next():
@@ -685,6 +697,10 @@ def _stub_graph_seeded(mission=None, task_rows=None, captured_tasks=None):
     return captured_tasks
 
 
+#: Mission-status writes captured by the stub, newest last.
+_mission_writes: list = []
+
+
 def _restore_graph_seeded():
     from tools import task_tools
     from tools.seeded_mission_queue import (
@@ -692,14 +708,23 @@ def _restore_graph_seeded():
         fetch_mission_tasks,
         seed_tasks_from_mission,
         mark_mission_running,
+        mark_mission_completed,
+        mark_mission_failed,
+        check_mission_completion,
     )
     graph.fetch_next_queued_mission = fetch_next_queued_mission
     graph.fetch_mission_tasks = fetch_mission_tasks
     graph.seed_tasks_from_mission = seed_tasks_from_mission
     graph.mark_mission_running = mark_mission_running
+    graph.mark_mission_completed = mark_mission_completed
+    graph.mark_mission_failed = mark_mission_failed
+    graph.check_mission_completion = check_mission_completion
     graph.add_task = task_tools.add_task
+    graph.load_tasks = task_tools.load_tasks
+    graph.remove_tasks = task_tools.remove_tasks
     graph.get_next_queued_task = task_tools.get_next_queued_task
     graph.update_task_branch = task_tools.update_task_branch
+    _mission_writes.clear()
 
 
 _SAMPLE_MISSION = {"id": "m-uuid", "name": "Test Mission", "status": "queued"}
@@ -777,6 +802,70 @@ def test_node_skips_when_task_already_loaded():
         out = graph.seed_mission_queue_if_needed(state)
         assert out.current_task["id"] == "existing"
         assert captured == []
+    finally:
+        original_has_supabase = property(lambda self: bool(graph.cfg.supabase_url and graph.cfg.supabase_service_role_key))
+        type(graph.cfg).has_supabase = original_has_supabase
+        _restore_graph_seeded()
+
+
+def test_node_never_seeds_a_mission_that_is_already_in_the_local_queue():
+    """m4c-03: "Execute: AI Infra" was seeded three times because nothing asked
+    whether the mission was already local — 15 rows, ids ai-infra-1..5 three
+    times over, and status writes landing on whichever row matched first."""
+    already_local = [
+        {"id": "task-1", "title": "Task One", "status": "complete",
+         "seeded_mission_id": "m-uuid", "seeded_task_id": "t-uuid-1"},
+        {"id": "task-2", "title": "Task Two", "status": "complete",
+         "seeded_mission_id": "m-uuid", "seeded_task_id": "t-uuid-2"},
+    ]
+    captured = _stub_graph_seeded(
+        mission=_SAMPLE_MISSION, task_rows=_SAMPLE_TASK_ROWS, existing_tasks=already_local,
+    )
+    try:
+        graph.cfg.seeded_mission_queue_enabled = True
+        type(graph.cfg).has_supabase = property(lambda self: True)
+        out = graph.seed_mission_queue_if_needed(_make_state(stop_reason="no_queued_tasks"))
+        assert captured == [], "re-seeding must add nothing"
+        assert out.current_task is None
+        # The mission must still leave 'queued' in Supabase, or the next poll
+        # fetches the same mission again forever.
+        assert _mission_writes and _mission_writes[-1][1] == "m-uuid"
+    finally:
+        original_has_supabase = property(lambda self: bool(graph.cfg.supabase_url and graph.cfg.supabase_service_role_key))
+        type(graph.cfg).has_supabase = original_has_supabase
+        _restore_graph_seeded()
+
+
+def test_node_seeds_only_the_mission_task_that_is_actually_missing():
+    already_local = [
+        {"id": "task-1", "title": "Task One", "status": "complete",
+         "seeded_mission_id": "m-uuid", "seeded_task_id": "t-uuid-1"},
+    ]
+    captured = _stub_graph_seeded(
+        mission=_SAMPLE_MISSION, task_rows=_SAMPLE_TASK_ROWS, existing_tasks=already_local,
+    )
+    try:
+        graph.cfg.seeded_mission_queue_enabled = True
+        type(graph.cfg).has_supabase = property(lambda self: True)
+        graph.seed_mission_queue_if_needed(_make_state(stop_reason="no_queued_tasks"))
+        assert [t["seeded_task_id"] for t in captured] == ["t-uuid-2"]
+    finally:
+        original_has_supabase = property(lambda self: bool(graph.cfg.supabase_url and graph.cfg.supabase_service_role_key))
+        type(graph.cfg).has_supabase = original_has_supabase
+        _restore_graph_seeded()
+
+
+def test_node_gives_a_seeded_task_a_unique_id_when_one_is_taken():
+    captured = _stub_graph_seeded(
+        mission=_SAMPLE_MISSION,
+        task_rows=_SAMPLE_TASK_ROWS,
+        existing_tasks=[{"id": "task-1", "title": "Unrelated", "status": "queued"}],
+    )
+    try:
+        graph.cfg.seeded_mission_queue_enabled = True
+        type(graph.cfg).has_supabase = property(lambda self: True)
+        graph.seed_mission_queue_if_needed(_make_state(stop_reason="no_queued_tasks"))
+        assert [t["id"] for t in captured] == ["task-1-2", "task-2"]
     finally:
         original_has_supabase = property(lambda self: bool(graph.cfg.supabase_url and graph.cfg.supabase_service_role_key))
         type(graph.cfg).has_supabase = original_has_supabase
@@ -1085,6 +1174,9 @@ if __name__ == "__main__":
         test_node_no_queued_mission,
         test_node_seeds_tasks_and_loads_first,
         test_node_skips_when_task_already_loaded,
+        test_node_never_seeds_a_mission_that_is_already_in_the_local_queue,
+        test_node_seeds_only_the_mission_task_that_is_actually_missing,
+        test_node_gives_a_seeded_task_a_unique_id_when_one_is_taken,
         test_route_compile_no_task_to_seed_queue,
         test_route_compile_with_task_to_choose_worker,
         test_route_seed_queue_no_task_to_chatgpt,

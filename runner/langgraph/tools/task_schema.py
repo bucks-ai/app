@@ -73,6 +73,12 @@ FIELD_TYPES: dict[str, tuple] = {
     "issue_number": (int,),
     "owner_pid": (int,),
     "owner_host": (str,),
+    # m4c-03 counters: restarts that requeued this row as an orphan, and
+    # retries spent on transient (never-terminal) failures. Both are policy
+    # state written by tools/state_self_healing.py; only their type is a
+    # structural concern.
+    "orphan_requeue_count": (int,),
+    "transient_retry_count": (int,),
 }
 
 #: Allowed status transitions. Permissive by design for forward motion, strict

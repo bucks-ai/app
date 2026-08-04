@@ -250,9 +250,13 @@ def test_node_present_in_graph():
 
 
 def test_node_wired_between_launch_readiness_and_load_next_task():
+    # m4c-03 inserted the startup self-heal between this node and the first
+    # task claim; the migration check must still be the step after readiness
+    # and must still lead to load_next_task.
     edges = [(e.source, e.target) for e in graph.graph.get_graph().edges]
     assert ("check_launch_readiness_if_needed", "check_pending_migrations_if_needed") in edges
-    assert ("check_pending_migrations_if_needed", "load_next_task") in edges
+    assert ("check_pending_migrations_if_needed", "self_heal_task_state") in edges
+    assert ("self_heal_task_state", "load_next_task") in edges
 
 
 if __name__ == "__main__":
