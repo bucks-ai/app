@@ -609,6 +609,10 @@ class TestGuardStopWiring:
         monkeypatch.setattr(graph_module, "log_event", lambda *a, **k: None)
         monkeypatch.setattr(graph_module, "update_state", lambda *a, **k: None)
         monkeypatch.setattr(graph_module.cfg, "wip_checkpoint_enabled", True)
+        # Pinned rather than inherited: the shared cfg singleton carries
+        # whatever an earlier test left on it, and these cases turn on which
+        # side of the budget loop_count falls.
+        monkeypatch.setattr(graph_module.cfg, "max_loop_tasks", 10)
 
         calls = []
 
@@ -636,7 +640,7 @@ class TestGuardStopWiring:
         assert out.wip_checkpoint["sha"] == "f" * 40
 
     def test_a_budget_stop_checkpoints_too(self, monkeypatch):
-        graph_module, state, calls = self._stopped_state(monkeypatch, loop_count=999)
+        graph_module, state, calls = self._stopped_state(monkeypatch, loop_count=10)
         out = graph_module.decide_continue_or_stop(state)
 
         assert out.stop_reason == "max_loop_tasks"
