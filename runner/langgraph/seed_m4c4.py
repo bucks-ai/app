@@ -97,6 +97,54 @@ TASKS = [
         ),
     },
     {
+        "id": "m4c4-05-network-pause",
+        "title": "M4c.4: no network is a PAUSE, not a failure",
+        "type": "backend",
+        "branch": "feature/m4c4/network-pause",
+        "description": (
+            "SCENARIO (founder, 2026-08-04): the laptop moves between locations — a 5-20 minute "
+            "drive with no wifi in between. Every worker call needs the network (Anthropic, "
+            "GitHub, Supabase, Vercel, Slack), so the loop currently converts a driveway into a "
+            "sequence of recorded failures: attempt counters burn, tasks flip to failed/blocked, "
+            "those statuses sync to Supabase, and the consecutive-failure and repeated-error "
+            "guards accumulate toward a stop. Worse, those fake failures pollute the very logs "
+            "that feed threshold calibration, loop telemetry, and m4c-10's 'how many times was "
+            "the founder touched' measure.\n\n"
+            "PRINCIPLE: total loss of connectivity is an environmental PAUSE — exactly like a "
+            "subscription cooldown — not a statement about the task. Reuse that machinery; do not "
+            "invent a second waiting mechanism.\n\n"
+            "REQUIRED, BOTH HALVES: (a) BEFORE dispatch, a cheap connectivity probe (DNS "
+            "resolution plus one lightweight HEAD request, short timeout). If it fails, enter a "
+            "`network_unavailable` wait instead of claiming a task. (b) DURING a call, classify "
+            "network-shaped errors (DNS failure, connection refused/reset, no route to host, TLS "
+            "handshake failure, request timeout with zero bytes received) as the same pause — the "
+            "in-flight task is left queued and simply re-attempted after the wait, NOT counted as "
+            "a transient failure and NOT parked.\n\n"
+            "WHILE PAUSED, nothing may be touched: no retry_count, no task_attempt_counts, no "
+            "consecutive_failures, no error_history, no task status change, no Supabase sync, and "
+            "the stale-run watchdog is suppressed (mirror how the cooldown wait already refreshes "
+            "last_task_completed_at at both ends of the sleep). Log `network_unavailable_detected` "
+            "on entry and `network_restored` on exit with the outage duration.\n\n"
+            "TIMING — two separate knobs, do not conflate them: POLL INTERVAL should be short "
+            "(default 30s; a DNS probe costs no tokens and no money) so the loop resumes within a "
+            "minute of arrival rather than idling; MAX PATIENCE should be long (default 90 "
+            "minutes) so a genuinely long outage is ridden out rather than escalated. Both config, "
+            "three-place rule. Beyond max patience, stop the loop with a `network_unavailable` "
+            "stop reason whose stop report says plainly that the machine had no internet for N "
+            "minutes — and let the supervisor's restart path pick it up when connectivity "
+            "returns.\n\n"
+            "DISTINGUISH CAREFULLY: a 5xx from one provider, an auth failure, or a rate limit are "
+            "NOT loss of connectivity and must keep their existing handling. The probe is the "
+            "authority for 'the machine is offline'; a single failing endpoint is not.\n\n"
+            "TESTS: probe failure pauses instead of dispatching; every counter is untouched across "
+            "a pause; a network error mid-call pauses and re-attempts the same task; a provider "
+            "5xx and a 401 still take their existing paths; max patience stops with the right "
+            "reason and report; poll interval and patience are independently configurable; the "
+            "stale watchdog does not fire during a pause. Mock the probe — no real network calls "
+            "in tests."
+        ),
+    },
+    {
         "id": "m4c4-04-plan-then-execute",
         "title": "M4c.4: plan the whole mission before writing any code",
         "type": "backend",
@@ -166,6 +214,7 @@ def main() -> int:
     order = [
         "m4c4-01-crash-safe-checkpointing",
         "m4c4-02-failure-context-repair-loop",
+        "m4c4-05-network-pause",
         BRIEFING_ID,
         "m4c4-04-plan-then-execute",
     ]
