@@ -1081,7 +1081,7 @@ def build_stop_diagnostics(
 
     Returns a dict with ``reason``, ``classification``, ``handler_found``,
     ``cause``, ``action``, ``task``, ``config_values``, ``evidence``,
-    ``recent_events``, ``report`` and ``slack_message``.
+    ``wip_checkpoint``, ``recent_events``, ``report`` and ``slack_message``.
     """
     session_state = session_state or {}
     config_report = config_report or {}
@@ -1139,6 +1139,10 @@ def build_stop_diagnostics(
         "reason": reason,
         "classification": classification,
         "handler_found": handler is not None,
+        # M4c.4: the sha of the WIP checkpoint taken as the loop stopped. This
+        # report is where a founder looks after an unexplained stop, so it is
+        # also where the one command that recovers the work belongs.
+        "wip_checkpoint": session_state.get("wip_checkpoint") or {},
         "headline": handler.headline if handler else "No diagnostics handler for this stop",
         "cause": cause,
         "action": action,
@@ -1195,6 +1199,48 @@ _CLASSIFICATION_GLOSS = {
 }
 
 
+def _wip_checkpoint_lines(checkpoint: Optional[dict]) -> list[str]:
+    """Render the M4c.4 checkpoint section of the report.
+
+    Three outcomes are worth printing and one is not: a commit (here is the
+    sha), a failure (the work is still only in the tree — act now), and a clean
+    tree (nothing was at risk, which is what stops the reader hunting for a sha
+    that does not exist). A checkpoint that never ran prints nothing.
+    """
+    checkpoint = checkpoint or {}
+    reason = checkpoint.get("reason")
+    if not reason:
+        return []
+
+    lines = ["", "UNCOMMITTED WORK AT THE STOP", _THIN]
+
+    if checkpoint.get("checkpointed"):
+        sha = checkpoint.get("short_sha") or checkpoint.get("sha") or "unknown"
+        lines.extend([
+            f"  Checkpointed : {checkpoint.get('file_count', 0)} file(s) committed as {sha}",
+            f"  Branch       : {_fmt_value(checkpoint.get('branch'))}"
+            + ("  (redirected off a protected branch)" if checkpoint.get("redirected") else ""),
+            f"  Pushed       : {_fmt_value(checkpoint.get('pushed'))}",
+            f"  Recover with : git checkout {sha}",
+        ])
+        files = checkpoint.get("files") or []
+        for path in files[:12]:
+            lines.append(f"    - {path}")
+        if len(files) < checkpoint.get("file_count", 0):
+            lines.append(f"    ... and {checkpoint['file_count'] - len(files)} more")
+    elif reason in ("clean_tree", "nothing_to_commit"):
+        lines.append("  Working tree was clean — no uncommitted work was at risk.")
+    else:
+        lines.extend([
+            f"  CHECKPOINT FAILED ({reason}) — {checkpoint.get('file_count', 0)} file(s) are "
+            f"STILL ONLY IN THE WORKING TREE.",
+            f"  Error        : {_fmt_value(checkpoint.get('error'), 300)}",
+            "  Commit them by hand before any branch operation touches that repo.",
+        ])
+
+    return lines
+
+
 def format_stop_report(diagnostics: dict) -> str:
     """Render the single structured record written to outbox/loop_stop_report.txt."""
     reason = diagnostics.get("reason", UNSPECIFIED_STOP)
@@ -1231,6 +1277,8 @@ def format_stop_report(diagnostics: dict) -> str:
     for warning in diagnostics.get("warnings") or []:
         lines.extend(["", "SUSPECT — READ THIS FIRST", _THIN])
         lines.extend(_wrap(warning, indent="  "))
+
+    lines.extend(_wip_checkpoint_lines(diagnostics.get("wip_checkpoint")))
 
     lines.extend(["", "CAUSE", _THIN])
     lines.extend(_wrap(diagnostics.get("cause", ""), indent="  "))
@@ -1294,6 +1342,20 @@ def format_slack_message(diagnostics: dict) -> str:
         if task.get("title"):
             bits.append(_truncate(str(task["title"]), 80))
         lines.append(" ".join(bits))
+
+    checkpoint = diagnostics.get("wip_checkpoint") or {}
+    if checkpoint.get("checkpointed"):
+        sha = checkpoint.get("short_sha") or checkpoint.get("sha") or "unknown"
+        lines.append(
+            f":floppy_disk: *WIP checkpointed*: {checkpoint.get('file_count', 0)} file(s) "
+            f"as `{sha}` on `{checkpoint.get('branch')}` — recover with "
+            f"`git checkout {sha}`"
+        )
+    elif checkpoint.get("reason") and checkpoint["reason"] not in ("clean_tree", "nothing_to_commit"):
+        lines.append(
+            f":rotating_light: *WIP checkpoint FAILED* ({checkpoint['reason']}): "
+            f"{checkpoint.get('file_count', 0)} file(s) are still only in the working tree."
+        )
 
     lines.append(f"*CAUSE*: {diagnostics.get('cause', '')}")
     lines.append(f"*RECOMMENDED ACTION*: {diagnostics.get('action', '')}")
@@ -1389,6 +1451,7 @@ def report_loop_stop(
         "task": diagnostics["task"],
         "config_values": diagnostics["config_values"],
         "observed": diagnostics["evidence"],
+        "wip_checkpoint": diagnostics["wip_checkpoint"],
         "preceding_events": [
             {
                 "event_type": e.get("event_type"),

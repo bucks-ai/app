@@ -237,6 +237,56 @@ def threshold_invariants_or_exit(command: str):
     sys.exit(1)
 
 
+def install_wip_checkpoint_handlers(state_ref: dict):
+    """M4c.4: make every exit path from the run loop commit the tree first.
+
+    Work that exists only in the working tree is work that can vanish — m4c-03's
+    1,552 finished lines sat uncommitted for days after a guard halted the loop
+    before its commit step, and survived only because the founder happened to
+    run `git status`. Ctrl+C, a watchdog's SIGTERM, an unhandled exception and a
+    plain return all land here first.
+
+    ``state_ref`` is the mutable holder the loop updates each iteration, so the
+    handlers read the task in flight at the moment of the exit rather than
+    whatever was current when they were installed.
+    """
+    from config import get_config
+    from tools.wip_checkpoint import CheckpointContext, install_checkpoint_handlers
+
+    cfg = get_config()
+    if not cfg.wip_checkpoint_enabled:
+        return None
+
+    def _context():
+        # Prefer the persisted state: every graph node writes it, so it names
+        # the task in flight even when a signal arrives mid-cycle, hours before
+        # graph.invoke() returns and updates state_ref. Fall back to the
+        # in-memory holder when the state file is unreadable.
+        from tools.log_tools import read_state
+
+        try:
+            state = read_state() or state_ref.get("state")
+        except Exception:
+            state = state_ref.get("state")
+
+        task = _state_get(state, "current_task") or {}
+        return CheckpointContext(
+            repo_path=task.get("repo_path") or cfg.repo_path,
+            task_id=_state_get(state, "current_task_id"),
+            stop_reason=_state_get(state, "stop_reason"),
+        )
+
+    return install_checkpoint_handlers(_context, push=cfg.wip_checkpoint_push)
+
+
+def _state_get(state, key, default=None):
+    """Read a field from loop state that LangGraph may hand back as either a
+    dict or a RunnerState."""
+    if state is None:
+        return default
+    return state.get(key, default) if isinstance(state, dict) else getattr(state, key, default)
+
+
 def cmd_run_loop(args):
     from graph import graph
     from state import RunnerState
@@ -249,14 +299,19 @@ def cmd_run_loop(args):
     init = RunnerState(**{k: v for k, v in saved.items() if k in RunnerState.model_fields})
     init = start_fresh_session(init)
 
+    # Installed before the first invoke so even a crash inside the first cycle
+    # exits through a checkpoint.
+    state_ref = {"state": init}
+    install_wip_checkpoint_handlers(state_ref)
+
     print("Starting autonomous loop (Ctrl+C to stop)...")
-    def _get(s, key, default=None):
-        return s.get(key, default) if isinstance(s, dict) else getattr(s, key, default)
+    _get = _state_get
 
     try:
         state = init
         while _get(state, "status") != "stopped":
             state = graph.invoke(state)
+            state_ref["state"] = state
             lc = _get(state, "loop_count", 0)
             step = _get(state, "last_completed_step")
             st = _get(state, "status")

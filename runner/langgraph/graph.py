@@ -144,6 +144,11 @@ from tools.state_self_healing import (
     run_startup_heal,
 )
 from tools.dispatch_preflight import verify_origin_remote
+from tools.wip_checkpoint import (
+    checkpoint_wip,
+    detect_wip_checkpoint,
+    format_wip_prompt_notice,
+)
 from workers.chatgpt_worker import ChatGPTWorker
 from workers.claude_worker import ClaudeWorker
 from workers.codex_worker import CodexWorker
@@ -1304,6 +1309,42 @@ def resolve_model_node(state: RunnerState) -> RunnerState:
     return _persist(state, "resolve_model")
 
 
+def _wip_prompt_notice(state: RunnerState, repo_path: str, task: dict) -> str:
+    """Detection half of M4c.4 (d): does this task's branch already hold a
+    checkpoint of partial work?
+
+    Returns the prompt block to prepend, or "" when there is nothing to say.
+    Purely additive context — every failure is swallowed, because a detection
+    problem must never be the reason a task is not dispatched.
+    """
+    if not cfg.wip_checkpoint_enabled:
+        return ""
+
+    branch = task.get("branch") or state.current_branch
+    try:
+        detection = detect_wip_checkpoint(repo_path, branch)
+    except Exception as e:  # pragma: no cover - defensive
+        log_event("wip_checkpoint_detect_degraded", {
+            "task_id": state.current_task_id, "branch": branch, "error": str(e),
+        }, task_id=state.current_task_id)
+        return ""
+
+    if not detection.get("found"):
+        return ""
+
+    log_event("wip_checkpoint_detected", {
+        "task_id": state.current_task_id,
+        "branch": detection.get("branch"),
+        "sha": detection.get("sha"),
+        "short_sha": detection.get("short_sha"),
+        "subject": detection.get("subject"),
+        "committed_at": detection.get("committed_at"),
+        "files": detection.get("files"),
+        "commits_since": detection.get("commits_since"),
+    }, task_id=state.current_task_id)
+    return format_wip_prompt_notice(detection)
+
+
 def generate_worker_prompt(state: RunnerState) -> RunnerState:
     state = _compress_context_if_needed(state, reason="before_worker_prompt")
     task = state.current_task or {}
@@ -1328,6 +1369,14 @@ def generate_worker_prompt(state: RunnerState) -> RunnerState:
             branch=task.get("branch", f"feature/{task.get('id', 'task')}"),
             description_section=description_section,
         )
+
+    # M4c.4: a WIP checkpoint on this task's branch means a previous attempt was
+    # interrupted with unfinished work. Say so at the very top of the prompt —
+    # a worker that does not know it exists re-implements it, and the
+    # checkpointed work is then buried under a duplicate that never references
+    # it. Prepended (not appended) because the instruction is "continue, don't
+    # restart", which has to be read before the task description, not after.
+    prompt = _wip_prompt_notice(state, repo_path, task) + prompt
 
     if cfg.fast_engineering_mode_enabled:
         from tools.fast_engineering_mode import build_engineering_context, format_engineering_injection
@@ -3444,6 +3493,34 @@ def report_loop_stop_diagnostics(state: RunnerState) -> RunnerState:
     return _persist(state, "report_loop_stop_diagnostics")
 
 
+def _checkpoint_wip_on_stop(state: RunnerState) -> RunnerState:
+    """Save the working tree the moment a stop reason lands (M4c.4).
+
+    A guard stop is the exact shape of the m4c-03 incident: the worker finished,
+    a guard halted the loop before ``commit_push_merge_if_needed`` ran, and
+    1,552 lines of finished work stayed in the working tree where the next
+    ``git checkout`` could have taken them. Checkpointing here — inside the node
+    that sets ``status='stopped'``, before the loop unwinds — means the work is
+    already on the branch by the time anything else touches the repo, and the
+    sha is in ``state`` in time for the stop report to quote it.
+
+    The result is recorded even when nothing was dirty: "the tree was clean"
+    is the answer the founder needs from the report just as much as a sha is.
+    """
+    if not cfg.wip_checkpoint_enabled:
+        return state
+
+    result = checkpoint_wip(
+        _effective_repo_path(state),
+        task_id=state.current_task_id,
+        stop_reason=state.stop_reason,
+        trigger="guard_stop",
+        push=cfg.wip_checkpoint_push,
+    )
+    state.wip_checkpoint = result
+    return state
+
+
 def decide_continue_or_stop(state: RunnerState) -> RunnerState:
     # ── Claude subscription cooldown auto-resume ─────────────────────────────
     # When the Claude subscription rate-limiter fired this iteration, sleep
@@ -3481,13 +3558,13 @@ def decide_continue_or_stop(state: RunnerState) -> RunnerState:
     if state.stop_reason:
         state.status = "stopped"
         log_event("loop_stopped", {"reason": state.stop_reason})
-        return state
+        return _checkpoint_wip_on_stop(state)
 
     if state.loop_count >= cfg.max_loop_tasks:
         state.stop_reason = "max_loop_tasks"
         state.status = "stopped"
         log_event("loop_stopped", {"reason": "max_loop_tasks", "count": state.loop_count})
-        return state
+        return _checkpoint_wip_on_stop(state)
 
     started_at = state.started_at
     if started_at:
@@ -3507,7 +3584,7 @@ def decide_continue_or_stop(state: RunnerState) -> RunnerState:
                 "effective_elapsed_minutes": effective_elapsed,
                 "cooldown_wait_seconds_total": state.cooldown_wait_seconds_total,
             })
-            return state
+            return _checkpoint_wip_on_stop(state)
 
     state.status = "running"
     return _persist(state, "decide_continue_or_stop")
