@@ -73,6 +73,11 @@ _DEFAULT_SLACK_EVENTS = frozenset({
     # one is the alert, this one is the diagnosis.
     "loop_stop_report",
     "stop_diagnostics_degraded",
+    # A checkpoint that could not be written leaves finished work living only in
+    # the working tree — the m4c-03 condition that went unnoticed for days
+    # (M4c.4). It is the failure, not the success, that has to reach a human;
+    # the sha of a successful checkpoint rides along in the stop report.
+    "wip_checkpoint_failed",
 })
 
 
@@ -535,6 +540,18 @@ class RunnerConfig:
     loop_start_preflight_enabled: bool = field(
         default_factory=lambda: os.getenv("LOOP_START_PREFLIGHT", "true").lower() == "true"
     )
+    # M4c.4: commit the working tree to the current task's branch before the
+    # process exits for ANY reason (Ctrl+C, SIGTERM, guard stop, unhandled
+    # exception). m4c-03's 1,552 finished lines survived only because a human
+    # happened to run `git status`. Off is the pre-incident behaviour.
+    wip_checkpoint_enabled: bool = field(
+        default_factory=lambda: os.getenv("WIP_CHECKPOINT", "true").lower() == "true"
+    )
+    # Pushing puts the checkpoint somewhere a lost laptop cannot take it. Only
+    # ever a plain push to the task's own branch — never a force, never main.
+    wip_checkpoint_push: bool = field(
+        default_factory=lambda: os.getenv("WIP_CHECKPOINT_PUSH", "true").lower() == "true"
+    )
     # M4c.0: verify production assumptions once, at loop start, before any task
     # is claimed. Reports only — it never halts on its own (the one halting
     # condition, dirty tree / wrong branch, belongs to LOOP_START_PREFLIGHT
@@ -781,6 +798,8 @@ class RunnerConfig:
             "fast_engineering_mode_enabled": self.fast_engineering_mode_enabled,
             "runner_dry_run": self.runner_dry_run,
             "loop_start_preflight_enabled": self.loop_start_preflight_enabled,
+            "wip_checkpoint_enabled": self.wip_checkpoint_enabled,
+            "wip_checkpoint_push": self.wip_checkpoint_push,
             "startup_preflight_enabled": self.startup_preflight_enabled,
             "preflight_required_tables": self.preflight_required_tables,
             "worker_health_probe_enabled": self.worker_health_probe_enabled,
