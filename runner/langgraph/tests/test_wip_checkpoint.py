@@ -185,11 +185,14 @@ class TestCheckpointCommit:
         assert payload["file_count"] == 2
         assert payload["recover_with"].startswith("git -C /repo checkout ")
 
-    def test_add_is_anchored_at_the_repo_root(self):
-        """`git add -A -- .` cannot stage anything above the repo."""
+    def test_add_stages_only_explicit_repo_relative_paths(self):
+        """Everything after `--` is a path git found dirty inside this repo, so
+        the add cannot reach above the repo root."""
         git = FakeGit()
         checkpoint_wip("/repo", task_id="m4c-04", trigger="guard_stop", git_run=git)
-        assert git.args_for("add") == ["add", "-A", "--", "."]
+        assert git.args_for("add") == [
+            "add", "-A", "--", "tools/state_self_healing.py", "tests/test_x.py",
+        ]
 
     def test_never_bypasses_commit_hooks(self):
         git = FakeGit()
@@ -229,6 +232,58 @@ class TestCheckpointCommit:
         assert result["checkpointed"] is True
         assert result["pushed"] is False
         assert "non-fast-forward" in result["push_error"]
+
+
+class TestCredentialFilesAreNeverCommitted:
+    """The checkpoint is pushed, and a cloned customer repo may not ignore
+    what bucks-ai's own .gitignore does."""
+
+    @pytest.mark.parametrize("path", [
+        ".env", ".env.local", "app/.env.production", "certs/server.pem",
+        "deploy/private.key", ".ssh/id_rsa", "config/credentials.json", ".npmrc",
+    ])
+    def test_credential_files_are_recognised(self, path):
+        assert wc.is_secret_path(path) is True
+
+    @pytest.mark.parametrize("path", [
+        ".env.example", "tools/wip_checkpoint.py", "docs/environment.md", "keys.md",
+    ])
+    def test_ordinary_files_are_not(self, path):
+        assert wc.is_secret_path(path) is False
+
+    def test_a_credential_file_is_left_out_of_the_commit(self, events):
+        git = FakeGit(dirty=("tools/x.py", ".env.production", "secrets.json"))
+        result = checkpoint_wip("/repo", task_id="m4c-04", trigger="guard_stop", git_run=git)
+
+        assert result["checkpointed"] is True
+        assert git.args_for("add") == ["add", "-A", "--", "tools/x.py"]
+        assert result["excluded_paths"] == [".env.production", "secrets.json"]
+        assert _payload(events, wc.CHECKPOINT_EVENT)["excluded_paths"] == [
+            ".env.production", "secrets.json",
+        ]
+
+    def test_the_whole_repo_fallback_is_refused_when_a_credential_was_excluded(self, events):
+        """A pathspec `add` can fail on an oddly-quoted path; retrying with the
+        whole repo would sweep the excluded file in, so it is not attempted."""
+        git = FakeGit(
+            dirty=("tools/x.py", ".env"),
+            **{"add": GitResult(success=False, output="fatal: pathspec did not match")},
+        )
+        result = checkpoint_wip("/repo", task_id="m4c-04", trigger="guard_stop", git_run=git)
+
+        assert result["reason"] == "add_failed"
+        assert [args for args, _ in git.calls if args[0] == "add"] == [
+            ("add", "-A", "--", "tools/x.py"),
+        ]
+
+    def test_a_tree_of_only_credential_files_commits_nothing_and_says_so(self, events):
+        git = FakeGit(dirty=(".env", "id_rsa"))
+        result = checkpoint_wip("/repo", task_id="m4c-04", trigger="guard_stop", git_run=git)
+
+        assert result["checkpointed"] is False
+        assert result["reason"] == "all_paths_excluded"
+        assert not git.ran("commit")
+        assert wc.CHECKPOINT_FAILED_EVENT in _types(events)
 
 
 class TestCleanTree:
@@ -292,6 +347,14 @@ class TestProtectedBranchRedirect:
 # ---------------------------------------------------------------------------
 
 class TestFailureDoesNotBlockExit:
+    def test_a_pathspec_add_failure_retries_over_the_whole_repo(self):
+        """Only safe because nothing was excluded — see the credential tests."""
+        git = FakeGit(**{"add": GitResult(success=False, output="fatal: pathspec did not match")})
+        checkpoint_wip("/repo", task_id="m4c-04", trigger="atexit", git_run=git)
+
+        adds = [args for args, _ in git.calls if args[0] == "add"]
+        assert adds[-1] == ("add", "-A", "--", ".")
+
     @pytest.mark.parametrize("failing,expected_reason", [
         ("add", "add_failed"),
         ("commit", "commit_failed"),

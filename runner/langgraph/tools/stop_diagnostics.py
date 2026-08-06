@@ -1228,6 +1228,12 @@ def _wip_checkpoint_lines(checkpoint: Optional[dict]) -> list[str]:
             lines.append(f"    - {path}")
         if len(files) < checkpoint.get("file_count", 0):
             lines.append(f"    ... and {checkpoint['file_count'] - len(files)} more")
+        excluded = checkpoint.get("excluded_paths") or []
+        if excluded:
+            lines.append(
+                f"  Left in tree : {len(excluded)} credential-looking file(s), never committed "
+                f"— {', '.join(excluded[:6])}"
+            )
     elif reason in ("clean_tree", "nothing_to_commit"):
         lines.append("  Working tree was clean — no uncommitted work was at risk.")
     else:

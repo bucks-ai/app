@@ -31,8 +31,12 @@ Safety, in order of how badly each would end:
   - **Never onto a protected branch.** A protected or detached HEAD redirects
     to ``wip/<task-id>``; the checkpoint is abandoned rather than committed to
     ``main`` if that redirect fails.
-  - **Never outside the repo.** The add is ``git add -A -- .`` from the repo
-    root, so the pathspec cannot reach above it.
+  - **Never outside the repo.** Paths are staged by explicit repo-relative
+    pathspec, so the add cannot reach above the repo root.
+  - **Never a credential file.** Anything whose *name* says credentials
+    (``.env*``, ``*.pem``, ``id_rsa``, ...) is left in the working tree and
+    reported by name. bucks-ai ignores those already; a cloned customer repo
+    may not, and this commit gets pushed.
   - **Never force-push.** A rejected push is reported, never forced.
   - **Never block the exit.** Every failure here is caught, logged loudly
     (``wip_checkpoint_failed`` reaches Slack), and returned as data. A failed
@@ -83,6 +87,26 @@ MAX_LISTED_FILES = 40
 
 _SLUG_RE = re.compile(r"[^A-Za-z0-9._-]+")
 
+#: Files never staged by a checkpoint, matched on basename. bucks-ai's own
+#: .gitignore already covers these, but a checkpoint also runs inside cloned
+#: customer repos (tools/foreign_repo_workspace.py) whose ignore rules the
+#: runner does not control — and this commit is pushed. Skipping them costs a
+#: file that is still sitting safely in the working tree; not skipping them
+#: costs a credential published to someone else's remote.
+_SECRET_FILE_SUFFIXES = (".pem", ".key", ".p12", ".pfx", ".jks", ".keystore")
+#: ``.env.*`` names that exist to be committed. Excluding these would drop real
+#: work (a task whose whole point is updating the env table) to protect a file
+#: that holds placeholders by definition.
+_ENV_TEMPLATE_NAMES = frozenset({
+    ".env.example", ".env.sample", ".env.template", ".env.dist", ".env.defaults",
+})
+_SECRET_FILE_NAMES = frozenset({
+    "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519",
+    ".npmrc", ".pypirc", ".netrc", ".htpasswd",
+    "credentials.json", "secrets.json", "service-account.json",
+    "serviceaccount.json", "gha-creds.json",
+})
+
 # Re-entrancy guard. A SIGTERM arriving while the atexit hook is mid-commit
 # would otherwise start a second `git add`/`git commit` on the same tree.
 _in_progress = False
@@ -130,6 +154,30 @@ def resolve_checkpoint_branch(current_branch: Optional[str], task_id: Optional[s
             "current": current,
         }
     return {"branch": current, "redirected": False, "reason": "", "current": current}
+
+
+def is_secret_path(path: str) -> bool:
+    """True for a file whose *name* says it holds credentials.
+
+    Name-based only: nothing here opens the file, so no secret value is ever
+    read, logged, or compared.
+    """
+    name = (path or "").replace("\\", "/").rsplit("/", 1)[-1].lower()
+    if name in _ENV_TEMPLATE_NAMES:
+        return False
+    if name == ".env" or name.startswith(".env."):
+        return True
+    if name in _SECRET_FILE_NAMES:
+        return True
+    return name.endswith(_SECRET_FILE_SUFFIXES)
+
+
+def partition_secret_paths(paths: list) -> tuple:
+    """Split dirty paths into ``(safe_to_commit, excluded_credential_files)``."""
+    safe, excluded = [], []
+    for path in paths:
+        (excluded if is_secret_path(path) else safe).append(path)
+    return safe, excluded
 
 
 def format_checkpoint_message(
@@ -241,6 +289,7 @@ def _blank_result(**overrides) -> dict:
         "short_sha": "",
         "files": [],
         "file_count": 0,
+        "excluded_paths": [],
         "pushed": False,
         "push_error": "",
         "error": "",
@@ -317,8 +366,8 @@ def _checkpoint_wip(
         _log_failure(repo_path, result)
         return result
 
-    files = worktree_files(repo_path, git_run=git_run)
-    if not files:
+    dirty = worktree_files(repo_path, git_run=git_run)
+    if not dirty:
         log_event(CHECKPOINT_SKIPPED_EVENT, {
             "reason": "clean_tree",
             "trigger": trigger,
@@ -328,7 +377,25 @@ def _checkpoint_wip(
         }, task_id=task_id)
         return _blank_result(**{**base, "reason": "clean_tree"})
 
-    base = {**base, "files": files[:MAX_LISTED_FILES], "file_count": len(files)}
+    files, excluded = partition_secret_paths(dirty)
+    base = {
+        **base,
+        "files": files[:MAX_LISTED_FILES],
+        "file_count": len(files),
+        "excluded_paths": excluded,
+    }
+
+    if not files:
+        # Everything dirty looked like a credential file. Nothing is committed,
+        # and the founder is told by name (never by value) what is sitting
+        # there — silence here would read as "there was nothing to save".
+        result = _blank_result(**{
+            **base,
+            "reason": "all_paths_excluded",
+            "error": f"every dirty path looked like a credential file: {', '.join(excluded[:10])}",
+        })
+        _log_failure(repo_path, result)
+        return result
 
     resolved = resolve_checkpoint_branch(_current_branch(repo_path, git_run), task_id)
     branch = resolved["branch"]
@@ -353,9 +420,18 @@ def _checkpoint_wip(
             _log_failure(repo_path, result)
             return result
 
-    # `-- .` anchors the pathspec at the repo root: git cannot be talked into
-    # staging anything above it.
-    add = _run(git_run, ["add", "-A", "--", "."], repo_path)
+    # Explicit, repo-relative pathspecs after `--`: git stages these and only
+    # these, so nothing outside the repo and no excluded credential file can be
+    # swept in.
+    add = _run(git_run, ["add", "-A", "--"] + files, repo_path)
+    if not add.success and not excluded:
+        # `git status --porcelain` escapes non-ASCII and quotes paths with
+        # spaces, so a pathspec built from it can fail to match the very file it
+        # names. Falling back to the whole repo saves that work — but only when
+        # nothing was deliberately excluded, because the pathspec list is the
+        # only thing keeping a credential file out of the commit.
+        add = _run(git_run, ["add", "-A", "--", "."], repo_path)
+
     if not add.success:
         result = _blank_result(**{
             **base, "reason": "add_failed", "error": (add.output or "")[-300:],
@@ -423,6 +499,8 @@ def _checkpoint_wip(
         "redirected": result["redirected"],
         "files": result["files"],
         "file_count": result["file_count"],
+        # Names only — never contents, and never a value.
+        "excluded_paths": result["excluded_paths"],
         "pushed": result["pushed"],
         "push_error": result["push_error"],
         "trigger": trigger,
@@ -444,6 +522,7 @@ def _log_failure(repo_path: str, result: dict) -> None:
         "branch": result.get("branch"),
         "files": result.get("files"),
         "file_count": result.get("file_count"),
+        "excluded_paths": result.get("excluded_paths"),
         "trigger": result.get("trigger"),
         "stop_reason": result.get("stop_reason"),
         "task_id": result.get("task_id"),
