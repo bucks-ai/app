@@ -110,6 +110,18 @@ export const updateApprovalBodySchema = z.object({
 export type UpdateApprovalBody = z.infer<typeof updateApprovalBodySchema>;
 
 // ---------------------------------------------------------------------------
+// PATCH /api/human-actions/[id]
+// ---------------------------------------------------------------------------
+
+export const humanActionDecisionSchema = z.enum(["approve", "dismiss"]);
+
+export const updateHumanActionBodySchema = z.object({
+  action: humanActionDecisionSchema,
+});
+
+export type UpdateHumanActionBody = z.infer<typeof updateHumanActionBodySchema>;
+
+// ---------------------------------------------------------------------------
 // POST /api/businesses/[id]/execute
 // This route takes no JSON body; the business id arrives via the path param.
 // ---------------------------------------------------------------------------

@@ -38,6 +38,9 @@ export type ActivityItem = {
 };
 
 export type HumanAction = {
+  // human_required_actions.id — absent for demo rows and for the string-only
+  // fallback list, which have no database row to decide against.
+  id?: string;
   title: string;
   business: string;
   reason: string;

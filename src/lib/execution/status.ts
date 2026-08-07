@@ -8,6 +8,7 @@ import { getToolPermissionsForBusiness } from "@/lib/tool-permissions";
 import { getLatestGitHubRepoForBusiness } from "@/lib/github/repo-metadata";
 import { getLatestVercelProjectForBusiness } from "@/lib/vercel/project-metadata";
 import { categorizeActivityLog } from "@/lib/execution/log-categories";
+import { isHumanActionOpen as isHumanActionStatusOpen } from "@/lib/human-actions";
 import type {
   AgentActivityLogRecord,
   BusinessBlueprintRecord,
@@ -46,14 +47,6 @@ const APPROVED_PERMISSION_STATUSES = new Set([
   "approved",
   "approved_by_founder",
   "connected_demo",
-]);
-
-const OPEN_HUMAN_ACTION_STATUSES = new Set([
-  "pending",
-  "open",
-  "required",
-  "needs_review",
-  "needs_approval",
 ]);
 
 function ok<T>(data: T): Result<T> {
@@ -97,9 +90,7 @@ function isPermissionBlocked(permission: ToolPermissionView | null): boolean {
 }
 
 function isHumanActionOpen(action: HumanRequiredActionRecord): boolean {
-  const normalized = action.status.toLowerCase();
-  if (OPEN_HUMAN_ACTION_STATUSES.has(normalized)) return true;
-  return !["complete", "completed", "resolved", "done", "closed"].includes(normalized);
+  return isHumanActionStatusOpen(action.status);
 }
 
 function milestone(input: ExecutionMilestone): ExecutionMilestone {

@@ -106,7 +106,11 @@ export function BusinessWorkspace({
         onBlueprintOpen={() => setBlueprintOpen(true)}
       />
     ) : activeTab === "actions" ? (
-      <ActionsTab business={business} executionStatus={executionStatus} />
+      <ActionsTab
+        business={business}
+        executionStatus={executionStatus}
+        onTabChange={handleTabChange}
+      />
     ) : activeTab === "research" ? (
       <ResearchTab business={business} />
     ) : activeTab === "build" ? (

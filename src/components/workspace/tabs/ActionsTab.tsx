@@ -1,10 +1,23 @@
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { DashboardBusiness } from "@/components/dashboard/mock-data";
 import type { BusinessExecutionStatus } from "@/types/execution-ui";
+import type { HumanActionDecision } from "@/types/human-action-ui";
+import { updateHumanAction } from "@/lib/human-action-client";
 import { ApprovalsPanel } from "@/components/workspace/tabs/ApprovalsPanel";
+import {
+  resolveActionTarget,
+  type ActionTarget,
+} from "@/components/workspace/action-target";
+import { TABS, type TabKey } from "@/components/workspace/WorkspaceTabs";
 
 type ActionsTabProps = {
   business: DashboardBusiness;
   executionStatus?: BusinessExecutionStatus | null;
+  onTabChange?: (tab: TabKey) => void;
 };
 
 type UnifiedAction = {
@@ -15,6 +28,10 @@ type UnifiedAction = {
   urgency: "critical" | "high" | "medium" | "low";
   category: "approval" | "blocker" | "next_action";
   dependency?: string;
+  // Present only for approvals backed by a human_required_actions row — those
+  // are the ones the founder can decide inline.
+  humanActionId?: string;
+  target?: ActionTarget | null;
 };
 
 function buildUnifiedActions(
@@ -27,6 +44,7 @@ function buildUnifiedActions(
   const humanItems =
     business.humanActionItems ??
     business.humanActions.map((title) => ({
+      id: undefined,
       title,
       business: business.name,
       reason: "Founder approval required before execution continues.",
@@ -35,12 +53,13 @@ function buildUnifiedActions(
 
   for (const [i, action] of humanItems.entries()) {
     actions.push({
-      id: `approval-${i}`,
+      id: action.id ?? `approval-${i}`,
       title: action.title,
       description: action.reason,
       owner: "founder",
       urgency: "critical",
       category: "approval",
+      humanActionId: action.id,
     });
   }
 
@@ -53,6 +72,7 @@ function buildUnifiedActions(
       owner: blocker.owner,
       urgency: "high",
       category: "blocker",
+      target: resolveActionTarget(blocker.href, business.id),
     });
   }
 
@@ -65,6 +85,7 @@ function buildUnifiedActions(
       owner: action.actor,
       urgency: action.priority === "high" ? "high" : action.priority === "low" ? "low" : "medium",
       category: "next_action",
+      target: resolveActionTarget(action.href, business.id),
     });
   }
 
@@ -93,13 +114,48 @@ const ownerStyle: Record<string, string> = {
   bucks_ai: "border-accent/25 bg-accent/10 text-accent",
 };
 
-export function ActionsTab({ business, executionStatus }: ActionsTabProps) {
-  const actions = buildUnifiedActions(business, executionStatus);
+const decisionLabel: Record<HumanActionDecision, string> = {
+  approve: "Approve",
+  dismiss: "Dismiss",
+};
+
+export function ActionsTab({
+  business,
+  executionStatus,
+  onTabChange,
+}: ActionsTabProps) {
+  const router = useRouter();
+  const [decidedIds, setDecidedIds] = useState<string[]>([]);
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const actions = buildUnifiedActions(business, executionStatus).filter(
+    (action) => !action.humanActionId || !decidedIds.includes(action.humanActionId)
+  );
+
+  async function handleDecision(id: string, decision: HumanActionDecision) {
+    setPendingId(id);
+    setError(null);
+
+    const result = await updateHumanAction(id, decision);
+    setPendingId(null);
+
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+
+    // Drop it locally straight away, then refresh so the sidebar badge, the
+    // right rail counts, and the execution status all agree.
+    setDecidedIds((current) => [...current, id]);
+    router.refresh();
+  }
 
   if (actions.length === 0) {
     return (
       <div>
         <ApprovalsPanel />
+        {error ? <DecisionError message={error} /> : null}
         <div className="solid-surface mt-5 rounded-lg p-8 text-center">
           <p className="font-mono text-xs uppercase tracking-[0.24em] text-muted-foreground">
             No pending actions
@@ -115,10 +171,11 @@ export function ActionsTab({ business, executionStatus }: ActionsTabProps) {
   return (
     <div className="space-y-2">
       <ApprovalsPanel />
+      {error ? <DecisionError message={error} /> : null}
       {actions.map((action) => (
         <div
           key={action.id}
-          className={`interactive-surface rounded-lg border bg-surface/90 p-4 ${
+          className={`rounded-lg border bg-surface/90 p-4 ${
             action.category === "approval"
               ? "border-warning/20"
               : action.category === "blocker"
@@ -154,8 +211,112 @@ export function ActionsTab({ business, executionStatus }: ActionsTabProps) {
               {ownerLabel[action.owner]}
             </span>
           </div>
+
+          <ActionControls
+            action={action}
+            pending={pendingId === action.humanActionId}
+            onDecide={handleDecision}
+            onTabChange={onTabChange}
+          />
         </div>
       ))}
+    </div>
+  );
+}
+
+function DecisionError({ message }: { message: string }) {
+  return (
+    <div
+      role="alert"
+      className="rounded-xl bg-error/10 p-4 text-xs leading-5 text-error"
+    >
+      {message}
+    </div>
+  );
+}
+
+const controlClass =
+  "inline-flex min-h-11 items-center rounded-lg border px-3 py-1.5 font-mono text-[11px] uppercase tracking-widest transition-colors disabled:opacity-50";
+
+function ActionControls({
+  action,
+  pending,
+  onDecide,
+  onTabChange,
+}: {
+  action: UnifiedAction;
+  pending: boolean;
+  onDecide: (id: string, decision: HumanActionDecision) => void;
+  onTabChange?: (tab: TabKey) => void;
+}) {
+  if (action.humanActionId) {
+    const id = action.humanActionId;
+    return (
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => onDecide(id, "approve")}
+          disabled={pending}
+          className={`${controlClass} border-accent/30 bg-accent/12 text-accent-on-tint hover:bg-accent/20`}
+        >
+          {pending ? "Saving..." : decisionLabel.approve}
+        </button>
+        <button
+          type="button"
+          onClick={() => onDecide(id, "dismiss")}
+          disabled={pending}
+          className={`${controlClass} border-error/30 bg-error/10 text-error hover:bg-error/20`}
+        >
+          {decisionLabel.dismiss}
+        </button>
+      </div>
+    );
+  }
+
+  const target = action.target;
+  if (!target) return null;
+
+  if (target.kind === "tab") {
+    // No handler means this tab is rendered outside the workspace shell, so
+    // there is nothing to switch to — better no control than a dead one.
+    if (!onTabChange) return null;
+    const tab = target.tab;
+    return (
+      <div className="mt-3">
+        <button
+          type="button"
+          onClick={() => onTabChange(tab)}
+          className={`${controlClass} border-border bg-background text-foreground-secondary hover:border-accent/40 hover:text-foreground`}
+        >
+          Open {TABS.find((entry) => entry.key === tab)?.label ?? tab}
+        </button>
+      </div>
+    );
+  }
+
+  if (target.kind === "internal") {
+    return (
+      <div className="mt-3">
+        <Link
+          href={target.href}
+          className={`${controlClass} border-border bg-background text-foreground-secondary hover:border-accent/40 hover:text-foreground`}
+        >
+          Open
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3">
+      <a
+        href={target.href}
+        target="_blank"
+        rel="noreferrer"
+        className={`${controlClass} border-border bg-background text-foreground-secondary hover:border-accent/40 hover:text-foreground`}
+      >
+        Open externally
+      </a>
     </div>
   );
 }

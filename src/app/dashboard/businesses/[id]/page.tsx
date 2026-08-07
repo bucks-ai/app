@@ -19,6 +19,7 @@ import {
   getLatestBlueprintForBusiness,
 } from "@/lib/projects";
 import { getToolPermissionsForBusiness } from "@/lib/tool-permissions";
+import { isHumanActionOpen } from "@/lib/human-actions";
 import { hasSupabaseEnv } from "@/lib/supabase/env";
 import type {
   AgentActivityLogRecord,
@@ -108,6 +109,7 @@ function toHumanAction(
   businessName: string
 ): HumanAction {
   return {
+    id: action.id,
     title: action.title,
     business: businessName,
     reason:
@@ -277,6 +279,10 @@ function toDashboardBusiness(input: {
           .filter((permission): permission is ToolPermission => !!permission)
       : [];
 
+  const openActions = input.actions.filter((action) =>
+    isHumanActionOpen(action.status)
+  );
+
   return {
     id: input.business.id,
     name: input.business.idea_name,
@@ -296,8 +302,10 @@ function toDashboardBusiness(input: {
       asString(typedBlueprint?.businessSummary) ??
       "No saved blueprint summary was found for this project.",
     nextActions,
-    humanActions: input.actions.map((action) => action.title),
-    humanActionItems: input.actions.map((action) =>
+    // Decided rows stay in the table for the audit trail but must not keep
+    // showing up as work the founder still owes.
+    humanActions: openActions.map((action) => action.title),
+    humanActionItems: openActions.map((action) =>
       toHumanAction(action, input.business.idea_name)
     ),
     activity: input.logs.map(toActivityItem),
