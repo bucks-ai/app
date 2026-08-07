@@ -62,6 +62,9 @@ _DEFAULT_SLACK_EVENTS = frozenset({
     "claude_subscription_cooldown_detected",
     "claude_subscription_cooldown_resumed",
     "loop_blocked_on_claude_subscription_cooldown",
+    "network_unavailable_detected",
+    "network_restored",
+    "loop_blocked_on_network_unavailable",
     "analytics_report_ready",
     "migrations_pending",
     "migration_applied",
@@ -617,6 +620,21 @@ class RunnerConfig:
     claude_subscription_cooldown_max_waits: int = field(
         default_factory=lambda: int(os.getenv("CLAUDE_SUBSCRIPTION_COOLDOWN_MAX_WAITS", "3"))
     )
+    # M4c.4: a driveway-length network outage is an environmental PAUSE, not a
+    # failure.  The probe is cheap (DNS + HEAD, no tokens) so the poll interval
+    # can be short; patience is long so a commute is ridden out.
+    network_pause_enabled: bool = field(
+        default_factory=lambda: os.getenv("NETWORK_PAUSE", "true").lower() == "true"
+    )
+    network_pause_probe_timeout_s: float = field(
+        default_factory=lambda: float(os.getenv("NETWORK_PAUSE_PROBE_TIMEOUT_S", "5.0"))
+    )
+    network_pause_poll_interval_s: int = field(
+        default_factory=lambda: int(os.getenv("NETWORK_PAUSE_POLL_INTERVAL_S", "30"))
+    )
+    network_pause_max_patience_s: int = field(
+        default_factory=lambda: int(os.getenv("NETWORK_PAUSE_MAX_PATIENCE_S", "5400"))
+    )
 
     @property
     def has_openai(self) -> bool:
@@ -816,6 +834,10 @@ class RunnerConfig:
             "claude_subscription_cooldown_enabled": self.claude_subscription_cooldown_enabled,
             "claude_subscription_cooldown_wait_s": self.claude_subscription_cooldown_wait_s,
             "claude_subscription_cooldown_max_waits": self.claude_subscription_cooldown_max_waits,
+            "network_pause_enabled": self.network_pause_enabled,
+            "network_pause_probe_timeout_s": self.network_pause_probe_timeout_s,
+            "network_pause_poll_interval_s": self.network_pause_poll_interval_s,
+            "network_pause_max_patience_s": self.network_pause_max_patience_s,
         }
 
     def threshold_violations(self) -> list:

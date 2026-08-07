@@ -542,7 +542,8 @@ def _stub_task_io(monkeypatch):
 
 def test_a_network_failure_never_marks_a_task_terminally_failed(monkeypatch):
     """Retries are exhausted, so the failure guard would give up and mark this
-    task failed — terminal. A transient error must pre-empt that."""
+    task failed — terminal. A DNS error takes the network-pause path, which
+    requeues the task without touching any counter (even better than transient)."""
     calls = _stub_task_io(monkeypatch)
     monkeypatch.setattr(graph.cfg, "max_task_retries", 1)
     monkeypatch.setattr(graph.cfg, "failure_guard_enabled", True)
@@ -554,8 +555,10 @@ def test_a_network_failure_never_marks_a_task_terminally_failed(monkeypatch):
     )
     out = graph.update_logs_and_state(state)
     assert calls["failed"] == []
-    assert calls["requeue"] and calls["requeue"][0][2] == {"transient_retry_count": 1}
-    assert calls["requeue"][0][1] == 5, "the genuine-retry budget must not be spent"
+    # Network-pause path: requeued with None extra (not transient metadata) and
+    # retry_count is unchanged — the genuine-retry budget must not be spent.
+    assert calls["requeue"] and calls["requeue"][0][1] == 5
+    assert calls["requeue"][0][2] is None, "network-pause requeue must not touch transient metadata"
     assert out.retry_pending is True
 
 

@@ -123,3 +123,6 @@ class RunnerState(BaseModel):
     current_agent_run_id: Optional[str] = None       # Supabase agent_runs.id for the in-flight seeded-mission task, if any
     startup_self_heal: Optional[dict] = None         # m4c-03 summary of what the startup heal requeued, parked, or pruned
     wip_checkpoint: Optional[dict] = None            # M4c.4 outcome of the last checkpoint_wip() — carries the sha the stop report quotes
+    network_unavailable_detected: bool = False       # M4c.4 set when a pre-dispatch probe or mid-call error identifies total connectivity loss
+    network_pause_started_at: Optional[str] = None  # ISO-8601 UTC timestamp when the current network outage was first detected
+    network_wait_seconds_total: float = 0.0          # cumulative wall-clock seconds slept on network-pause waits this session; excluded from MAX_RUNTIME_MINUTES

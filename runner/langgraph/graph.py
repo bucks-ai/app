@@ -36,6 +36,11 @@ from tools.claude_subscription_cooldown import (
     evaluate_subscription_cooldown,
     _is_cooldown_error,
 )
+from tools.network_pause import (
+    probe_connectivity,
+    is_network_error,
+    NETWORK_PAUSE_STOP,
+)
 from tools.cost_budget_guard import evaluate_cost_budget
 from tools.summary_tools import build_run_summary_digest, parse_worker_summary
 from tools.context_compression import compress_messages
@@ -1440,6 +1445,37 @@ def dispatch_worker(state: RunnerState) -> RunnerState:
 
     worker_type = state.current_worker or "claude"
 
+    # ── Pre-dispatch network connectivity probe (M4c.4) ──────────────────────
+    # A cheap DNS + HEAD check before any worker is launched.  If the machine
+    # is offline the task is not dispatched and not counted as a failure — the
+    # wait happens in decide_continue_or_stop, exactly like a cooldown.
+    if cfg.network_pause_enabled and not state.network_unavailable_detected:
+        net = probe_connectivity(timeout_s=cfg.network_pause_probe_timeout_s)
+        if not net["online"]:
+            probe_err = net.get("error") or "network probe failed"
+            if not state.network_unavailable_detected:
+                state.network_unavailable_detected = True
+                state.network_pause_started_at = datetime.utcnow().isoformat()
+                log_event("network_unavailable_detected", {
+                    "task_id": state.current_task_id,
+                    "source": "pre_dispatch_probe",
+                    "error": probe_err,
+                }, task_id=state.current_task_id)
+            state.worker_elapsed_seconds = 0.0
+            state.worker_result = {
+                "worker": worker_type,
+                "mode": "cli",
+                "success": False,
+                "output": None,
+                "error": f"network_unavailable: {probe_err}",
+                "prompt_written": False,
+                "prompt_path": None,
+                "response_path": None,
+                "api_cost": None,
+                "tokens_used": None,
+            }
+            return _persist(state, "dispatch_worker")
+
     # ── Worker health probe ──────────────────────────────────────────────────
     if cfg.worker_health_probe_enabled:
         hp = probe_worker_health(
@@ -2786,8 +2822,31 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
         and _is_cooldown_error(result.get("output"), result.get("error"))
     )
 
+    # M4c.4: total loss of connectivity is a PAUSE, not a failure.  Neither
+    # the pre-dispatch probe (state.network_unavailable_detected already set)
+    # nor a mid-call socket error should touch retry_count, task_attempt_counts,
+    # consecutive_failures, error_history, task status, or Supabase sync.
+    err_for_network = result.get("error")
+    _is_network_pause = (
+        cfg.network_pause_enabled
+        and not result.get("success")
+        and (
+            state.network_unavailable_detected
+            or is_network_error(err_for_network)
+        )
+    )
+    if _is_network_pause and not state.network_unavailable_detected:
+        # Mid-call detection: mark the outage start now.
+        state.network_unavailable_detected = True
+        state.network_pause_started_at = datetime.utcnow().isoformat()
+        log_event("network_unavailable_detected", {
+            "task_id": task_id,
+            "source": "mid_call_error",
+            "error": (err_for_network or "")[:200],
+        }, task_id=task_id)
+
     # ── Repeated-task guard ──────────────────────────────────────────────────
-    if task_id and not _is_cooldown_failure:
+    if task_id and not _is_cooldown_failure and not _is_network_pause:
         rep_task = evaluate_task_repetition(
             task_id, state.task_attempt_counts, cfg.max_task_attempts
         )
@@ -2882,169 +2941,244 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
         err = result.get("error") or "worker returned no output"
         state.retry_pending = False
 
-        # ── Repeated-error guard ─────────────────────────────────────────────
-        # A subscription cooldown is NOT a repeated error. The cooldown guard
-        # further down handles it by sleeping until the window resets, but it
-        # runs ~120ms later — so without this exemption every cooldown also
-        # incremented the repeated-error counter, and three cooldowns in one
-        # session killed the loop with `repeated_errors` while the cooldown
-        # guard was busy correctly waiting them out (observed 2026-08-03
-        # 18:39:41 on m4c0-05: blocked at match_count 3 / cooldown_count 3).
-        # Waiting out a rate limit is the designed behaviour; it must never
-        # accumulate toward a failure ceiling.
-        if _is_cooldown_failure:
-            log_event("repeated_error_guard_skipped", {
+        if _is_network_pause:
+            # M4c.4: network pause — skip ALL failure counters, guards, and
+            # Supabase sync.  The task is simply requeued (retry_count unchanged)
+            # and the polling wait happens in decide_continue_or_stop.
+            current_retry_count = task.get("retry_count", 0) or 0
+            requeue_task(task_id, current_retry_count, None)
+            state.retry_pending = True
+            log_event("network_pause_task_requeued", {
                 "task_id": task_id,
-                "reason": "claude subscription cooldown — not a task failure",
-                "error": err,
+                "retry_count": current_retry_count,
+                "error": (err or "")[:200],
             }, task_id=task_id)
-
-        rep_err = evaluate_error_repetition(
-            err, state.error_history, cfg.max_repeated_errors, cfg.repeated_error_window
-        ) if not _is_cooldown_failure else {"blocked": False, "match_count": 0, "stop_reason": None}
-        if not _is_cooldown_failure:
-            state.error_history = list(state.error_history) + [{"error": err, "task_id": task_id}]
-        if rep_err["blocked"] and not state.stop_reason:
-            state.stop_reason = rep_err["stop_reason"]
-            log_event("loop_blocked_on_repeated_error", authority_payload(
-                "repeated_error",
-                task_id=task_id,
-                match_count=rep_err["match_count"],
-                max_repeated_errors=cfg.max_repeated_errors,
-                error=err,
-            ), task_id=task_id)
-
-        # ── Worker timeout guard ─────────────────────────────────────────────
-        if cfg.worker_timeout_guard_enabled:
-            tg = evaluate_worker_timeout(
-                state.worker_elapsed_seconds,
-                err,
-                state.worker_timeout_count,
-                cfg.max_worker_timeouts,
-                cfg.worker_timeout_threshold,
-            )
-            state.worker_timeout_count = tg["timeout_count"]
-            if tg["timed_out"]:
-                log_event("worker_timeout_detected", {
+        else:
+            # ── Repeated-error guard ─────────────────────────────────────────
+            # A subscription cooldown is NOT a repeated error. The cooldown guard
+            # further down handles it by sleeping until the window resets, but it
+            # runs ~120ms later — so without this exemption every cooldown also
+            # incremented the repeated-error counter, and three cooldowns in one
+            # session killed the loop with `repeated_errors` while the cooldown
+            # guard was busy correctly waiting them out (observed 2026-08-03
+            # 18:39:41 on m4c0-05: blocked at match_count 3 / cooldown_count 3).
+            # Waiting out a rate limit is the designed behaviour; it must never
+            # accumulate toward a failure ceiling.
+            if _is_cooldown_failure:
+                log_event("repeated_error_guard_skipped", {
                     "task_id": task_id,
-                    "elapsed_seconds": state.worker_elapsed_seconds,
-                    "timeout_count": tg["timeout_count"],
-                    "max_worker_timeouts": cfg.max_worker_timeouts,
+                    "reason": "claude subscription cooldown — not a task failure",
+                    "error": err,
                 }, task_id=task_id)
-            if tg["blocked"]:
-                # Systemic: only fires after MAX_WORKER_TIMEOUTS across the
-                # session, so the evidence is about the run, not this task.
-                _record_gate_block(
-                    state,
-                    "worker_timeout",
-                    event="loop_blocked_on_worker_timeout",
-                    payload={
+
+            rep_err = evaluate_error_repetition(
+                err, state.error_history, cfg.max_repeated_errors, cfg.repeated_error_window
+            ) if not _is_cooldown_failure else {"blocked": False, "match_count": 0, "stop_reason": None}
+            if not _is_cooldown_failure:
+                state.error_history = list(state.error_history) + [{"error": err, "task_id": task_id}]
+            if rep_err["blocked"] and not state.stop_reason:
+                state.stop_reason = rep_err["stop_reason"]
+                log_event("loop_blocked_on_repeated_error", authority_payload(
+                    "repeated_error",
+                    task_id=task_id,
+                    match_count=rep_err["match_count"],
+                    max_repeated_errors=cfg.max_repeated_errors,
+                    error=err,
+                ), task_id=task_id)
+
+            # ── Worker timeout guard ─────────────────────────────────────────
+            if cfg.worker_timeout_guard_enabled:
+                tg = evaluate_worker_timeout(
+                    state.worker_elapsed_seconds,
+                    err,
+                    state.worker_timeout_count,
+                    cfg.max_worker_timeouts,
+                    cfg.worker_timeout_threshold,
+                )
+                state.worker_timeout_count = tg["timeout_count"]
+                if tg["timed_out"]:
+                    log_event("worker_timeout_detected", {
                         "task_id": task_id,
+                        "elapsed_seconds": state.worker_elapsed_seconds,
                         "timeout_count": tg["timeout_count"],
                         "max_worker_timeouts": cfg.max_worker_timeouts,
-                    },
-                    stop_reason=tg["stop_reason"],
-                    task_id=task_id,
-                    pre_completion=False,
-                )
+                    }, task_id=task_id)
+                if tg["blocked"]:
+                    # Systemic: only fires after MAX_WORKER_TIMEOUTS across the
+                    # session, so the evidence is about the run, not this task.
+                    _record_gate_block(
+                        state,
+                        "worker_timeout",
+                        event="loop_blocked_on_worker_timeout",
+                        payload={
+                            "task_id": task_id,
+                            "timeout_count": tg["timeout_count"],
+                            "max_worker_timeouts": cfg.max_worker_timeouts,
+                        },
+                        stop_reason=tg["stop_reason"],
+                        task_id=task_id,
+                        pre_completion=False,
+                    )
 
-        # ── Codex usage-limit guard ──────────────────────────────────────────
-        if cfg.codex_usage_limit_guard_enabled:
-            cug = evaluate_codex_usage_limit(
-                err,
-                result.get("worker"),
-                state.codex_usage_limit_count,
-                cfg.max_codex_usage_limit_errors,
-            )
-            state.codex_usage_limit_count = cug["usage_limit_count"]
-            if cug["usage_limit_detected"]:
-                log_event("codex_usage_limit_detected", {
-                    "task_id": task_id,
-                    "usage_limit_count": cug["usage_limit_count"],
-                    "max_codex_usage_limit_errors": cfg.max_codex_usage_limit_errors,
-                }, task_id=task_id)
-            if cug["blocked"]:
-                _record_gate_block(
-                    state,
-                    "codex_usage_limit",
-                    event="loop_blocked_on_codex_usage_limit",
-                    payload={
+            # ── Codex usage-limit guard ──────────────────────────────────────
+            if cfg.codex_usage_limit_guard_enabled:
+                cug = evaluate_codex_usage_limit(
+                    err,
+                    result.get("worker"),
+                    state.codex_usage_limit_count,
+                    cfg.max_codex_usage_limit_errors,
+                )
+                state.codex_usage_limit_count = cug["usage_limit_count"]
+                if cug["usage_limit_detected"]:
+                    log_event("codex_usage_limit_detected", {
                         "task_id": task_id,
                         "usage_limit_count": cug["usage_limit_count"],
                         "max_codex_usage_limit_errors": cfg.max_codex_usage_limit_errors,
-                    },
-                    stop_reason=cug["stop_reason"],
-                    task_id=task_id,
-                    pre_completion=False,
-                )
+                    }, task_id=task_id)
+                if cug["blocked"]:
+                    _record_gate_block(
+                        state,
+                        "codex_usage_limit",
+                        event="loop_blocked_on_codex_usage_limit",
+                        payload={
+                            "task_id": task_id,
+                            "usage_limit_count": cug["usage_limit_count"],
+                            "max_codex_usage_limit_errors": cfg.max_codex_usage_limit_errors,
+                        },
+                        stop_reason=cug["stop_reason"],
+                        task_id=task_id,
+                        pre_completion=False,
+                    )
 
-        # ── Claude subscription cooldown guard ───────────────────────────────
-        # Detect Claude.ai subscription rate-limit responses and schedule
-        # an auto-resume instead of counting this as a task failure.  When
-        # detected the task is requeued with a future retry_not_before
-        # timestamp and the failure guard is bypassed for this iteration.
-        _cooldown_detected = False
-        if cfg.claude_subscription_cooldown_enabled:
-            csc = evaluate_subscription_cooldown(
-                result.get("output"),
-                err,
-                result.get("worker"),
-                cfg.claude_auth_mode,
-                enabled=True,
-                default_wait_s=cfg.claude_subscription_cooldown_wait_s,
-                cooldown_count=state.claude_subscription_cooldown_count,
-                max_cooldown_waits=cfg.claude_subscription_cooldown_max_waits,
-            )
-            state.claude_subscription_cooldown_count = csc["cooldown_count"]
-            if csc["detected"]:
-                _cooldown_detected = True
-                state.claude_subscription_cooldown_until = csc["resume_at_iso"]
-                log_event("claude_subscription_cooldown_detected", {
-                    "task_id": task_id,
-                    "wait_seconds": csc["wait_seconds"],
-                    "resume_at": csc["resume_at_iso"],
-                    "cooldown_count": csc["cooldown_count"],
-                    "max_cooldown_waits": cfg.claude_subscription_cooldown_max_waits,
-                }, task_id=task_id)
-                if csc["blocked"] and not state.stop_reason:
-                    state.stop_reason = csc["stop_reason"]
-                    log_event("loop_blocked_on_claude_subscription_cooldown", {
+            # ── Claude subscription cooldown guard ───────────────────────────
+            # Detect Claude.ai subscription rate-limit responses and schedule
+            # an auto-resume instead of counting this as a task failure.  When
+            # detected the task is requeued with a future retry_not_before
+            # timestamp and the failure guard is bypassed for this iteration.
+            _cooldown_detected = False
+            if cfg.claude_subscription_cooldown_enabled:
+                csc = evaluate_subscription_cooldown(
+                    result.get("output"),
+                    err,
+                    result.get("worker"),
+                    cfg.claude_auth_mode,
+                    enabled=True,
+                    default_wait_s=cfg.claude_subscription_cooldown_wait_s,
+                    cooldown_count=state.claude_subscription_cooldown_count,
+                    max_cooldown_waits=cfg.claude_subscription_cooldown_max_waits,
+                )
+                state.claude_subscription_cooldown_count = csc["cooldown_count"]
+                if csc["detected"]:
+                    _cooldown_detected = True
+                    state.claude_subscription_cooldown_until = csc["resume_at_iso"]
+                    log_event("claude_subscription_cooldown_detected", {
                         "task_id": task_id,
+                        "wait_seconds": csc["wait_seconds"],
+                        "resume_at": csc["resume_at_iso"],
                         "cooldown_count": csc["cooldown_count"],
                         "max_cooldown_waits": cfg.claude_subscription_cooldown_max_waits,
                     }, task_id=task_id)
-                else:
-                    # Requeue the task for when the cooldown expires (no retry
-                    # count increment — this is not a task failure).
-                    current_retry_count = task.get("retry_count", 0)
-                    requeue_task(task_id, current_retry_count, csc["resume_at_iso"])
-                    state.retry_pending = True
+                    if csc["blocked"] and not state.stop_reason:
+                        state.stop_reason = csc["stop_reason"]
+                        log_event("loop_blocked_on_claude_subscription_cooldown", {
+                            "task_id": task_id,
+                            "cooldown_count": csc["cooldown_count"],
+                            "max_cooldown_waits": cfg.claude_subscription_cooldown_max_waits,
+                        }, task_id=task_id)
+                    else:
+                        # Requeue the task for when the cooldown expires (no retry
+                        # count increment — this is not a task failure).
+                        current_retry_count = task.get("retry_count", 0)
+                        requeue_task(task_id, current_retry_count, csc["resume_at_iso"])
+                        state.retry_pending = True
 
-        if not _cooldown_detected:
-            # m4c-03: an infrastructure failure (network, DNS, rate limit, 5xx)
-            # is never allowed to make a task terminal — the work was never
-            # attempted, so nothing about it has been proven wrong. Decided
-            # ahead of the failure guard because it overrides the guard's
-            # give-up decision, and applies just the same when the guard is off.
-            _transient_failure = (
-                cfg.state_self_healing_enabled
-                and decide_failure_disposition(
-                    err, task, max_transient_retries=cfg.max_transient_retries
-                )["error_class"] == "transient"
-            )
-
-            if cfg.failure_guard_enabled:
-                decision = evaluate_failure(
-                    task,
-                    state.consecutive_failures,
-                    max_task_retries=cfg.max_task_retries,
-                    max_consecutive_failures=cfg.max_consecutive_failures,
+            if not _cooldown_detected:
+                # m4c-03: an infrastructure failure (network, DNS, rate limit, 5xx)
+                # is never allowed to make a task terminal — the work was never
+                # attempted, so nothing about it has been proven wrong. Decided
+                # ahead of the failure guard because it overrides the guard's
+                # give-up decision, and applies just the same when the guard is off.
+                _transient_failure = (
+                    cfg.state_self_healing_enabled
+                    and decide_failure_disposition(
+                        err, task, max_transient_retries=cfg.max_transient_retries
+                    )["error_class"] == "transient"
                 )
-                state.consecutive_failures = decision["consecutive_failures"]
 
-                if _transient_failure:
-                    # The circuit breaker below still sees this failure and can
-                    # still halt the run; only the task's own fate changes.
+                if cfg.failure_guard_enabled:
+                    decision = evaluate_failure(
+                        task,
+                        state.consecutive_failures,
+                        max_task_retries=cfg.max_task_retries,
+                        max_consecutive_failures=cfg.max_consecutive_failures,
+                    )
+                    state.consecutive_failures = decision["consecutive_failures"]
+
+                    if _transient_failure:
+                        # The circuit breaker below still sees this failure and can
+                        # still halt the run; only the task's own fate changes.
+                        _park_transient_failure(
+                            state,
+                            task_id,
+                            task,
+                            error=err,
+                            event="transient_failure_requeued",
+                            payload={"worker": result.get("worker")},
+                        )
+                    elif decision["action"] == "retry":
+                        # Recoverable failure: requeue the task for another attempt.
+                        # Under degraded conditions (timeout, health-probe failure,
+                        # sustained consecutive failures) apply exponential backoff so
+                        # the runner doesn't immediately hammer the same broken wall.
+                        retry_not_before = None
+                        degraded = (
+                            cfg.failure_retry_backoff_enabled
+                            and is_degraded_failure(
+                                err,
+                                state.worker_elapsed_seconds,
+                                cfg.worker_timeout_threshold,
+                                state.consecutive_failures,
+                            )
+                        )
+                        if degraded:
+                            retry_not_before = compute_retry_not_before(
+                                decision["retry_count"],
+                                cfg.failure_retry_backoff_base_s,
+                                cfg.failure_retry_backoff_multiplier,
+                                cfg.failure_retry_backoff_max_s,
+                            )
+                        requeue_task(task_id, decision["retry_count"], retry_not_before)
+                        state.retry_pending = True
+                        log_event("task_retry_scheduled", {
+                            "task_id": task_id,
+                            "error": err,
+                            "attempt": decision["retry_count"],
+                            "max_retries": cfg.max_task_retries,
+                            "degraded": degraded,
+                            "retry_not_before": retry_not_before,
+                        }, task_id=task_id)
+                    else:
+                        # Retries exhausted (or disabled): record a permanent failure.
+                        mark_task_failed(task_id, err)
+                        log_event("error", {
+                            "task_id": task_id,
+                            "error": err,
+                            "retries_exhausted": cfg.max_task_retries > 0,
+                        })
+
+                    # Circuit breaker: too many back-to-back failures halts the loop so
+                    # the runner stops piling tasks onto a run that's clearly going
+                    # sideways. Independent of the retry decision — the requeued task is
+                    # preserved for the next run while this run stops cleanly.
+                    if decision["circuit_open"]:
+                        state.stop_reason = decision["stop_reason"]
+                        log_event("loop_blocked_on_failures", authority_payload(
+                            "repeated_error",
+                            task_id=task_id,
+                            consecutive_failures=state.consecutive_failures,
+                            max_consecutive_failures=cfg.max_consecutive_failures,
+                        ), task_id=task_id)
+                elif _transient_failure:
                     _park_transient_failure(
                         state,
                         task_id,
@@ -3053,71 +3187,9 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
                         event="transient_failure_requeued",
                         payload={"worker": result.get("worker")},
                     )
-                elif decision["action"] == "retry":
-                    # Recoverable failure: requeue the task for another attempt.
-                    # Under degraded conditions (timeout, health-probe failure,
-                    # sustained consecutive failures) apply exponential backoff so
-                    # the runner doesn't immediately hammer the same broken wall.
-                    retry_not_before = None
-                    degraded = (
-                        cfg.failure_retry_backoff_enabled
-                        and is_degraded_failure(
-                            err,
-                            state.worker_elapsed_seconds,
-                            cfg.worker_timeout_threshold,
-                            state.consecutive_failures,
-                        )
-                    )
-                    if degraded:
-                        retry_not_before = compute_retry_not_before(
-                            decision["retry_count"],
-                            cfg.failure_retry_backoff_base_s,
-                            cfg.failure_retry_backoff_multiplier,
-                            cfg.failure_retry_backoff_max_s,
-                        )
-                    requeue_task(task_id, decision["retry_count"], retry_not_before)
-                    state.retry_pending = True
-                    log_event("task_retry_scheduled", {
-                        "task_id": task_id,
-                        "error": err,
-                        "attempt": decision["retry_count"],
-                        "max_retries": cfg.max_task_retries,
-                        "degraded": degraded,
-                        "retry_not_before": retry_not_before,
-                    }, task_id=task_id)
                 else:
-                    # Retries exhausted (or disabled): record a permanent failure.
                     mark_task_failed(task_id, err)
-                    log_event("error", {
-                        "task_id": task_id,
-                        "error": err,
-                        "retries_exhausted": cfg.max_task_retries > 0,
-                    })
-
-                # Circuit breaker: too many back-to-back failures halts the loop so the
-                # runner stops piling tasks onto a run that's clearly going sideways.
-                # Independent of the retry decision — the requeued task is preserved
-                # for the next run while this run stops cleanly.
-                if decision["circuit_open"]:
-                    state.stop_reason = decision["stop_reason"]
-                    log_event("loop_blocked_on_failures", authority_payload(
-                        "repeated_error",
-                        task_id=task_id,
-                        consecutive_failures=state.consecutive_failures,
-                        max_consecutive_failures=cfg.max_consecutive_failures,
-                    ), task_id=task_id)
-            elif _transient_failure:
-                _park_transient_failure(
-                    state,
-                    task_id,
-                    task,
-                    error=err,
-                    event="transient_failure_requeued",
-                    payload={"worker": result.get("worker")},
-                )
-            else:
-                mark_task_failed(task_id, err)
-                log_event("error", {"task_id": task_id, "error": err})
+                    log_event("error", {"task_id": task_id, "error": err})
 
     # ── Cost & budget guard ──────────────────────────────────────────────────
     if cfg.cost_budget_guard_enabled:
@@ -3179,15 +3251,15 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
                     cost_usd=result.get("api_cost"),
                     duration_seconds=state.worker_elapsed_seconds,
                 )
-        elif _transient_failure:
-            # m4c-03: the local task is queued or blocked, never failed — so
-            # telling Supabase it failed would open a divergence that outlives
-            # the outage and, once every row is "failed", completes the mission
-            # as failed. The agent_run still records what happened.
+        elif _is_network_pause or _transient_failure:
+            # M4c.4 network pause / m4c-03 transient failure: the local task is
+            # queued or paused, never failed — so telling Supabase it failed
+            # would open a divergence that outlives the outage.
+            _sync_skip_reason = "network_pause" if _is_network_pause else "transient_failure"
             log_event("seeded_mission_failure_sync_skipped", {
                 "task_id": task_id,
                 "seeded_task_id": seeded_task_id,
-                "reason": "transient_failure",
+                "reason": _sync_skip_reason,
                 "error": (result.get("error") or "")[:200],
             }, task_id=task_id)
             if state.current_agent_run_id:
@@ -3235,7 +3307,11 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
         }, task_id=task_id)
 
     # ── Stale run watchdog ───────────────────────────────────────────────────
-    if cfg.stale_run_watchdog_enabled:
+    # Suppressed during network pauses: decide_continue_or_stop refreshes
+    # last_task_completed_at at both ends of the polling wait, so the watchdog
+    # cannot see the outage gap.  Firing here would set stop_reason before the
+    # wait even starts, turning a recoverable outage into a stale-run stop.
+    if cfg.stale_run_watchdog_enabled and not _is_network_pause:
         sw = evaluate_stale_run(
             last_task_completed_at=state.last_task_completed_at,
             loop_count=state.loop_count,
@@ -3557,6 +3633,70 @@ def decide_continue_or_stop(state: RunnerState) -> RunnerState:
             "cooldown_count": state.claude_subscription_cooldown_count,
         })
 
+    # ── Network connectivity pause (M4c.4) ──────────────────────────────────
+    # When the machine is offline (detected by pre-dispatch probe or mid-call
+    # classification), poll for connectivity and wait until the network returns
+    # or max patience is exceeded.  Nothing is touched while paused — all
+    # counters were already bypassed in update_logs_and_state.
+    #
+    # Two separate knobs — poll interval and max patience — so a short poll
+    # (default 30s) gives fast resumption while a long patience (default 90 min)
+    # rides out a commute.  The wait time is excluded from MAX_RUNTIME_MINUTES.
+    if state.network_unavailable_detected and cfg.network_pause_enabled and not state.stop_reason:
+        outage_start_iso = state.network_pause_started_at or datetime.utcnow().isoformat()
+        try:
+            outage_start = datetime.fromisoformat(outage_start_iso)
+        except (ValueError, TypeError):
+            outage_start = datetime.utcnow()
+
+        # Mirror cooldown: treat the start of the wait as task activity so
+        # stale_run_watchdog cannot fire on the gap while the loop is paused.
+        state.last_task_completed_at = datetime.utcnow().isoformat()
+        log_event("network_unavailable_detected", {
+            "source": "decide_continue_or_stop",
+            "outage_started_at": outage_start_iso,
+            "poll_interval_s": cfg.network_pause_poll_interval_s,
+            "max_patience_s": cfg.network_pause_max_patience_s,
+        })
+
+        _patience_exceeded = False
+        while True:
+            elapsed_outage = (datetime.utcnow() - outage_start).total_seconds()
+            if elapsed_outage >= cfg.network_pause_max_patience_s:
+                _patience_exceeded = True
+                break
+            remaining_patience = cfg.network_pause_max_patience_s - elapsed_outage
+            sleep_s = min(cfg.network_pause_poll_interval_s, remaining_patience)
+            time.sleep(sleep_s)
+            probe = probe_connectivity(timeout_s=cfg.network_pause_probe_timeout_s)
+            if probe["online"]:
+                break
+
+        outage_duration_s = (datetime.utcnow() - outage_start).total_seconds()
+        state.network_wait_seconds_total += outage_duration_s
+        state.network_unavailable_detected = False
+        state.network_pause_started_at = None
+
+        if _patience_exceeded:
+            state.stop_reason = NETWORK_PAUSE_STOP
+            log_event("loop_blocked_on_network_unavailable", {
+                "outage_duration_s": round(outage_duration_s, 1),
+                "max_patience_s": cfg.network_pause_max_patience_s,
+                "message": (
+                    f"Machine had no internet for {round(outage_duration_s / 60, 1)} minutes "
+                    f"({round(outage_duration_s, 0):.0f}s); exceeded max patience "
+                    f"({cfg.network_pause_max_patience_s}s). Stop and restart when "
+                    "connectivity is confirmed."
+                ),
+            })
+        else:
+            # Mirror cooldown: refresh activity timestamp after the wait so the
+            # next update_logs_and_state sees a fresh last_task_completed_at.
+            state.last_task_completed_at = datetime.utcnow().isoformat()
+            log_event("network_restored", {
+                "outage_duration_s": round(outage_duration_s, 1),
+            })
+
     if state.stop_reason:
         state.status = "stopped"
         log_event("loop_stopped", {"reason": state.stop_reason})
@@ -3572,11 +3712,13 @@ def decide_continue_or_stop(state: RunnerState) -> RunnerState:
     if started_at:
         from datetime import timezone
         elapsed = (datetime.utcnow() - datetime.fromisoformat(started_at)).total_seconds() / 60
-        # Cooldown waits are wall-clock time the loop spent deliberately
-        # asleep, not runtime the run actually used — exclude them so
-        # sleeping through a Claude subscription reset window never
-        # kills an otherwise-healthy run.
-        effective_elapsed = elapsed - (state.cooldown_wait_seconds_total / 60)
+        # Cooldown and network-pause waits are wall-clock time the loop spent
+        # deliberately asleep, not runtime the run actually used — exclude them
+        # so sleeping through a connectivity gap never kills an otherwise-healthy
+        # run.
+        effective_elapsed = elapsed - (
+            (state.cooldown_wait_seconds_total + state.network_wait_seconds_total) / 60
+        )
         if effective_elapsed > cfg.max_runtime_minutes:
             state.stop_reason = "max_runtime"
             state.status = "stopped"
@@ -3585,6 +3727,7 @@ def decide_continue_or_stop(state: RunnerState) -> RunnerState:
                 "elapsed_minutes": elapsed,
                 "effective_elapsed_minutes": effective_elapsed,
                 "cooldown_wait_seconds_total": state.cooldown_wait_seconds_total,
+                "network_wait_seconds_total": state.network_wait_seconds_total,
             })
             return _checkpoint_wip_on_stop(state)
 

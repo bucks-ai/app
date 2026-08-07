@@ -76,6 +76,7 @@ EXPECTED_STOP_REASONS = frozenset({
     "seeded_queue_exhausted",
     "max_loop_tasks",
     "claude_subscription_cooldown",
+    "network_unavailable",
     "no_more_tasks",
     "no_queued_tasks",
 })
@@ -96,6 +97,7 @@ _ENV_NAME_OVERRIDES = {
     "worker_health_live_ping_enabled": "WORKER_HEALTH_LIVE_PING",
     "stale_run_watchdog_enabled": "STALE_RUN_WATCHDOG",
     "claude_subscription_cooldown_enabled": "CLAUDE_SUBSCRIPTION_COOLDOWN",
+    "network_pause_enabled": "NETWORK_PAUSE",
     "planner_quality_gate_v2_enabled": "PLANNER_QUALITY_GATE_V2",
     "planner_scope_guard_enabled": "PLANNER_SCOPE_GUARD",
 }
@@ -488,6 +490,36 @@ STOP_HANDLERS: dict[str, StopHandler] = dict([
         evidence_events=(
             "loop_blocked_on_claude_subscription_cooldown",
             "claude_subscription_cooldown_detected",
+        ),
+    )),
+
+    # ── Network pause — machine lost internet for too long ──────────────────
+    _h(StopHandler(
+        reason="network_unavailable",
+        headline="Machine lost internet connectivity beyond the patience limit",
+        cause=(
+            "The pre-dispatch connectivity probe (or a mid-call socket error) found "
+            "that the machine had no internet. The loop waited "
+            "NETWORK_PAUSE_MAX_PATIENCE_S ({network_pause_max_patience_s}s) polling "
+            "every NETWORK_PAUSE_POLL_INTERVAL_S ({network_pause_poll_interval_s}s) — "
+            "connectivity never returned, so the loop stopped cleanly. The in-flight "
+            "task was requeued and no counter was incremented — no work was lost."
+        ),
+        action=(
+            "Restore connectivity and re-run `python main.py run-loop`; the requeued "
+            "task will be retried from the beginning. To tolerate longer outages raise "
+            "NETWORK_PAUSE_MAX_PATIENCE_S (default 5400 = 90 min). To shorten the "
+            "reconnect check interval lower NETWORK_PAUSE_POLL_INTERVAL_S (default 30s). "
+            "Set NETWORK_PAUSE=false to skip the probe entirely (not recommended)."
+        ),
+        config_keys=(
+            "network_pause_enabled",
+            "network_pause_max_patience_s",
+            "network_pause_poll_interval_s",
+        ),
+        evidence_events=(
+            "loop_blocked_on_network_unavailable",
+            "network_unavailable_detected",
         ),
     )),
 

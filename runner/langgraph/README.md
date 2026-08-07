@@ -447,6 +447,10 @@ Copy `.env.example` to `.env` and fill in:
 | `CLAUDE_SUBSCRIPTION_COOLDOWN` | When Claude in subscription mode returns a rate-limit/cooldown response, automatically wait until the cooldown expires and resume rather than failing the task (default: true) |
 | `CLAUDE_SUBSCRIPTION_COOLDOWN_WAIT_S` | Default cooldown wait in seconds when the reset time cannot be parsed from the Claude response (default: 3600) |
 | `CLAUDE_SUBSCRIPTION_COOLDOWN_MAX_WAITS` | Maximum number of auto-resume cooldown waits per session before halting the loop; 0 disables the limit (default: 3) |
+| `NETWORK_PAUSE` | Enable the network-pause guard: a connectivity probe before every dispatch and mid-call network-error classification; when offline the loop waits instead of counting failures (default: true) |
+| `NETWORK_PAUSE_PROBE_TIMEOUT_S` | Seconds allowed for the DNS + HTTP connectivity probe before it is declared offline (default: 5.0) |
+| `NETWORK_PAUSE_POLL_INTERVAL_S` | How often (in seconds) the loop re-probes for connectivity while paused (default: 30) |
+| `NETWORK_PAUSE_MAX_PATIENCE_S` | Maximum seconds to wait for connectivity before stopping with reason `network_unavailable`; pause wait is excluded from MAX_RUNTIME_MINUTES (default: 5400 = 90 min) |
 
 #### Threshold ordering invariants
 
