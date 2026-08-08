@@ -461,6 +461,62 @@ def check_credentials(config_snapshot: dict) -> dict:
     return make_check("credentials", PASS, f"all {len(reqs)} required credential(s) resolvable")
 
 
+def check_repo_health(
+    repo_path: str,
+    *,
+    enabled: bool = True,
+    timeout: int = 120,
+    run_fn=None,
+) -> dict:
+    """Run scripts/check.sh once to verify the base repo is healthy (M4c.4).
+
+    This is a HALTING check: a repo where scripts/check.sh fails is broken
+    before any task touches it. Dispatching workers into it wastes budget on
+    work that will never pass the post-task verification gate. The loop must
+    not proceed until the repo is fixed.
+
+    ``enabled=False`` reproduces the pre-M4c.4 behaviour exactly — no
+    check.sh run at startup, no halt from this check.
+    """
+    if not enabled:
+        return make_check(
+            "repo_health", SKIP,
+            "REPO_HEALTH_PREFLIGHT=false — repo health check skipped",
+        )
+
+    from tools.repo_health_preflight import run_repo_health_check
+
+    result = run_repo_health_check(repo_path, timeout=timeout, run_fn=run_fn)
+
+    if result["healthy"]:
+        return make_check(
+            "repo_health", PASS,
+            "scripts/check.sh passed on the base repo",
+        )
+
+    if result.get("timed_out"):
+        short_detail = (
+            f"scripts/check.sh timed out after {timeout}s — "
+            "startup blocked; fix the script or increase REPO_HEALTH_PREFLIGHT_TIMEOUT_S"
+        )
+    else:
+        short_detail = (
+            f"scripts/check.sh exited {result.get('exit_code')} on the base repo — "
+            "this is a pre-existing environment problem, not a task failure"
+        )
+
+    return make_check(
+        "repo_health", FAIL,
+        short_detail,
+        halting=True,
+        data={
+            "exit_code": result.get("exit_code"),
+            "timed_out": result.get("timed_out"),
+            "output_excerpt": result.get("output_excerpt"),
+        },
+    )
+
+
 # ---------------------------------------------------------------------------
 # Default readers
 # ---------------------------------------------------------------------------
@@ -621,6 +677,11 @@ def run_startup_preflight(cfg, probes: Optional[list] = None) -> dict:
         )
         probes = [
             _named("git_state", lambda: check_git_state(cfg.repo_path)),
+            _named("repo_health", lambda: check_repo_health(
+                cfg.repo_path,
+                enabled=getattr(cfg, "repo_health_preflight_enabled", True),
+                timeout=getattr(cfg, "repo_health_preflight_timeout_s", 120),
+            )),
             _named("pending_migrations",
                    lambda: check_pending_migrations(migrations_dir, cfg.has_database)),
             _named("production_sha",
