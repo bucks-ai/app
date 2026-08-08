@@ -17,6 +17,7 @@ they keep the retry-with-backoff path unchanged.
 """
 import hashlib
 import json
+import subprocess
 from typing import Optional
 
 # ---------------------------------------------------------------------------
@@ -239,6 +240,53 @@ def fetch_ci_failure_evidence(
     return evidence
 
 
+def fetch_merge_conflict_evidence(
+    repo_path: str,
+    max_excerpt_chars: int = 3000,
+) -> dict:
+    """Build a merge conflict evidence dict from local git state.
+
+    Runs git commands against repo_path to discover which files are conflicted
+    and extracts the conflict diff vs origin/main.  Degrades gracefully when
+    git is unavailable or the working tree is clean.
+    """
+    conflicted_files: list = []
+    diff_excerpt = ""
+
+    try:
+        status_out = subprocess.check_output(
+            ["git", "status", "--porcelain"],
+            cwd=repo_path,
+            stderr=subprocess.DEVNULL,
+            timeout=15,
+        ).decode(errors="replace")
+        conflicted_files = [
+            line[3:].strip()
+            for line in status_out.splitlines()
+            if line[:2] in ("UU", "AA", "DD", "AU", "UA", "DU", "UD")
+        ]
+    except Exception:
+        pass
+
+    try:
+        diff_out = subprocess.check_output(
+            ["git", "diff", "origin/main...HEAD"],
+            cwd=repo_path,
+            stderr=subprocess.DEVNULL,
+            timeout=15,
+        ).decode(errors="replace")
+        diff_excerpt = diff_out[:max_excerpt_chars]
+        if len(diff_out) > max_excerpt_chars:
+            diff_excerpt += "\n... (truncated)"
+    except Exception:
+        pass
+
+    return {
+        "conflicted_files": conflicted_files,
+        "diff_excerpt": diff_excerpt,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Repair prompt builders — one per deterministic failure class
 # ---------------------------------------------------------------------------
@@ -344,3 +392,23 @@ def build_gate_block_repair_prompt(
         parts.append(f"Authority: {authority}")
     parts += [f"Issues: {reasons}", "", "--- ORIGINAL TASK ---", original_prompt]
     return "\n".join(parts)
+
+
+def build_deterministic_repair_prompt(
+    failure_class: str,
+    original_prompt: str,
+    evidence: dict,
+    task: dict,
+    attempt: int,
+    max_attempts: int,
+) -> str:
+    """Dispatch to the appropriate repair prompt builder for a failure class."""
+    if failure_class == CI_CHECK_FAILURE:
+        return build_ci_repair_prompt(original_prompt, evidence, task, attempt, max_attempts)
+    if failure_class == MERGE_CONFLICT:
+        return build_merge_conflict_repair_prompt(original_prompt, evidence, task, attempt, max_attempts)
+    if failure_class == COMPLETION_EVIDENCE_BLOCK:
+        return build_completion_evidence_repair_prompt(original_prompt, evidence, task, attempt, max_attempts)
+    if failure_class == GATE_BLOCK:
+        return build_gate_block_repair_prompt(original_prompt, evidence, task, attempt, max_attempts)
+    return original_prompt

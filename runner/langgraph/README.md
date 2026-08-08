@@ -389,6 +389,7 @@ Copy `.env.example` to `.env` and fill in:
 | `CODEX_TO_CLAUDE_ESCALATION_ENABLED` | When Codex fails with a non-quota error, re-attempt the task via Claude Code before the failure guard runs (default: true) |
 | `AUTO_REPAIR_LOOP_ENABLED` | When check.sh fails after a successful worker run, re-dispatch the same worker with the failure output so it can fix the issues (default: true) |
 | `MAX_AUTO_REPAIR_ATTEMPTS` | Maximum number of inline repair attempts per task before giving up and letting the failure guard handle it (default: 2) |
+| `MAX_REPAIR_DEPTH` | Maximum nesting depth for deterministic-failure repairs (CI check failure, merge conflict, evidence block, gate block); depth ≥ MAX_REPAIR_DEPTH escalates to human instead of attempting another repair (default: 3) |
 | `RISK_BASED_MERGE_APPROVAL_ENABLED` | Classify merge risk and pause the loop for human approval when risk exceeds the policy threshold (default: true) |
 | `MERGE_APPROVAL_POLICY` | Controls when human approval is required before merging: `auto`, `require_approval_on_high` (default), `require_approval_on_medium_and_high`, `always_require` |
 | `E2E_ENABLED` | Run Playwright browser E2E smoke tests after each successful deployment (default: false — requires `python -m playwright install`) |

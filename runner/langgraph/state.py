@@ -108,6 +108,8 @@ class RunnerState(BaseModel):
     auto_repair_attempt: int = 0                   # repair attempts made this task loop
     auto_repair_status: Optional[str] = None       # attempted | succeeded | failed | None
     check_output: Optional[str] = None             # last check.sh stdout (used by auto_repair_if_needed)
+    repair_depth: int = 0                          # M4c.4: deterministic-failure repair nesting level
+    last_failure_signature: Optional[str] = None   # M4c.4: fingerprint of last deterministic failure; repeated match stops repair
     merge_approval_status: Optional[str] = None   # approved | pending | skipped | None
     merge_risk_level: Optional[str] = None         # low | medium | high | None
     e2e_result: Optional[dict] = None              # result dict from playwright_harness.run_e2e_suite
