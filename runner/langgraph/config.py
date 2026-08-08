@@ -68,6 +68,10 @@ _DEFAULT_SLACK_EVENTS = frozenset({
     "gate_blocked",
     "config_invariant_violated",
     "preflight_report",
+    # M4c.4: the repo itself is broken at loop start — scripts/check.sh fails
+    # before any task is dispatched. This is louder than a per-task check
+    # failure because the root cause predates every queued task.
+    "repo_unhealthy",
     # The one message per stop that says what stopped the loop and what to do
     # about it (M4c.0). Paired with the bare "loop_stopped" token above: that
     # one is the alert, this one is the diagnosis.
@@ -559,6 +563,21 @@ class RunnerConfig:
     startup_preflight_enabled: bool = field(
         default_factory=lambda: os.getenv("STARTUP_PREFLIGHT", "true").lower() == "true"
     )
+    # M4c.4: run scripts/check.sh ONCE at session start, before any task is
+    # dispatched. If it fails, the repo is already broken and no amount of
+    # worker retries will produce a passing check — stop immediately with
+    # repo_unhealthy instead of burning budget on unverifiable work. On by
+    # default; disable ONLY for environments where check.sh cannot run (CI
+    # with no Node.js) or for deliberate local experiments.
+    repo_health_preflight_enabled: bool = field(
+        default_factory=lambda: os.getenv("REPO_HEALTH_PREFLIGHT", "true").lower() == "true"
+    )
+    # Seconds before the repo-health check.sh subprocess is hard-killed.
+    # scripts/check.sh was observed at ~90s; 120s gives 33% headroom while
+    # preventing a hung npm process from wedging startup indefinitely.
+    repo_health_preflight_timeout_s: int = field(
+        default_factory=lambda: int(os.getenv("REPO_HEALTH_PREFLIGHT_TIMEOUT_S", "120"))
+    )
     preflight_required_tables: tuple = field(
         default_factory=lambda: tuple(
             t.strip() for t in os.getenv("PREFLIGHT_REQUIRED_TABLES", "").split(",") if t.strip()
@@ -802,6 +821,8 @@ class RunnerConfig:
             "wip_checkpoint_push": self.wip_checkpoint_push,
             "startup_preflight_enabled": self.startup_preflight_enabled,
             "preflight_required_tables": self.preflight_required_tables,
+            "repo_health_preflight_enabled": self.repo_health_preflight_enabled,
+            "repo_health_preflight_timeout_s": self.repo_health_preflight_timeout_s,
             "worker_health_probe_enabled": self.worker_health_probe_enabled,
             "worker_health_live_ping_enabled": self.worker_health_live_ping_enabled,
             "worker_health_live_ping_timeout_s": self.worker_health_live_ping_timeout_s,

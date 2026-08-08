@@ -428,7 +428,36 @@ def run_startup_preflight_if_needed(state: RunnerState) -> RunnerState:
     report_path.write_text(summary["report"])
 
     if summary["unsafe"]:
-        state.stop_reason = "preflight_unsafe"
+        # repo_health failure (M4c.4) gets its own stop reason so the stop
+        # report and the founder's Slack message name the actual problem.
+        # git_state failure keeps "preflight_unsafe" (m4c-01, existing).
+        if "repo_health" in (summary.get("unsafe_checks") or []):
+            state.stop_reason = "repo_unhealthy"
+            # Write the full report to outbox so the founder can read it without
+            # knowing which graph node to look in.
+            from tools.repo_health_preflight import format_repo_unhealthy_report
+            repo_health_data = next(
+                (c.get("data") or {} for c in summary.get("checks") or []
+                 if c.get("name") == "repo_health"),
+                {},
+            )
+            report_text = format_repo_unhealthy_report(repo_health_data)
+            repo_health_path = _RUNNER_DIR / "outbox" / "repo_health_preflight.txt"
+            repo_health_path.parent.mkdir(parents=True, exist_ok=True)
+            repo_health_path.write_text(report_text)
+            log_event("repo_unhealthy", {
+                "failed_command": repo_health_data.get("failed_command"),
+                "exit_code": repo_health_data.get("exit_code"),
+                "timed_out": repo_health_data.get("timed_out"),
+                "output_excerpt": repo_health_data.get("output_excerpt"),
+                "report_path": str(repo_health_path),
+                "message": (
+                    "scripts/check.sh fails on the base repo — this is a PRE-EXISTING "
+                    "environment problem. No task can complete until the repo is fixed."
+                ),
+            })
+        else:
+            state.stop_reason = "preflight_unsafe"
 
     return _persist(state, "run_startup_preflight_if_needed")
 
@@ -582,6 +611,7 @@ _TASK_SCOPED_STATE_DEFAULTS = {
     "sql_scan": None,
     "check_passed": None,
     "check_output": None,
+    "last_check_environmental": None,
     "auto_repair_attempt": 0,
     "auto_repair_status": None,
     "retry_pending": None,
@@ -1893,6 +1923,26 @@ def run_checks_if_needed(state: RunnerState) -> RunnerState:
     check = run_check(_effective_repo_path(state))
     state.check_passed = check["success"]
     state.check_output = check.get("output") or ""
+
+    # (b) When check.sh fails, classify as environmental (pre-existing) or
+    # task-caused (introduced by this worker run). This drives whether
+    # failure counters are charged to the task downstream.
+    if not check["success"] and cfg.repo_health_preflight_enabled:
+        from tools.repo_health_preflight import classify_check_failure
+        classification = classify_check_failure(
+            _effective_repo_path(state),
+            timeout=cfg.repo_health_preflight_timeout_s,
+        )
+        state.last_check_environmental = classification["environmental"]
+        log_event("check_failure_classified", {
+            "task_id": state.current_task_id,
+            "environmental": classification["environmental"],
+            "base_passed": classification["base_passed"],
+            "had_stash": classification["had_stash"],
+        }, task_id=state.current_task_id)
+    else:
+        state.last_check_environmental = False if not check["success"] else None
+
     return _persist(state, "run_checks_if_needed")
 
 
@@ -1916,6 +1966,19 @@ def auto_repair_if_needed(state: RunnerState) -> RunnerState:
     """
     if not cfg.auto_repair_loop_enabled:
         return state
+
+    # An environmental check failure cannot be fixed by re-dispatching the
+    # worker — the breakage predates this task and lives in the base repo.
+    if state.last_check_environmental:
+        log_event("auto_repair_skipped", {
+            "task_id": state.current_task_id,
+            "reason": "environmental_check_failure",
+            "message": (
+                "check.sh also fails on the clean base state; "
+                "this is a repo environment problem that a worker cannot fix."
+            ),
+        }, task_id=state.current_task_id)
+        return _persist(state, "auto_repair_if_needed")
 
     result = state.worker_result or {}
     task = state.current_task or {}
@@ -2786,8 +2849,18 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
         and _is_cooldown_error(result.get("output"), result.get("error"))
     )
 
+    # M4c.4 (b): an environmental check failure is a REPO problem, not a task
+    # failure. The worker succeeded; only check.sh fails — and it also fails on
+    # the clean base state, so nothing the worker did caused it. These must not
+    # burn retry_count, task_attempt_counts, consecutive_failures, or
+    # error_history — exactly the same exemption cooldown failures already have.
+    _environmental_check_failure = (
+        result.get("success")
+        and state.last_check_environmental is True
+    )
+
     # ── Repeated-task guard ──────────────────────────────────────────────────
-    if task_id and not _is_cooldown_failure:
+    if task_id and not _is_cooldown_failure and not _environmental_check_failure:
         rep_task = evaluate_task_repetition(
             task_id, state.task_attempt_counts, cfg.max_task_attempts
         )
@@ -2860,9 +2933,27 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
         # circuit breaker nor resets a real failure streak, and the task is left
         # in a state a human can act on.
         reasons = (state.completion_evidence or {}).get("reasons") or []
+
+        # (c) M4c.4: when the check failure was environmental, the worker may
+        # have done real work that could not be committed because check.sh was
+        # already broken. Surface the uncommitted paths so the founder knows the
+        # work exists and does not have to run `git status` by hand.
+        dirty_paths: list = []
+        if _environmental_check_failure or state.last_check_environmental:
+            from tools.repo_health_preflight import get_dirty_paths
+            dirty_paths = get_dirty_paths(_effective_repo_path(state))
+
+        env_note = ""
+        if dirty_paths:
+            env_note = (
+                "; verification was blocked by a pre-existing broken repo — "
+                f"uncommitted work may exist at: {', '.join(dirty_paths[:5])}"
+                + (" (and more)" if len(dirty_paths) > 5 else "")
+            )
+
         mark_task_blocked(
             task_id,
-            "no evidence of completion: " + "; ".join(reasons),
+            "no evidence of completion: " + "; ".join(reasons) + env_note,
         )
         state.retry_pending = False
         state.last_task_completed_at = datetime.utcnow().isoformat()
@@ -2871,7 +2962,19 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
             state,
             "completion_evidence",
             event="gate_blocked",
-            payload={"task_id": task_id, "issues": reasons},
+            payload={
+                "task_id": task_id,
+                "issues": reasons,
+                "environmental_check_failure": bool(
+                    _environmental_check_failure or state.last_check_environmental
+                ),
+                "uncommitted_paths": dirty_paths,
+                "message": (
+                    "Work may exist uncommitted because verification was blocked "
+                    "by a pre-existing broken repo — check scripts/check.sh on the "
+                    "base branch before re-dispatching."
+                ) if dirty_paths else None,
+            },
             stop_reason="no_completion_evidence",
             task_id=task_id,
             # This gate runs inside update_logs_and_state, so the task has
@@ -3739,7 +3842,11 @@ def build_graph():
     # ends one.
     builder.add_conditional_edges(
         "run_startup_preflight_if_needed",
-        lambda s: "decide_continue_or_stop" if s.stop_reason == "preflight_unsafe" else "check_launch_readiness_if_needed",
+        lambda s: (
+            "decide_continue_or_stop"
+            if s.stop_reason in ("preflight_unsafe", "repo_unhealthy")
+            else "check_launch_readiness_if_needed"
+        ),
         {
             "check_launch_readiness_if_needed": "check_launch_readiness_if_needed",
             "decide_continue_or_stop": "decide_continue_or_stop",
