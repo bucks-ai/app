@@ -1932,3 +1932,161 @@ h6 {
     transition: none;
   }
 }
+
+/* ── Brain: depth, real-pixel type, preview, camera controls ──────────────
+   Layered on top of the base brain styles. Three things this buys:
+   1. Node chrome counter-scales, so type is authored at a real size instead of
+      being multiplied by the camera. That is what lets a display face live on
+      the canvas at all.
+   2. Nodes gain a lit edge and a cast shadow so they read as objects above the
+      cortex rather than flat discs drawn on it.
+   3. Preview and camera controls, neither of which existed. */
+
+.brain-viewport {
+  cursor: grab;
+}
+.brain-viewport.is-panning {
+  cursor: grabbing;
+}
+
+/* Counter-scale. --brain-inv is written once per frame by paint(). */
+.brain-node-chrome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.1rem;
+  scale: var(--brain-inv, 1);
+  /* Scale about the centre so the label stays centred in its disc. */
+  transform-origin: center;
+}
+
+/* The serif can finally appear here, because the counter-scale means this is
+   authored at a real size rather than an accident of camera depth. */
+.brain-node.is-focus .brain-node-label {
+  font-family: var(--font-serif);
+  font-weight: 500;
+  font-size: 1.4rem;
+  line-height: 1.05;
+  letter-spacing: -0.014em;
+}
+
+/* Objects above the cortex, not discs drawn on it. */
+.brain-node {
+  background:
+    radial-gradient(
+      120% 120% at 30% 22%,
+      var(--surface-raised),
+      var(--surface) 70%
+    );
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.07) inset,
+    0 18px 44px rgba(0, 0, 0, 0.42);
+}
+.brain-node.is-child:hover,
+.brain-node.is-child:focus-visible {
+  border-color: var(--accent-ring);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.09) inset,
+    0 22px 54px rgba(0, 0, 0, 0.5),
+    0 0 32px color-mix(in srgb, var(--accent) 26%, transparent);
+}
+
+/* ── Preview card ── */
+.brain-peek {
+  position: absolute;
+  z-index: 30;
+  translate: -50% calc(-100% - 14px);
+  /* Flipped when the node sits too near the top to show the card above it. */
+  width: 15rem;
+  padding: 0.85rem 0.95rem;
+  border-radius: var(--radius, 1rem);
+  border: 1px solid var(--edge-strong);
+  background: var(--surface-solid);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+}
+.brain-peek[data-below="true"] {
+  translate: -50% 14px;
+}
+.brain-peek-title {
+  font-family: var(--font-serif);
+  font-size: 1.25rem;
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: -0.012em;
+  color: var(--foreground);
+}
+.brain-peek-detail {
+  margin-top: 0.15rem;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.brain-peek-list {
+  margin-top: 0.6rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.brain-peek-count {
+  margin-top: 0.55rem;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--warning);
+}
+
+/* ── Camera controls ── */
+.brain-controls {
+  position: absolute;
+  z-index: 20;
+  right: 1.25rem;
+  bottom: 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.brain-control {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  min-width: 2.75rem;
+  padding: 0 0.9rem;
+  border-radius: 999px;
+  border: 1px solid var(--edge-strong);
+  background: var(--surface-glass);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  transition: color 180ms ease, border-color 180ms ease;
+}
+.brain-control.is-icon {
+  padding: 0;
+  font-size: 1.1rem;
+}
+.brain-control:hover {
+  color: var(--foreground);
+  border-color: var(--accent-ring);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brain-control {
+    transition: none;
+  }
+}
+
