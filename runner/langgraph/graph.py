@@ -57,6 +57,7 @@ from tools.git_tools import (
     push_branch,
     merge_feature_branch,
     cleanup_feature_branch,
+    fast_forward_main,
     fetch_pull_main,
     push_deploy_if_available,
     current_branch,
@@ -599,6 +600,7 @@ _TASK_SCOPED_STATE_DEFAULTS = {
     # let a task that committed nothing be "proved" complete by the *previous*
     # task's commit — exactly the false success the gate exists to stop.
     "last_commit_result": None,
+    "pr_merge_result": None,
     "completion_evidence": None,
     "completion_evidence_status": None,
     "code_review_status": None,
@@ -2196,8 +2198,8 @@ def commit_push_merge_if_needed(state: RunnerState) -> RunnerState:
             else:
                 merge = merge_feature_branch(repo_path, branch)
                 if merge.get("success"):
-                    fetch_pull_main(repo_path)
-                    if cfg.auto_cleanup_branches:
+                    ff = fast_forward_main(repo_path)
+                    if ff.get("success") and cfg.auto_cleanup_branches:
                         cleanup_feature_branch(repo_path, branch)
 
     return _persist(state, "commit_push_merge_if_needed")
@@ -2336,11 +2338,48 @@ def _merge_via_pull_request(state: RunnerState, task: dict, branch: str) -> None
         )
         return
 
-    fetch_pull_main(repo_path)
+    # ── Record the merge result so the completion-evidence gate can use it ───
+    # The merge sha from GitHub is stronger evidence than the feature-branch
+    # commit sha: GitHub confirmed this commit landed on main, even if the
+    # local working tree hasn't been fast-forwarded yet (M4c.4).
+    merge_sha = merge.get("sha") or ""
+    state.pr_merge_result = {**merge, "pr_number": state.pr_number}
+
+    # Update last_commit_result to point at the merge commit rather than the
+    # feature-branch commit.  For squash merges the original sha is rewritten
+    # away, so verify_commit_evidence would otherwise fail even after the
+    # fast-forward succeeds.  nothing_to_commit is explicitly False: the merge
+    # sha is fresh from GitHub, not the pre-task HEAD.
+    if merge_sha:
+        state.last_commit_result = {
+            **(state.last_commit_result or {}),
+            "sha": merge_sha,
+            "committed": True,
+            "nothing_to_commit": False,
+            "merged_pr": state.pr_number,
+        }
+
+    # ── Fast-forward local main to the merge commit BEFORE any cleanup ───────
+    # fetch_pull_main runs on whatever branch is checked out, which at this
+    # point is still the feature branch — rebasing the feature branch is not a
+    # main sync.  fast_forward_main checks out main and does --ff-only so the
+    # merge commit enters the local graph before we verify and delete (M4c.4).
+    ff = fast_forward_main(repo_path, merge_sha)
+    if not ff.get("success"):
+        log_event("error", {
+            "task_id": task_id,
+            "merge_sha": merge_sha[:12] if merge_sha else "",
+            "reason": f"fast_forward_main failed ({ff.get('reason')}); branch cleanup aborted to prevent data loss",
+        }, task_id=task_id)
+        # Leave the feature branch intact — it is the only local ref holding
+        # the merged state until a human or the next run can fast-forward main.
+        return
+
     if cfg.auto_cleanup_branches:
-        # force: the GitHub merge API just confirmed this branch's changes are
-        # on main; a squash merge makes local `git branch -d` false-refuse.
-        cleanup_feature_branch(repo_path, branch, force=True)
+        # force: squash merge rewrites history so local `git branch -d`
+        # false-refuses; the ancestor check in cleanup_feature_branch confirms
+        # the work is on main before issuing -D (M4c.4).
+        cleanup_feature_branch(repo_path, branch, force=True, merge_sha=merge_sha)
 
 
 _RUNNER_DIR = Path(__file__).parent
@@ -2895,6 +2934,7 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
             repo_path=_effective_repo_path(state),
             commit=state.last_commit_result,
             deploy_result=state.deploy_result,
+            merge_result=state.pr_merge_result,
             # Only hold a deploy task to deployment evidence when a deploy could
             # actually have happened. With AUTO_DEPLOY off or no Vercel token,
             # deploy_if_needed never runs, so requiring a live deployment would

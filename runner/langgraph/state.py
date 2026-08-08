@@ -101,6 +101,7 @@ class RunnerState(BaseModel):
     completion_evidence_status: Optional[str] = None  # verified | blocked | skipped | None (M4c)
     completion_evidence: Optional[dict] = None  # evaluate_completion() verdict for the current task
     last_commit_result: Optional[dict] = None  # git_tools.commit_all() dict for the current task; carries nothing_to_commit
+    pr_merge_result: Optional[dict] = None     # merge_pull_request() dict after a successful PR merge (M4c.4)
     code_review_status: Optional[str] = None  # passed | warned | failed | None
     high_risk_review_status: Optional[str] = None  # passed | warned | skipped | failed | None
     codex_escalation_status: Optional[str] = None  # attempted | succeeded | failed | skipped | None

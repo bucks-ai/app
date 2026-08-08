@@ -62,8 +62,10 @@ HARD_SIGNALS = frozenset({REFUSAL, QUESTION})
 EVIDENCE_FILES = "files"
 EVIDENCE_COMMIT = "commit"
 EVIDENCE_DEPLOYMENT = "deployment"
-#: Satisfied by *either* files-on-disk or a commit-in-remote — the bar for a
-#: task whose deliverable is source changes, however they landed.
+#: A successfully merged PR whose sha GitHub returned at merge time.
+EVIDENCE_MERGED_PR = "merged_pr"
+#: Satisfied by *any* of: files-on-disk, a commit-in-remote, or a merged PR
+#: — the bar for a task whose deliverable is source changes, however they landed.
 EVIDENCE_ARTIFACT = "artifact"
 
 GATE_NAME = "completion_evidence"
@@ -323,6 +325,25 @@ def verify_commit_evidence(
     return _result(True, f"commit {sha[:12]} is in the remote on {', '.join(on_remote[:3])}")
 
 
+def verify_merged_pr_evidence(merge_result: Optional[dict]) -> dict:
+    """A successfully merged PR is artifact evidence in its own right.
+
+    The GitHub merge API returning a sha is stronger proof than files on disk:
+    GitHub confirmed the commit landed on main, even if the local working tree
+    hasn't been fast-forwarded yet or the branch has already been deleted.
+    """
+    if not merge_result:
+        return _result(False, "no merge result")
+    if not merge_result.get("success"):
+        return _result(False, f"PR merge was not successful: {merge_result.get('error') or merge_result.get('reason') or 'unknown'}")
+    sha = str(merge_result.get("sha") or "").strip()
+    if not sha:
+        return _result(False, "merge result has no sha")
+    pr_number = merge_result.get("pr_number") or merge_result.get("number")
+    label = f"PR #{pr_number} " if pr_number else ""
+    return _result(True, f"{label}merged with sha {sha[:12]}")
+
+
 def _default_http_probe(url: str, timeout: float = 15.0) -> tuple[bool, str]:
     import requests
 
@@ -374,30 +395,36 @@ def verify_evidence(
     repo_path: str = "",
     commit: Optional[dict] = None,
     deploy_result: Optional[dict] = None,
+    merge_result: Optional[dict] = None,
     remote: str = "origin",
     git_runner: Optional[Callable[[list[str], str], tuple[bool, str]]] = None,
     http_probe: Optional[Callable[[str], tuple[bool, str]]] = None,
 ) -> dict:
     """Verify every evidence kind, returning ``{kind: {verified, detail}}``.
 
-    :data:`EVIDENCE_ARTIFACT` is the disjunction of files and commit: source
-    work counts however it landed.
+    :data:`EVIDENCE_ARTIFACT` is the disjunction of files, commit, and merged
+    PR: source work counts however it landed.  A merged PR sha returned by
+    GitHub is accepted as artifact evidence even when the working tree is clean
+    and the feature branch has already been deleted (M4c.4).
     """
     files = verify_files_evidence(summary, repo_path)
     commit_ev = verify_commit_evidence(commit, repo_path, remote, git_runner=git_runner)
+    merged_pr = verify_merged_pr_evidence(merge_result)
     deployment = verify_deployment_evidence(deploy_result, http_probe=http_probe)
 
-    if files["verified"] or commit_ev["verified"]:
-        artifact = _result(
-            True,
-            "; ".join(e["detail"] for e in (files, commit_ev) if e["verified"]),
-        )
+    artifact_sources = [e for e in (files, commit_ev, merged_pr) if e["verified"]]
+    if artifact_sources:
+        artifact = _result(True, "; ".join(e["detail"] for e in artifact_sources))
     else:
-        artifact = _result(False, f"{files['detail']}; {commit_ev['detail']}")
+        artifact = _result(
+            False,
+            f"{files['detail']}; {commit_ev['detail']}; {merged_pr['detail']}",
+        )
 
     return {
         EVIDENCE_FILES: files,
         EVIDENCE_COMMIT: commit_ev,
+        EVIDENCE_MERGED_PR: merged_pr,
         EVIDENCE_DEPLOYMENT: deployment,
         EVIDENCE_ARTIFACT: artifact,
     }
@@ -411,6 +438,7 @@ def evaluate_completion(
     repo_path: str = "",
     commit: Optional[dict] = None,
     deploy_result: Optional[dict] = None,
+    merge_result: Optional[dict] = None,
     remote: str = "origin",
     deploy_available: bool = True,
     git_runner: Optional[Callable[[list[str], str], tuple[bool, str]]] = None,
@@ -440,6 +468,7 @@ def evaluate_completion(
         repo_path=repo_path,
         commit=commit,
         deploy_result=deploy_result,
+        merge_result=merge_result,
         remote=remote,
         git_runner=git_runner,
         http_probe=http_probe,
@@ -473,6 +502,7 @@ def guard_completion_evidence(
     task: Optional[dict] = None,
     raw_output: str = "",
     context: str = "",
+    merge_result: Optional[dict] = None,
     **kwargs,
 ) -> dict:
     """Run :func:`evaluate_completion` and log the verdict.
@@ -483,7 +513,7 @@ def guard_completion_evidence(
     :data:`EVENT_NO_OP_OVERRIDDEN` — worth seeing, since it usually means a
     worker under-reported its own summary.
     """
-    decision = evaluate_completion(summary, task, raw_output, **kwargs)
+    decision = evaluate_completion(summary, task, raw_output, merge_result=merge_result, **kwargs)
     task_id = (task or {}).get("id")
 
     if decision["complete"]:

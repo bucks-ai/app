@@ -102,7 +102,7 @@ def _worker_done_state():
 
 def _wire_git(commit_result):
     """Stub the git_tools symbols imported into graph; record push/merge calls."""
-    calls = {"push": [], "merge": [], "cleanup": [], "fetch": 0}
+    calls = {"push": [], "merge": [], "cleanup": [], "fast_forward": 0}
     graph.create_branch = lambda repo, branch: {"success": True, "output": ""}
     graph.commit_all = lambda repo, message: commit_result
     graph.push_branch = lambda repo, branch: calls["push"].append(branch)
@@ -111,9 +111,10 @@ def _wire_git(commit_result):
         return {"success": True, "output": ""}
     graph.merge_feature_branch = _merge
     graph.cleanup_feature_branch = lambda repo, branch, **kw: calls["cleanup"].append(branch)
-    def _fetch(repo):
-        calls["fetch"] += 1
-    graph.fetch_pull_main = _fetch
+    def _fast_forward(repo, merge_sha=""):
+        calls["fast_forward"] += 1
+        return {"success": True, "before": "b_sha", "after": "a_sha", "output": ""}
+    graph.fast_forward_main = _fast_forward
     return calls
 
 
@@ -183,7 +184,7 @@ def test_node_skips_cleanup_when_merge_fails():
     assert state.last_commit == "abc1234 msg", state.last_commit
     assert calls["push"] == ["feature/t1"], calls
     assert calls["merge"] == ["feature/t1"], calls
-    assert calls["fetch"] == 0, "must not fetch main after a failed merge"
+    assert calls["fast_forward"] == 0, "must not fast-forward main after a failed merge"
     assert calls["cleanup"] == [], "must not clean up branch after a failed merge"
 
 
@@ -201,7 +202,7 @@ def test_node_respects_branch_cleanup_flag():
     assert state.last_commit == "abc1234 msg", state.last_commit
     assert calls["push"] == ["feature/t1"], calls
     assert calls["merge"] == ["feature/t1"], calls
-    assert calls["fetch"] == 1, calls
+    assert calls["fast_forward"] == 1, calls
     assert calls["cleanup"] == [], "cleanup disabled by config"
 
 
