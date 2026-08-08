@@ -436,13 +436,27 @@ def _checkpoint_wip(
     # these, so nothing outside the repo and no excluded credential file can be
     # swept in.
     add = _run(git_run, ["add", "-A", "--"] + files, repo_path)
-    if not add.success and not excluded:
-        # `git status --porcelain` escapes non-ASCII and quotes paths with
-        # spaces, so a pathspec built from it can fail to match the very file it
-        # names. Falling back to the whole repo saves that work — but only when
-        # nothing was deliberately excluded, because the pathspec list is the
-        # only thing keeping a credential file out of the commit.
-        add = _run(git_run, ["add", "-A", "--", "."], repo_path)
+    if not add.success:
+        # Log at error level even when the fallback below succeeds: the targeted
+        # add used paths the runner itself generated (from worktree_files), so a
+        # failure is an internal inconsistency, not a transient quote/escape issue.
+        log_event("wip_checkpoint_add_targeted_failed", {
+            "paths": files[:10],
+            "error": (add.output or "")[-300:],
+            "task_id": task_id,
+            "message": (
+                "targeted git add failed on runner-generated pathspecs — possible path "
+                "corruption; fallback to git add -A -- . will be attempted if no credential "
+                "files were excluded. Verify that worktree_files() returns correct repo-relative paths."
+            ),
+        }, task_id=task_id)
+        if not excluded:
+            # `git status --porcelain` escapes non-ASCII and quotes paths with
+            # spaces, so a pathspec built from it can fail to match the very file it
+            # names. Falling back to the whole repo saves that work — but only when
+            # nothing was deliberately excluded, because the pathspec list is the
+            # only thing keeping a credential file out of the commit.
+            add = _run(git_run, ["add", "-A", "--", "."], repo_path)
 
     if not add.success:
         result = _blank_result(**{

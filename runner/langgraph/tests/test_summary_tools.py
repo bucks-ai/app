@@ -226,6 +226,34 @@ def test_digest_includes_task_label_and_resource_needs():
     assert "Limitations: SQL was not applied" in digest
 
 
+def test_backtick_wrapped_paths_are_stripped():
+    """Paths wrapped in backticks (common in markdown worker output) are returned bare."""
+    text = """
+- Files Created:
+  - `runner/langgraph/tools/new_tool.py`
+- Files Modified:
+  - `runner/langgraph/tools/existing.py`
+  - plain_no_backticks.ts
+- Check Result: pass
+- Commit Result: abc1234
+- Push Result: done
+- SQL Required: no
+- SQL File Path: N/A
+- Known Limitations: (none)
+- Next Task: (none)
+"""
+    result = parse_worker_summary(text)
+    assert result["files_created"] == ["runner/langgraph/tools/new_tool.py"], (
+        f"Backtick not stripped from files_created: {result['files_created']!r}"
+    )
+    assert "runner/langgraph/tools/existing.py" in result["files_modified"], (
+        f"Backtick not stripped from files_modified: {result['files_modified']!r}"
+    )
+    assert "plain_no_backticks.ts" in result["files_modified"], (
+        f"Bare path incorrectly modified: {result['files_modified']!r}"
+    )
+
+
 def test_digest_truncates_predictably():
     summary = {
         "files_created": [f"created-{idx}.txt" for idx in range(10)],

@@ -250,6 +250,27 @@ def _result(verified: bool, detail: str) -> dict:
     return {"verified": verified, "detail": detail}
 
 
+def _to_repo_relative(raw: str, repo_path: str) -> str:
+    """Strip backtick wrapping and convert a reported path to a repo-relative form.
+
+    Handles three formats workers may produce:
+    - Backtick-wrapped: ``runner/foo.py`` → runner/foo.py
+    - Dot-slash prefix: ./runner/foo.py → runner/foo.py
+    - Absolute under repo root: /home/.../bucks-ai/runner/foo.py → runner/foo.py
+
+    Uses str.startswith for the repo-root strip (not lstrip) to avoid the
+    lstrip-with-charset trap: lstrip('/home/arnav/bucks-ai/') treats the
+    argument as a character set and eats the leading 'r' from runner/.
+    """
+    path = raw.strip('`')
+    root = (repo_path or "").rstrip('/')
+    if root and path.startswith(root + '/'):
+        return path[len(root) + 1:]
+    if path.startswith('./'):
+        return path[2:]
+    return path.lstrip('/')
+
+
 def verify_files_evidence(summary: Optional[dict], repo_path: str) -> dict:
     """A file the worker claims it wrote must actually exist on disk."""
     summary = summary or {}
@@ -263,7 +284,7 @@ def verify_files_evidence(summary: Optional[dict], repo_path: str) -> dict:
 
     found, missing = [], []
     for raw_path in claimed:
-        rel = raw_path.lstrip("./")
+        rel = _to_repo_relative(raw_path, repo_path)
         (found if os.path.exists(os.path.join(repo_path, rel)) else missing).append(raw_path)
 
     if not found:
