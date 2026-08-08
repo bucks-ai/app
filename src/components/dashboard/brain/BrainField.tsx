@@ -11,7 +11,7 @@
 //   - Trig output is rounded to integers immediately. Everything downstream is
 //     then plain arithmetic on integers, which IEEE-754 makes deterministic.
 
-import { CORE, WORLD_H, WORLD_W } from "./brain-model";
+import { CORE, CORTEX_RX, CORTEX_RY, WORLD_H, WORLD_W } from "./brain-model";
 
 type Point = { x: number; y: number };
 
@@ -30,27 +30,40 @@ function angleGap(a: number, b: number) {
   return diff > Math.PI ? Math.PI * 2 - diff : diff;
 }
 
-const RX = 505;
-const RY = 395;
+const RX = CORTEX_RX;
+const RY = CORTEX_RY;
 
 /**
- * Top-down cortex outline. An ellipse modulated two ways:
- *   - `cos(9t)` gives the gyri, the lobed edge.
- *   - Gaussian dips at the front (t=0) and back (t=PI) give the longitudinal
- *     fissure notches. Without them the lobed ellipse reads as a cloud, which
- *     is the single thing that separates this shape from a cumulus.
+ * Top-down cortex outline, `t` measured from the frontal pole.
+ *
+ * The outline is deliberately SMOOTH. An earlier version modulated it with
+ * `cos(11t)`, which put eleven evenly-spaced equal-amplitude scallops around
+ * the edge — that is the signature of a cloud, and it read as one. A real
+ * cortex from above has only three macro-features, and they are all here:
+ * a deep cleft at the frontal pole, a shallower one at the occipital pole,
+ * and temporal bulges at the widest point. Fold texture belongs on the
+ * inside, not on the silhouette (see GYRI).
  */
-function cortexPoints(scale = 1, phase = 0, steps = 96): Point[] {
+function cortexPoints(scale = 1, steps = 128): Point[] {
   const points: Point[] = [];
 
   for (let i = 0; i < steps; i += 1) {
     const t = (i / steps) * Math.PI * 2;
-    const gyri = 1 + 0.062 * Math.cos(11 * t + phase);
-    const frontNotch = 0.22 * Math.exp(-Math.pow(angleGap(t, 0) / 0.26, 2));
-    const backNotch = 0.15 * Math.exp(-Math.pow(angleGap(t, Math.PI) / 0.3, 2));
-    // Narrower at the front than the back, like a brain seen from above.
-    const taper = 1 - 0.08 * Math.cos(t);
-    const m = (gyri - frontNotch - backNotch) * taper * scale;
+
+    // The longitudinal fissure entering front and back. Narrow and deep, so
+    // the shape cleaves into two hemispheres instead of merely denting.
+    const frontCleft = 0.15 * Math.exp(-Math.pow(angleGap(t, 0) / 0.24, 2));
+    const backCleft = 0.12 * Math.exp(-Math.pow(angleGap(t, Math.PI) / 0.2, 2));
+
+    // Widest behind the middle, narrowing toward the frontal pole.
+    const taper = 1 - 0.1 * Math.cos(t);
+    // Temporal lobes: a slight swell either side, below the equator.
+    const temporal =
+      0.055 *
+      (Math.exp(-Math.pow(angleGap(t, Math.PI * 0.62) / 0.42, 2)) +
+        Math.exp(-Math.pow(angleGap(t, Math.PI * 1.38) / 0.42, 2)));
+
+    const m = (1 - frontCleft - backCleft + temporal) * taper * scale;
 
     points.push({
       x: Math.round(CORE.x + Math.sin(t) * RX * m),
@@ -82,18 +95,63 @@ function closedSpline(points: Point[]) {
 
 const CORTEX_PATH = closedSpline(cortexPoints());
 
-/* Longitudinal fissure, then gyri arcs mirrored across it. Drawn as arcs that
-   follow the hemisphere rather than cutting across it. */
-const FISSURE = `M ${CORE.x} ${CORE.y - RY * 0.9} Q ${CORE.x - 14} ${CORE.y} ${CORE.x} ${
-  CORE.y + RY * 0.92
-}`;
+/* The longitudinal fissure, running the full front-to-back axis. This is the
+   line that makes the shape bilateral rather than radial. */
+const FISSURE = `M ${CORE.x} ${Math.round(CORE.y - RY * 0.82)}
+  C ${CORE.x - 16} ${Math.round(CORE.y - RY * 0.4)}
+    ${CORE.x + 16} ${Math.round(CORE.y + RY * 0.4)}
+    ${CORE.x} ${Math.round(CORE.y + RY * 0.86)}`;
 
-/* Gyri as inner contours of the outline itself. Each ring is phase-shifted so
-   they do not nest like an onion, which is what turns concentric rings into
-   something that reads as folds. */
-const GYRI = [0.83, 0.66, 0.49, 0.32].map((scale, index) =>
-  closedSpline(cortexPoints(scale, index * 1.4 + 0.7))
-);
+/**
+ * Gyri, one hemisphere at a time and mirrored across the fissure.
+ *
+ * The previous version drew closed contours of the whole outline at
+ * decreasing scale. Sharing one centre made them read as a topographic map —
+ * ripples around a peak — rather than as folds. Real gyri are elongated bands
+ * running roughly front-to-back within a hemisphere, turning back on
+ * themselves at the midline. These are C-curves that open toward the fissure,
+ * which is what gives the shape its brain-ness.
+ */
+function gyriPaths(): string[] {
+  const paths: string[] = [];
+
+  for (const side of [-1, 1]) {
+    for (let band = 0; band < 5; band += 1) {
+      // How far out from the midline this band sits.
+      const spread = 0.2 + band * 0.17;
+      const points: Point[] = [];
+
+      // Sweep front to back down one hemisphere.
+      for (let i = 0; i <= 40; i += 1) {
+        const u = i / 40;
+        const t = -0.78 + u * 1.56 * Math.PI * 0.62;
+        // Belly out from the midline in the middle, tuck back in at the poles,
+        // so each band closes toward the fissure at both ends like a real fold.
+        const belly = Math.sin(u * Math.PI);
+        const wobble = 1 + 0.16 * Math.sin(u * Math.PI * (3 + band));
+
+        points.push({
+          x: Math.round(CORE.x + side * spread * RX * belly * wobble),
+          y: Math.round(CORE.y - Math.cos(t) * RY * (0.34 + band * 0.11) * wobble),
+        });
+      }
+
+      let d = `M ${points[0].x} ${points[0].y}`;
+      for (let i = 1; i < points.length - 1; i += 1) {
+        const next = {
+          x: (points[i].x + points[i + 1].x) / 2,
+          y: (points[i].y + points[i + 1].y) / 2,
+        };
+        d += ` Q ${points[i].x} ${points[i].y} ${next.x} ${next.y}`;
+      }
+      paths.push(d);
+    }
+  }
+
+  return paths;
+}
+
+const GYRI = gyriPaths();
 
 /* Scatters mesh points inside the cortex. sqrt on the radius keeps the spread
    even instead of clumping at the centre. */
@@ -104,8 +162,8 @@ function meshPoints(count: number): Point[] {
     const angle = rand(i + 1) * Math.PI * 2;
     const radius = Math.sqrt(rand(i + 97)) * 0.95;
     points.push({
-      x: Math.round(CORE.x + Math.cos(angle) * radius * RX),
-      y: Math.round(CORE.y + Math.sin(angle) * radius * RY),
+      x: Math.round(CORE.x + Math.cos(angle) * radius * RX * 0.96),
+      y: Math.round(CORE.y + Math.sin(angle) * radius * RY * 0.96),
     });
   }
 
@@ -124,7 +182,7 @@ function filaments(points: Point[]) {
         // the sort is total rather than implementation-defined.
         d2: (to.x - from.x) ** 2 + (to.y - from.y) ** 2,
       }))
-      .filter((entry) => entry.j > i && entry.d2 < 250 ** 2)
+      .filter((entry) => entry.j > i && entry.d2 < 300 ** 2)
       .sort((a, b) => a.d2 - b.d2 || a.j - b.j)
       .slice(0, 3);
 
@@ -143,7 +201,7 @@ function filaments(points: Point[]) {
   return paths;
 }
 
-const POINTS = meshPoints(130);
+const POINTS = meshPoints(190);
 const MESH = filaments(POINTS);
 
 type BrainFieldProps = {
@@ -172,7 +230,7 @@ export function BrainField({ live }: BrainFieldProps) {
         </clipPath>
       </defs>
 
-      <circle cx={CORE.x} cy={CORE.y} r={520} fill="url(#brain-core-glow)" />
+      <circle cx={CORE.x} cy={CORE.y} r={RY} fill="url(#brain-core-glow)" />
       <path d={CORTEX_PATH} className="brain-cortex" />
 
       {/* Clipped so no filament escapes the silhouette. */}

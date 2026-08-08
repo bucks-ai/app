@@ -3,7 +3,10 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  CORE,
   CORTEX_BOUNDS,
+  CORTEX_RX,
+  CORTEX_RY,
   LOBES,
   buildBrainNodes,
   cameraFor,
@@ -56,8 +59,19 @@ describe("buildBrainNodes", () => {
 
   it("centres a lone business rather than stranding it on the ring", () => {
     const [only] = buildBrainNodes([BUSINESSES[0]]).filter((node) => node.level === 1);
-    expect(only.x).toBe(800);
-    expect(only.y).toBe(550);
+    expect(only.x).toBe(CORE.x);
+    expect(only.y).toBe(CORE.y);
+  });
+
+  it("keeps a business and its lobes inside the cortex", () => {
+    const nodes = buildBrainNodes(BUSINESSES);
+    // A lobe rendered outside the silhouette breaks the one metaphor the page
+    // is built on, so the ring radii are constrained against the cortex.
+    for (const node of nodes.filter((entry) => entry.level <= 2)) {
+      const dx = (node.x - CORE.x) / CORTEX_RX;
+      const dy = (node.y - CORE.y) / CORTEX_RY;
+      expect(Math.hypot(dx, dy), `${node.id} sits outside the cortex`).toBeLessThan(1);
+    }
   });
 });
 

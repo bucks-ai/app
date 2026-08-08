@@ -166,23 +166,40 @@ export type BrainBusiness = {
 };
 
 /* World-space constants. The brain silhouette is authored against this box, so
-   node placement and the outline path share one coordinate system. */
-export const WORLD_W = 1600;
-export const WORLD_H = 1100;
+   node placement and the outline path share one coordinate system.
+
+   The world is portrait and generous: a brain seen from above is taller than
+   it is wide, and the cortex has to be large enough that a business node plus
+   its ring of lobes still sits inside the outline. Lobes floating outside the
+   boundary break the one metaphor the page is built on. */
+export const WORLD_W = 1900;
+export const WORLD_H = 2200;
 export const CORE = { x: WORLD_W / 2, y: WORLD_H / 2 };
+
+/** Cortex semi-axes. Portrait: front-to-back is the long dimension. */
+export const CORTEX_RX = 760;
+export const CORTEX_RY = 910;
 
 /* Bounding box of the drawn cortex. Level 1 frames *this*, not the node
    cluster — fitting only the business nodes leaves the silhouette they sit
    inside hanging off every edge of the viewport. */
-export const CORTEX_BOUNDS = { minX: 250, maxX: 1350, minY: 90, maxY: 970 };
+export const CORTEX_BOUNDS = {
+  minX: CORE.x - CORTEX_RX - 20,
+  maxX: CORE.x + CORTEX_RX + 20,
+  minY: CORE.y - CORTEX_RY - 20,
+  maxY: CORE.y + CORTEX_RY + 20,
+};
 
 /* Ring radii must shrink with depth, or drilling in zooms *out*: a nine-leaf
    lobe cluster on a small ring is physically wider than the nine-lobe cluster
    that contains it, and the camera dutifully pulls back to fit it. Each level's
-   cluster is sized to be comfortably smaller than its parent's. */
+   cluster is sized to be comfortably smaller than its parent's.
+
+   BUSINESS_RING + LOBE_RING must also stay under CORTEX_RX, or a business's
+   lobes render outside the silhouette that is supposed to contain them. */
 const BUSINESS_RING = 380;
 const LOBE_RING = 300;
-const LEAF_RING = 118;
+const LEAF_RING = 150;
 
 /* Distributes n points over an arc centred on `from`. One item sits dead
    centre rather than off to one side, which is what a naive i/n split does. */
@@ -208,7 +225,8 @@ function ring(
 /* Labels are far wider than the node discs, so a fixed ring collides them as
    soon as a lobe has more than about five leaves. Research has nine. */
 function leafRing(count: number) {
-  return Math.max(LEAF_RING, count * 23);
+  // Spacing must clear the node diameter, or nine leaves overlap each other.
+  return Math.max(LEAF_RING, count * 27);
 }
 
 export function buildBrainNodes(businesses: BrainBusiness[]): BrainNode[] {
@@ -232,7 +250,7 @@ export function buildBrainNodes(businesses: BrainBusiness[]): BrainNode[] {
       detail: business.detail,
       x: pos.x,
       y: pos.y,
-      r: 58,
+      r: 138,
       tone: business.tone,
       count: business.approvals,
       live: business.live,
@@ -262,7 +280,7 @@ export function buildBrainNodes(businesses: BrainBusiness[]): BrainNode[] {
         detail: lobe.detail,
         x: lobePos.x,
         y: lobePos.y,
-        r: 40,
+        r: 95,
         tone: lobe.tone,
         count,
         live: business.live && lobe.key === "actions" && count ? count > 0 : false,
@@ -293,7 +311,7 @@ export function buildBrainNodes(businesses: BrainBusiness[]): BrainNode[] {
           detail: leaf.detail,
           x: leafPos.x,
           y: leafPos.y,
-          r: 26,
+          r: 75,
           tone: lobe.tone,
           expandable: false,
           href: `/dashboard/businesses/${business.id}?tab=${lobe.tab}${
