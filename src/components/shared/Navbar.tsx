@@ -44,6 +44,9 @@ export function Navbar() {
 
   return (
     <nav
+      // Named so it is distinguishable from the dashboard's "Brain location"
+      // nav when a screen reader lists landmarks.
+      aria-label="Main"
       className={`fixed left-0 right-0 top-0 z-50 transition-all duration-200 ${
         isScrolled
           ? "bg-background/40"

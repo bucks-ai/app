@@ -136,19 +136,34 @@ export function ResearchWorkspacePanel({ businessId }: ResearchWorkspacePanelPro
         onFocusHypotheses={() => scrollTo("research-hypotheses")}
         onFocusCompetitors={() => scrollTo("research-competitors")}
       />
-      <OpportunityScoreCard report={workspace.report} />
+      {/* Anchor ids are the brain's level-3 destinations (?section=...). The
+          competitors, risks, and hypotheses panels carry their own id already,
+          so wrapping them here too would duplicate the id. */}
+      <section id="research-opportunity" className="scroll-mt-28">
+        <OpportunityScoreCard report={workspace.report} />
+      </section>
       <div className="grid gap-4 xl:grid-cols-2">
-        <CustomerSegmentsPanel segments={workspace.segments} />
-        <BuyerBudgetPanel buyerBudgets={workspace.buyerBudgets} />
+        <section id="research-segments" className="scroll-mt-28">
+          <CustomerSegmentsPanel segments={workspace.segments} />
+        </section>
+        <section id="research-budgets" className="scroll-mt-28">
+          <BuyerBudgetPanel buyerBudgets={workspace.buyerBudgets} />
+        </section>
       </div>
       <CompetitorMapPanel competitors={workspace.competitors} />
       <div className="grid gap-4 xl:grid-cols-2">
-        <MonetizationPanel models={workspace.monetizationModels} />
-        <DistributionChannelsPanel channels={workspace.distributionChannels} />
+        <section id="research-monetization" className="scroll-mt-28">
+          <MonetizationPanel models={workspace.monetizationModels} />
+        </section>
+        <section id="research-distribution" className="scroll-mt-28">
+          <DistributionChannelsPanel channels={workspace.distributionChannels} />
+        </section>
       </div>
       <ResearchRisksPanel risks={workspace.risks} />
       <ResearchHypothesesPanel hypotheses={workspace.hypotheses} />
-      <ResearchEvidencePanel evidence={workspace.evidence} />
+      <section id="research-evidence" className="scroll-mt-28">
+        <ResearchEvidencePanel evidence={workspace.evidence} />
+      </section>
     </div>
   );
 }

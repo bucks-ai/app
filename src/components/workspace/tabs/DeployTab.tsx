@@ -15,10 +15,13 @@ export function DeployTab({ business }: DeployTabProps) {
         title="Deployment status and release controls."
         description="Keep Vercel status, project creation, scaffold preparation, and live-app links together without mixing them into the overview."
       />
-      <DeploymentStatusCard
-        businessId={business.id}
-        initialProject={business.vercelProject ?? null}
-      />
+      <section id="deploy-status" className="scroll-mt-28">
+        <DeploymentStatusCard
+          businessId={business.id}
+          initialProject={business.vercelProject ?? null}
+        />
+      </section>
+      <section id="deploy-execution" className="scroll-mt-28">
       <DeploymentExecutionPanel
         businessId={business.id}
         businessName={business.name}
@@ -28,6 +31,7 @@ export function DeployTab({ business }: DeployTabProps) {
         existingGitHubRepo={business.githubRepo ?? null}
         existingVercelProject={business.vercelProject ?? null}
       />
+      </section>
     </div>
   );
 }

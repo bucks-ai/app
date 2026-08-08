@@ -140,12 +140,12 @@ export function OperatingTeamPanel({ businessId }: OperatingTeamPanelProps) {
       ) : null}
 
       <div className="grid gap-4 2xl:grid-cols-[1fr_22rem]">
-        <div className="min-w-0 space-y-4">
+        <div id="team-roster" className="min-w-0 space-y-4 scroll-mt-28">
           {registry.nodes.map((node) => (
             <AgentNodeGroup key={node.nodeId} node={node} latestRuns={latestRuns} />
           ))}
         </div>
-        <div className="min-w-0">
+        <div id="team-runs" className="min-w-0 scroll-mt-28">
           <AgentRunTimeline runs={runs} agents={registry.agents} />
         </div>
       </div>

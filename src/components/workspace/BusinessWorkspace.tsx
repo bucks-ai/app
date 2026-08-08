@@ -12,6 +12,7 @@ import { PageField } from "@/components/ui/PageField";
 import { WorkspaceTabs } from "@/components/workspace/WorkspaceTabs";
 import type { TabKey } from "@/components/workspace/WorkspaceTabs";
 import { WorkspaceSidebar } from "@/components/workspace/WorkspaceSidebar";
+import { useSectionFocus } from "@/components/workspace/use-section-focus";
 import { WorkspaceRightRail } from "@/components/workspace/WorkspaceRightRail";
 import { WorkspaceDrawer } from "@/components/workspace/WorkspaceDrawer";
 import { OverviewTab } from "@/components/workspace/tabs/OverviewTab";
@@ -58,6 +59,9 @@ export function BusinessWorkspace({
   const [activeTab, setActiveTab] = useState<TabKey>(
     resolveInitialTab(searchParams.get("tab"))
   );
+  // Set by the brain's level-3 nodes (?tab=research&section=research-risks).
+  useSectionFocus(searchParams.get("section"), activeTab);
+
   const [blueprintOpen, setBlueprintOpen] = useState(false);
   const [executionStatus, setExecutionStatus] =
     useState<BusinessExecutionStatus | null>(initialExecutionStatus ?? null);
@@ -68,6 +72,9 @@ export function BusinessWorkspace({
       setActiveTab(tab);
       const params = new URLSearchParams(searchParams.toString());
       params.set("tab", tab);
+      // The deep-linked section belongs to the tab we are leaving; carrying it
+      // over would scroll the new tab to an unrelated panel, or to nothing.
+      params.delete("section");
       router.replace(`?${params.toString()}`, { scroll: false });
     },
     [router, searchParams]

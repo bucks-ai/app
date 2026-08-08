@@ -1362,3 +1362,425 @@ h6 {
     transform: none !important;
   }
 }
+/* ── Brain canvas ─────────────────────────────────────────────────────────
+   The dashboard as a zoomable neural map. One world, one camera: depth is a
+   single transform on `.brain-world`, so nothing here ever reflows.
+
+   Contrast note: dimmed "context" nodes carry their de-emphasis in a text
+   colour that still clears 4.5:1, never in wrapper opacity — an opacity on the
+   container would multiply every descendant's contrast at once. */
+
+.brain-shell {
+  display: none;
+  /* Positioning context for the chrome: `main` carries the navbar's top
+     padding, so absolute chrome anchored to it lands *under* the navbar. */
+  position: relative;
+}
+@media (min-width: 1024px) {
+  .brain-shell {
+    display: block;
+  }
+}
+
+.brain-chrome {
+  position: absolute;
+  z-index: 20;
+  top: 1rem;
+  /* Matches the navbar's inset so the chrome reads as one layer with it. */
+  left: 2rem;
+  right: 2rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  pointer-events: none;
+}
+.brain-chrome > * {
+  pointer-events: auto;
+}
+
+.brain-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 999px;
+  border: 1px solid var(--edge-strong);
+  background: var(--surface-glass);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  padding: 0.3rem 0.65rem;
+}
+.brain-crumb {
+  min-height: 2.25rem;
+  padding: 0 0.6rem;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  transition: color 180ms ease, background-color 180ms ease;
+}
+.brain-crumb:hover {
+  color: var(--foreground);
+  background: var(--surface-muted);
+}
+.brain-crumb[aria-current="true"] {
+  color: var(--accent-on-tint);
+  background: var(--accent-soft);
+}
+.brain-crumb-sep {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.brain-actions,
+.brain-outline-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.brain-action {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding: 0 1rem;
+  border-radius: 999px;
+  border: 1px solid var(--edge-strong);
+  background: var(--surface-raised);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  transition: border-color 200ms ease, color 200ms ease, background-color 200ms ease;
+}
+.brain-action:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--edge-strong));
+  color: var(--foreground);
+}
+.brain-action.is-primary {
+  background: var(--accent-soft);
+  border-color: var(--accent-ring);
+  color: var(--accent-on-tint);
+}
+
+.brain-viewport {
+  position: relative;
+  height: calc(100vh - 4.75rem);
+  height: calc(100dvh - 4.75rem);
+  /* `clip`, not `hidden`: hidden still makes this a scroll container, and the
+     browser scrolls it to reveal the focused node after the world transforms
+     under it — which silently offsets every framing. `clip` cannot scroll. */
+  overflow: clip;
+  touch-action: none;
+  user-select: none;
+}
+.brain-world {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+.brain-field {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+.brain-cortex {
+  fill: color-mix(in srgb, var(--accent) 6%, transparent);
+  stroke: color-mix(in srgb, var(--accent-bright) 34%, transparent);
+  stroke-width: 2.5;
+}
+/* The gyri carry the recognition, so they sit above the mesh in weight. */
+.brain-folds path {
+  fill: none;
+  stroke: color-mix(in srgb, var(--accent-bright) 22%, transparent);
+  stroke-width: 1.75;
+  stroke-linecap: round;
+}
+.brain-folds .brain-fissure {
+  stroke: color-mix(in srgb, var(--accent-bright) 34%, transparent);
+  stroke-width: 2.25;
+}
+.brain-mesh path {
+  fill: none;
+  stroke: color-mix(in srgb, var(--foreground) 11%, transparent);
+  stroke-width: 1;
+}
+.brain-synapses circle {
+  fill: color-mix(in srgb, var(--accent-bright) 55%, transparent);
+}
+.brain-mesh.is-live path {
+  stroke-dasharray: 5 9;
+  animation: brain-flow 2.4s linear infinite;
+}
+@keyframes brain-flow {
+  to {
+    stroke-dashoffset: -28;
+  }
+}
+
+/* ── Nodes ── */
+
+.brain-nodes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+/* The <li> carries the world position; the control fills it. Keeps real list
+   semantics without display:contents, which drops them in some engines. */
+.brain-node-slot {
+  position: absolute;
+  translate: -50% -50%;
+}
+
+.brain-node {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.1rem;
+  border-radius: 999px;
+  /* 1.4.11: the ring is the only thing marking the clickable area on an
+     otherwise decorative canvas, so it needs 3:1 — which --edge-strong
+     (white at 10%) cannot reach on #050506 at any blend. */
+  border: 1.5px solid var(--text-muted);
+  background: var(--surface-raised);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.06) inset,
+    0 10px 30px rgba(0, 0, 0, 0.34);
+  text-align: center;
+  padding: 0.35rem;
+  transition: border-color 200ms ease, box-shadow 200ms ease, scale 200ms ease;
+}
+.brain-node:hover {
+  scale: 1.04;
+}
+.brain-node-label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--foreground);
+  line-height: 1.15;
+}
+.brain-node-detail {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  line-height: 1.2;
+}
+.brain-node-count {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.brain-node.tone-accent { border-color: var(--accent-bright); }
+.brain-node.tone-accent .brain-node-count { color: var(--accent-on-tint); }
+.brain-node.tone-warning { border-color: var(--warning); }
+.brain-node.tone-warning .brain-node-count { color: var(--warning); }
+.brain-node.tone-danger { border-color: var(--error); }
+.brain-node.tone-danger .brain-node-count { color: var(--error); }
+.brain-node.tone-running { border-color: var(--status-running); }
+.brain-node.tone-running .brain-node-count { color: var(--running-on-tint); }
+
+.brain-node:hover.tone-accent,
+.brain-node:hover.tone-neutral {
+  box-shadow:
+    0 10px 30px rgba(0, 0, 0, 0.34),
+    0 0 28px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+/* The focused node is the thing you zoomed into: present, but it must not
+   out-shout the children it just revealed. */
+.brain-node.is-focus {
+  background: var(--surface-glass);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border-color: var(--accent-bright);
+  border-width: 2px;
+}
+
+/* .brain-node's own box-shadow overrode the global :focus-visible ring purely
+   by source order, leaving the outline as the sole (accidental) indicator. */
+.brain-node:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+.brain-node.is-live::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent-bright) 40%, transparent);
+  animation: brain-halo 2.2s ease-in-out infinite;
+}
+@keyframes brain-halo {
+  0%, 100% { opacity: 0.15; scale: 1; }
+  50% { opacity: 0.6; scale: 1.06; }
+}
+
+.brain-back {
+  position: absolute;
+  z-index: 20;
+  left: 1.25rem;
+  bottom: 1.25rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding: 0 1rem;
+  border-radius: 999px;
+  border: 1px solid var(--edge-strong);
+  background: var(--surface-glass);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  transition: color 180ms ease, border-color 180ms ease;
+}
+.brain-back:hover {
+  color: var(--foreground);
+  border-color: var(--accent-ring);
+}
+.brain-back-hint {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  border: 1px solid var(--edge);
+  border-radius: 4px;
+  padding: 0.1rem 0.3rem;
+}
+
+/* ── Outline (below lg) ── */
+
+.brain-outline {
+  padding: 1rem 1.25rem 5rem;
+}
+.brain-outline-actions {
+  margin-bottom: 1rem;
+}
+.brain-outline-empty {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  padding: 1rem 0;
+}
+.brain-outline-business {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card, 14px);
+  background: var(--surface-raised);
+  margin-bottom: 0.75rem;
+  overflow: hidden;
+}
+.brain-outline-business > summary,
+.brain-outline-lobe > summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding: 0.65rem 0.9rem;
+  cursor: pointer;
+  list-style: none;
+}
+.brain-outline-business > summary::-webkit-details-marker,
+.brain-outline-lobe > summary::-webkit-details-marker {
+  display: none;
+}
+/* Replaces the marker we removed — without it an expandable row is visually
+   identical to a plain link row. */
+.brain-outline-business > summary::after,
+.brain-outline-lobe > summary::after {
+  content: "";
+  margin-left: auto;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-right: 1.5px solid var(--text-muted);
+  border-bottom: 1.5px solid var(--text-muted);
+  rotate: 45deg;
+  transition: rotate 180ms ease;
+}
+.brain-outline-business[open] > summary::after,
+.brain-outline-lobe[open] > summary::after {
+  rotate: -135deg;
+}
+.brain-outline-name {
+  font-weight: 600;
+  color: var(--foreground);
+}
+.brain-outline-detail {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.brain-outline-count {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--warning);
+  border: 1px solid color-mix(in srgb, var(--warning) 30%, transparent);
+  border-radius: 999px;
+  padding: 0.15rem 0.45rem;
+}
+.brain-outline-lobes {
+  padding: 0 0.6rem 0.6rem;
+}
+.brain-outline-lobe {
+  border-top: 1px solid var(--border-subtle);
+}
+.brain-outline-lobe > summary > span:first-child {
+  font-weight: 600;
+  color: var(--foreground);
+  font-size: 0.875rem;
+}
+.brain-outline-lobe ul {
+  padding-bottom: 0.4rem;
+}
+.brain-outline-leaf {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.9rem;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  transition: color 180ms ease, background-color 180ms ease;
+}
+.brain-outline-leaf:hover {
+  color: var(--foreground);
+  background: var(--surface-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brain-mesh.is-live path,
+  .brain-node.is-live::after {
+    animation: none;
+  }
+  .brain-outline-business > summary::after,
+  .brain-outline-lobe > summary::after,
+  .brain-node,
+  .brain-crumb,
+  .brain-action,
+  .brain-back,
+  .brain-outline-leaf {
+    transition: none;
+  }
+  .brain-node:hover {
+    scale: 1;
+  }
+}

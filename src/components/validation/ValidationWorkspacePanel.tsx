@@ -123,13 +123,19 @@ export function ValidationWorkspacePanel({ businessId }: ValidationWorkspacePane
         onFocusLeads={() => scrollTo("validation-leads")}
         onFocusFeedback={() => scrollTo("validation-feedback")}
       />
+      {/* Level-3 anchors from the brain. Leads and feedback already carry
+          their own id, so they are not wrapped again here. */}
       <div className="grid gap-4 xl:grid-cols-2">
-        <PersonaList personas={workspace.personas} />
-        <HypothesisTracker
-          businessId={businessId}
-          hypotheses={workspace.hypotheses}
-          onChange={loadWorkspace}
-        />
+        <section id="validation-personas" className="scroll-mt-28">
+          <PersonaList personas={workspace.personas} />
+        </section>
+        <section id="validation-hypotheses" className="scroll-mt-28">
+          <HypothesisTracker
+            businessId={businessId}
+            hypotheses={workspace.hypotheses}
+            onChange={loadWorkspace}
+          />
+        </section>
       </div>
       <LeadPipeline businessId={businessId} leads={workspace.leads} onChange={loadWorkspace} />
       <FeedbackNotes

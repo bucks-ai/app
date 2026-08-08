@@ -1,26 +1,18 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { MissionCanvas, type CanvasBusiness } from "@/components/dashboard/MissionCanvas";
+import { BrainCanvas } from "@/components/dashboard/brain/BrainCanvas";
+import type { BrainBusiness, BrainTone } from "@/components/dashboard/brain/brain-model";
 import {
-  demoActivity,
   demoBusinesses,
-  demoHumanActions,
-  type ActivityItem,
-  type HumanAction,
   type StatusVariant,
 } from "@/components/dashboard/mock-data";
 import {
-  getAgentActivityLogs,
   getCurrentUser,
   getHumanRequiredActions,
   getUserBusinesses,
 } from "@/lib/projects";
 import { hasSupabaseEnv } from "@/lib/supabase/env";
-import type {
-  AgentActivityLogRecord,
-  BusinessRecord,
-  HumanRequiredActionRecord,
-} from "@/types/database";
+import type { BusinessRecord } from "@/types/database";
 import { Navbar } from "@/components/shared/Navbar";
 import { PageField } from "@/components/ui/PageField";
 import { GlassCard } from "@/components/ui/GlassCard";
@@ -29,19 +21,10 @@ import { StatusPill } from "@/components/ui/StatusPill";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Mission Canvas | bucks.ai",
+  title: "Brain | bucks.ai",
   description:
-    "Your businesses as a live node canvas: workspaces, approvals, deploys, and activity branching from one hub.",
+    "Your businesses as a zoomable neural map: pick a business, zoom into research, validation, build, deploy, and the decisions waiting on you.",
 };
-
-function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
 
 function formatStatus(status: string) {
   return status
@@ -51,54 +34,50 @@ function formatStatus(status: string) {
     .join(" ");
 }
 
-function statusVariant(status: string): StatusVariant {
-  if (status === "active" || status === "completed") return "success";
-  if (status === "paused") return "warning";
-  return "accent";
-}
+/* An action the founder has already dealt with is not load on the map. */
+const RESOLVED_ACTION_STATUSES = new Set([
+  "approved",
+  "rejected",
+  "dismissed",
+  "complete",
+  "completed",
+  "resolved",
+  "done",
+  "closed",
+]);
 
-function toCanvasBusiness(business: BusinessRecord): CanvasBusiness {
+const TONE_BY_VARIANT: Record<StatusVariant, BrainTone> = {
+  accent: "accent",
+  success: "accent",
+  warning: "warning",
+  danger: "danger",
+  neutral: "neutral",
+};
+
+function toBrainBusiness(
+  business: BusinessRecord,
+  approvals: number,
+  blockers: number
+): BrainBusiness {
   return {
     id: business.id,
     name: business.idea_name,
-    status: formatStatus(business.status),
-    statusVariant: statusVariant(business.status),
-    goal: business.primary_goal ?? "Goal not set",
-    businessType: business.business_type ?? "Unclassified",
+    detail: business.business_type ?? formatStatus(business.status),
+    tone: blockers > 0 ? "danger" : approvals > 0 ? "warning" : "accent",
+    approvals,
+    blockers,
+    live: approvals > 0 || blockers > 0,
   };
 }
 
-function toActivityItem(log: AgentActivityLogRecord): ActivityItem {
-  return {
-    time: formatDateTime(log.created_at),
-    actor: formatStatus(log.activity_type),
-    event: log.message,
-    tone: log.activity_type === "blueprint_created" ? "accent" : "neutral",
-    statusLabel: "log",
-  };
-}
-
-function toHumanAction(
-  action: HumanRequiredActionRecord,
-  businessName: string
-): HumanAction {
-  return {
-    title: action.title,
-    business: businessName,
-    reason:
-      action.description ??
-      "Founder approval is required before bucks.ai can continue this step.",
-    status: formatStatus(action.status),
-  };
-}
-
-const demoCanvasBusinesses: CanvasBusiness[] = demoBusinesses.map((b) => ({
-  id: b.id,
-  name: b.name,
-  status: b.status,
-  statusVariant: b.statusVariant,
-  goal: b.goal,
-  businessType: b.businessType,
+const demoBrainBusinesses: BrainBusiness[] = demoBusinesses.map((business) => ({
+  id: business.id,
+  name: business.name,
+  detail: business.businessType,
+  tone: TONE_BY_VARIANT[business.statusVariant],
+  approvals: business.humanActions.length,
+  blockers: 0,
+  live: false,
 }));
 
 /* Full-bleed canvas layout: the page itself never scrolls on lg — you pan
@@ -128,16 +107,7 @@ function CanvasShell({
 }
 
 function SampleCanvas() {
-  return (
-    <MissionCanvas
-      businesses={demoCanvasBusinesses}
-      humanActions={demoHumanActions}
-      activity={demoActivity}
-      deploys={1}
-      blockers={1}
-      sample
-    />
-  );
+  return <BrainCanvas businesses={demoBrainBusinesses} sample />;
 }
 
 export default async function DashboardPage() {
@@ -206,45 +176,27 @@ export default async function DashboardPage() {
   }
 
   const businesses = businessesResult.data;
-  const businessNameById = new Map(
-    businesses.map((business) => [business.id, business.idea_name])
+
+  // Counts are per business, not global: each node in the brain carries its own
+  // load, so the map shows where the work is rather than one aggregate number.
+  const actionsByBusiness = await Promise.all(
+    businesses.map((business) => getHumanRequiredActions(business.id))
   );
 
-  const [actionsByBusiness, logsByBusiness] = await Promise.all([
-    Promise.all(businesses.map((business) => getHumanRequiredActions(business.id))),
-    Promise.all(businesses.map((business) => getAgentActivityLogs(business.id))),
-  ]);
-
-  const humanActions = actionsByBusiness
-    .flatMap((result) => result.data ?? [])
-    .slice(0, 6)
-    .map((action) =>
-      toHumanAction(action, businessNameById.get(action.business_id) ?? "Saved business")
+  const brainBusinesses = businesses.map((business, index) => {
+    const actions = (actionsByBusiness[index]?.data ?? []).filter(
+      (action) => !RESOLVED_ACTION_STATUSES.has(action.status.trim().toLowerCase())
     );
+    const blockers = actions.filter((action) =>
+      ["high", "critical"].includes(action.risk_level.toLowerCase())
+    ).length;
 
-  const activityItems = logsByBusiness
-    .flatMap((result) => result.data ?? [])
-    .sort(
-      (a, b) =>
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    )
-    .slice(0, 6)
-    .map(toActivityItem);
-
-  const blockerCount = humanActions.filter((action) => {
-    const value = `${action.status} ${action.reason}`.toLowerCase();
-    return value.includes("block") || value.includes("human-only");
-  }).length;
+    return toBrainBusiness(business, actions.length, blockers);
+  });
 
   return (
     <CanvasShell>
-      <MissionCanvas
-        businesses={businesses.map(toCanvasBusiness)}
-        humanActions={humanActions}
-        activity={activityItems}
-        deploys={0}
-        blockers={blockerCount}
-      />
+      <BrainCanvas businesses={brainBusinesses} />
     </CanvasShell>
   );
 }

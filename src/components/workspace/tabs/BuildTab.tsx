@@ -107,6 +107,7 @@ export function BuildTab({ business }: BuildTabProps) {
         <GitHubRepoGate />
       </StepRow>
 
+      <div id="build-repo" className="scroll-mt-28">
       <StepRow index={2} label="Repository created" status={step2Status}>
         <GitHubRepoCard
           businessId={business.id}
@@ -115,7 +116,9 @@ export function BuildTab({ business }: BuildTabProps) {
           existingRepo={business.githubRepo ?? null}
         />
       </StepRow>
+      </div>
 
+      <div id="build-scaffold" className="scroll-mt-28">
       <StepRow index={3} label="Scaffold prepared" status={step3Status}>
         {hasRepo ? (
           <div className="rounded-lg border border-border bg-background/72 p-4">
@@ -135,6 +138,7 @@ export function BuildTab({ business }: BuildTabProps) {
           </div>
         ) : null}
       </StepRow>
+      </div>
     </div>
   );
 }

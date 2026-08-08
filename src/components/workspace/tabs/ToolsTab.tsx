@@ -11,7 +11,7 @@ type ToolsTabProps = {
 export function ToolsTab({ business, businessId, businessName }: ToolsTabProps) {
   return (
     <div className="space-y-5">
-      <div className="rounded-lg border border-border bg-surface p-4">
+      <div id="tools-queue" className="scroll-mt-28 rounded-lg border border-border bg-surface p-4">
         <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">
@@ -27,10 +27,12 @@ export function ToolsTab({ business, businessId, businessName }: ToolsTabProps) 
         </div>
         <CompactToolQueue business={business} full />
       </div>
-      <PermissionControlRoom
-        businessId={businessId}
-        businessName={businessName}
-      />
+      <section id="tools-permissions" className="scroll-mt-28">
+        <PermissionControlRoom
+          businessId={businessId}
+          businessName={businessName}
+        />
+      </section>
     </div>
   );
 }
