@@ -33,6 +33,23 @@ def _meaningful_items(items: list) -> list[str]:
     return [str(v).strip() for v in items if str(v).strip().lower() not in _EMPTY_VALUES]
 
 
+def _to_repo_relative(raw: str, repo_path: str) -> str:
+    """Strip backtick wrapping and convert a reported path to repo-relative form.
+
+    Handles backtick-wrapped (``runner/foo.py``), dot-slash (./runner/foo.py),
+    and absolute-under-repo-root (/abs/path/runner/foo.py) formats.
+    Uses startswith for the repo-root strip — never lstrip(repo_path) which
+    would treat the argument as a character set and eat path characters.
+    """
+    path = raw.strip('`')
+    root = (repo_path or "").rstrip('/')
+    if root and path.startswith(root + '/'):
+        return path[len(root) + 1:]
+    if path.startswith('./'):
+        return path[2:]
+    return path.lstrip('/')
+
+
 def _check_files_touched(summary: dict) -> tuple[bool, str]:
     created = _meaningful_items(summary.get("files_created") or [])
     modified = _meaningful_items(summary.get("files_modified") or [])
@@ -65,7 +82,7 @@ def _check_file_claims_exist(summary: dict, repo_path: str, diff_text: str) -> t
 
     missing = []
     for raw_path in claimed:
-        rel_path = raw_path.lstrip("./")
+        rel_path = _to_repo_relative(raw_path, repo_path)
         if rel_path in diff_files:
             continue
         if os.path.exists(os.path.join(repo_path, rel_path)):

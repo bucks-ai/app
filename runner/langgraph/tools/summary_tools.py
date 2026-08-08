@@ -29,7 +29,7 @@ def _extract_list(text: str, *keywords: str) -> list[str]:
         if m:
             items = []
             for raw in re.findall(r"[-*]\s*(.+)", m.group(1)):
-                item = raw.strip()
+                item = raw.strip().strip('`')
                 # Stop at the next section header so one list doesn't absorb the
                 # bullets (or inline values) of the sections that follow it.
                 if _SECTION_HEADER.match(item):
