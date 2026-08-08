@@ -7,6 +7,8 @@ import type {
 } from "@/types/execution-ui";
 
 type BusinessDetailProps = {
+  /** Region chosen in the Brain. The workspace never picks one for you. */
+  region: string;
   business: DashboardBusiness;
 };
 
@@ -238,7 +240,7 @@ function buildFallbackExecutionStatus(
   };
 }
 
-export function BusinessDetail({ business }: BusinessDetailProps) {
+export function BusinessDetail({ business, region }: BusinessDetailProps) {
   const humanActions =
     business.humanActionItems ??
     business.humanActions.map((action) => ({
@@ -258,6 +260,7 @@ export function BusinessDetail({ business }: BusinessDetailProps) {
   return (
     <BusinessWorkspace
       business={businessWithNormalizedActions}
+      region={region}
       initialExecutionStatus={initialStatus}
     />
   );

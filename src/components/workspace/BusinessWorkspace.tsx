@@ -3,18 +3,15 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { DashboardBusiness } from "@/components/dashboard/mock-data";
+import { LOBES } from "@/components/dashboard/brain/brain-model";
 import type { BusinessExecutionStatus } from "@/types/execution-ui";
 import {
   fetchBusinessExecutionStatus,
   fetchExecutionTimeline,
 } from "@/lib/execution-client";
 import { PageField } from "@/components/ui/PageField";
-import { WorkspaceTabs } from "@/components/workspace/WorkspaceTabs";
-import type { TabKey } from "@/components/workspace/WorkspaceTabs";
-import { WorkspaceSidebar } from "@/components/workspace/WorkspaceSidebar";
+import { RegionShell, brainHref } from "@/components/workspace/RegionShell";
 import { useSectionFocus } from "@/components/workspace/use-section-focus";
-import { WorkspaceRightRail } from "@/components/workspace/WorkspaceRightRail";
-import { WorkspaceDrawer } from "@/components/workspace/WorkspaceDrawer";
 import { OverviewTab } from "@/components/workspace/tabs/OverviewTab";
 import { ResearchTab } from "@/components/workspace/tabs/ResearchTab";
 import { ActionsTab } from "@/components/workspace/tabs/ActionsTab";
@@ -28,59 +25,50 @@ import { SettingsTab } from "@/components/workspace/tabs/SettingsTab";
 
 type BusinessWorkspaceProps = {
   business: DashboardBusiness;
+  /** The region the Brain sent us into. Never defaults — see the note below. */
+  region: string;
   initialExecutionStatus?: BusinessExecutionStatus | null;
 };
 
-function resolveInitialTab(searchParam: string | null): TabKey {
-  const valid: TabKey[] = [
-    "overview",
-    "research",
-    "actions",
-    "build",
-    "deploy",
-    "validation",
-    "team",
-    "tools",
-    "activity",
-    "settings",
-  ];
-  if (searchParam && valid.includes(searchParam as TabKey)) {
-    return searchParam as TabKey;
-  }
-  return "overview";
-}
-
+/**
+ * One region of one business, and nothing else.
+ *
+ * This used to render WorkspaceSidebar (all ten regions, always) plus
+ * WorkspaceTabs (the same ten on mobile) around whichever tab was active, with
+ * `resolveInitialTab` quietly defaulting to "overview". That is what made the
+ * Brain a doorway: you arrived and every other region was already in reach.
+ *
+ * Now the region arrives as a prop, there is no switcher, and a business with
+ * no region chosen never lands here at all — the route sends it back to the
+ * Brain to choose one. Both lateral navigations are deliberately gone; the
+ * Brain is the only way across.
+ */
 export function BusinessWorkspace({
   business,
+  region,
   initialExecutionStatus,
 }: BusinessWorkspaceProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [activeTab, setActiveTab] = useState<TabKey>(
-    resolveInitialTab(searchParams.get("tab"))
-  );
-  // Set by the brain's level-3 nodes (?tab=research&section=research-risks).
-  useSectionFocus(searchParams.get("section"), activeTab);
-
-  const [blueprintOpen, setBlueprintOpen] = useState(false);
   const [executionStatus, setExecutionStatus] =
     useState<BusinessExecutionStatus | null>(initialExecutionStatus ?? null);
 
-  // Sync tab to URL
-  const handleTabChange = useCallback(
-    (tab: TabKey) => {
-      setActiveTab(tab);
-      const params = new URLSearchParams(searchParams.toString());
-      params.set("tab", tab);
-      // The deep-linked section belongs to the tab we are leaving; carrying it
-      // over would scroll the new tab to an unrelated panel, or to nothing.
-      params.delete("section");
-      router.replace(`?${params.toString()}`, { scroll: false });
+  /* Overview's cards point at other regions. Under the old sidebar those were
+     lateral jumps, which is exactly the "everything is equally reachable"
+     problem. They now travel THROUGH the Brain: following one flies the camera
+     to that lobe, and you commit from the map. One extra step, and that step is
+     the spatial transition rather than a hidden teleport. */
+  const travelTo = useCallback(
+    (tab: string) => {
+      const lobe = LOBES.find((entry) => entry.tab === tab);
+      router.push(brainHref(lobe ? `${business.id}:${lobe.key}` : business.id));
     },
-    [router, searchParams]
+    [router, business.id]
   );
 
-  // Load fresh execution status after initial render
+  const activeSection = searchParams.get("section");
+  useSectionFocus(activeSection, region);
+
   useEffect(() => {
     async function load() {
       const result = await fetchBusinessExecutionStatus(business.id);
@@ -98,117 +86,50 @@ export function BusinessWorkspace({
     void load();
   }, [business.id]);
 
-  const pendingApprovalCount =
-    business.humanActionItems?.length ?? business.humanActions.length;
-  const blockerCount = executionStatus?.blockers?.length ?? 0;
-  const actionCount = pendingApprovalCount + blockerCount;
-  const badgeCounts = { actions: actionCount };
-
-  const activeTabContent =
-    activeTab === "overview" ? (
+  const panel =
+    region === "overview" ? (
       <OverviewTab
         business={business}
         executionStatus={executionStatus}
-        onTabChange={handleTabChange}
-        onBlueprintOpen={() => setBlueprintOpen(true)}
+        onTabChange={travelTo}
       />
-    ) : activeTab === "actions" ? (
+    ) : region === "actions" ? (
       <ActionsTab business={business} executionStatus={executionStatus} />
-    ) : activeTab === "research" ? (
+    ) : region === "research" ? (
       <ResearchTab business={business} />
-    ) : activeTab === "build" ? (
+    ) : region === "build" ? (
       <BuildTab business={business} />
-    ) : activeTab === "deploy" ? (
+    ) : region === "deploy" ? (
       <DeployTab business={business} />
-    ) : activeTab === "validation" ? (
+    ) : region === "validation" ? (
       <ValidationTab business={business} />
-    ) : activeTab === "team" ? (
+    ) : region === "team" ? (
       <OperatingTeamTab business={business} />
-    ) : activeTab === "tools" ? (
+    ) : region === "tools" ? (
       <ToolsTab
         business={business}
         businessId={business.id}
         businessName={business.name}
       />
-    ) : activeTab === "activity" ? (
+    ) : region === "activity" ? (
       <ActivityTab business={business} executionStatus={executionStatus} />
-    ) : activeTab === "settings" ? (
+    ) : region === "settings" ? (
       <SettingsTab business={business} />
     ) : null;
 
   return (
     <div className="flex min-h-screen flex-col overflow-x-hidden pt-[69px]">
-      {/* Grid off: the workspace is already dense with real data, so the
-          field stays a plain gradient here. */}
       <PageField grid={false} />
-      <div className="flex min-w-0 flex-1">
-        {/* Desktop left navigation */}
-        <WorkspaceSidebar
-          activeTab={activeTab}
-          business={business}
-          executionStatus={executionStatus}
-          badgeCounts={badgeCounts}
-          onTabChange={handleTabChange}
-        />
-
-        {/* Main column: mobile tabs + scrolling content */}
-        <div className="flex min-w-0 flex-1 flex-col">
-          <div className="border-b border-border/70 bg-background/50 lg:hidden">
-            <WorkspaceTabs
-              activeTab={activeTab}
-              onTabChange={handleTabChange}
-              badgeCounts={badgeCounts}
-            />
-          </div>
-
-          <main className="min-w-0 flex-1 px-4 py-5 pb-24 sm:px-6 lg:px-8 lg:pb-8">
-            <div className="mx-auto max-w-5xl">{activeTabContent}</div>
-          </main>
-        </div>
-
-        {/* Status rail — wide desktop only */}
-        <aside className="hidden w-80 shrink-0 border-l border-border/80 bg-background/35 backdrop-blur 2xl:block">
-          <div className="sticky top-[69px] max-h-[calc(100vh-69px)] overflow-y-auto p-4">
-            <WorkspaceRightRail
-              business={business}
-              executionStatus={executionStatus}
-              onTabChange={handleTabChange}
-            />
-          </div>
-        </aside>
-      </div>
-
-      {/* Blueprint drawer */}
-      <WorkspaceDrawer
-        open={blueprintOpen}
-        onClose={() => setBlueprintOpen(false)}
-        title="Blueprint"
-      >
-        <div className="space-y-4">
-          <p className="text-sm leading-7 text-foreground-secondary">
-            {business.blueprintSummary ??
-              "No blueprint summary is available for this project."}
-          </p>
-
-          {business.nextActions.length > 0 ? (
-            <div>
-              <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.24em] text-accent">
-                Next autonomous actions
-              </p>
-              <ul className="space-y-1.5">
-                {business.nextActions.map((action, i) => (
-                  <li
-                    key={i}
-                    className="rounded-lg border border-border bg-elevated px-3 py-2 text-xs text-foreground-secondary"
-                  >
-                    {action}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-        </div>
-      </WorkspaceDrawer>
+      <main id="main-content" className="min-w-0 flex-1">
+        <RegionShell
+          businessId={business.id}
+          businessName={business.name}
+          regionKey={region}
+          activeSection={activeSection}
+        >
+          {panel}
+        </RegionShell>
+      </main>
     </div>
   );
 }

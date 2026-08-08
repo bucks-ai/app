@@ -1784,3 +1784,151 @@ h6 {
     scale: 1;
   }
 }
+
+/* ── Region shell ─────────────────────────────────────────────────────────
+   What replaced WorkspaceSidebar. Scoped to one region: a breadcrumb back
+   through the Brain, this region's leaves, and nothing naming another region.
+
+   This is also where EB Garamond finally does the job DESIGN.md assigns it
+   ("workspace titles"). It could never appear on the canvas itself, because
+   type inside `.brain-world` is multiplied by the camera scale — no display
+   face survives being rendered at an arbitrary 0.4x. Chrome is untransformed,
+   so here the serif can be authored at a real size. */
+
+.region-shell {
+  margin: 0 auto;
+  max-width: 78rem;
+  padding: 1.5rem 1.25rem 5rem;
+}
+@media (min-width: 1024px) {
+  .region-shell {
+    padding: 2rem 2rem 6rem;
+  }
+}
+
+.region-header {
+  margin-bottom: 1.75rem;
+}
+
+.region-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+.region-crumb {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.25rem;
+  padding: 0 0.55rem;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  transition: color 180ms ease, background-color 180ms ease;
+}
+.region-crumb:hover {
+  color: var(--foreground);
+  background: var(--surface-muted);
+}
+.region-crumb[aria-current="page"] {
+  color: var(--accent-on-tint);
+  background: var(--accent-soft);
+}
+.region-crumb-sep {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.region-title-block {
+  margin-top: 1rem;
+}
+.region-title {
+  font-family: var(--font-serif);
+  font-weight: 500;
+  font-size: clamp(2rem, 3.4vw, 3rem);
+  line-height: 1.04;
+  /* Negative tracking is permitted only at display sizes, per DESIGN.md. */
+  letter-spacing: -0.018em;
+  color: var(--foreground);
+}
+.region-detail {
+  margin-top: 0.4rem;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* This region's leaves only. Regions with none render no rail at all rather
+   than an empty one pretending to be navigation. */
+.region-leaves {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border-subtle);
+}
+.region-leaf {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding: 0 0.9rem;
+  border-radius: 999px;
+  border: 1px solid var(--edge-strong);
+  background: var(--surface-raised);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  transition: border-color 200ms ease, color 200ms ease, background-color 200ms ease;
+}
+.region-leaf:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--edge-strong));
+  color: var(--foreground);
+}
+.region-leaf[data-active="true"] {
+  border-color: var(--accent-ring);
+  background: var(--accent-soft);
+  color: var(--accent-on-tint);
+}
+
+.region-body {
+  min-width: 0;
+}
+
+.region-foot {
+  margin-top: 3rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border-subtle);
+}
+.region-exit {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding: 0 1rem;
+  border-radius: 999px;
+  border: 1px solid var(--edge-strong);
+  background: var(--surface-raised);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  transition: border-color 200ms ease, color 200ms ease;
+}
+.region-exit:hover {
+  border-color: var(--accent-ring);
+  color: var(--foreground);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .region-crumb,
+  .region-leaf,
+  .region-exit {
+    transition: none;
+  }
+}

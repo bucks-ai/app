@@ -1,15 +1,18 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { BusinessDetail } from "@/components/dashboard/BusinessDetail";
+import { LOBES } from "@/components/dashboard/brain/brain-model";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { Navbar } from "@/components/shared/Navbar";
-import type {
-  ActivityItem,
-  DashboardToolPermission,
-  DashboardBusiness,
-  HumanAction,
-  ToolPermission,
+import {
+  demoBusinesses,
+  type ActivityItem,
+  type DashboardToolPermission,
+  type DashboardBusiness,
+  type HumanAction,
+  type ToolPermission,
 } from "@/components/dashboard/mock-data";
 import {
   getAgentActivityLogs,
@@ -63,6 +66,14 @@ function formatDateTime(value: string) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+/* The Brain's lobes are the only valid regions, so an unknown or absent ?tab
+   sends you back to choose one rather than guessing on your behalf. */
+function resolveRegion(value: string | string[] | undefined): string | null {
+  const tab = Array.isArray(value) ? value[0] : value;
+  if (!tab) return null;
+  return LOBES.some((lobe) => lobe.tab === tab) ? tab : null;
 }
 
 function formatStatus(status: string) {
@@ -351,8 +362,34 @@ function StatePanel({
 
 export default async function BusinessDetailPage({
   params,
+  searchParams,
 }: PageProps<"/dashboard/businesses/[id]">) {
   const { id } = await params;
+  const query = await searchParams;
+  const region = resolveRegion(query?.tab);
+
+  // A business with no region chosen belongs in the Brain, not in a workspace
+  // that quietly defaults to Overview with all ten regions in reach. Sending it
+  // back is the whole doctrine: you choose a region spatially, or not at all.
+  if (!region) {
+    redirect(`/dashboard?focus=${encodeURIComponent(id)}`);
+  }
+
+  // Demo businesses render signed out so the Brain's destinations are real in
+  // the sample preview. Without this every door the sample Brain offers opens
+  // onto a sign-in wall, which makes the navigation demo hollow.
+  const demo = demoBusinesses.find((entry) => entry.id === id);
+  if (demo) {
+    const signedIn = hasSupabaseEnv() ? await getCurrentUser() : null;
+    if (!signedIn?.data) {
+      return (
+        <div className="flex min-h-screen flex-col bg-background">
+          <Navbar />
+          <BusinessDetail business={demo} region={region} />
+        </div>
+      );
+    }
+  }
 
   if (!hasSupabaseEnv()) {
     return (
@@ -427,7 +464,7 @@ export default async function BusinessDetailPage({
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <Navbar />
-      <BusinessDetail business={dashboardBusiness} />
+      <BusinessDetail business={dashboardBusiness} region={region} />
     </div>
   );
 }
