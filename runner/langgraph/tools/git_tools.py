@@ -163,15 +163,67 @@ def merge_feature_branch(repo_path: str, branch: str) -> dict:
     return {"success": r.success, "output": r.output}
 
 
-def cleanup_feature_branch(repo_path: str, branch: str, force: bool = False) -> dict:
+def fast_forward_main(repo_path: str, merge_sha: str = "") -> dict:
+    """Checkout main and fast-forward it to the merge commit on origin/main.
+
+    Must be called BEFORE branch cleanup after a successful merge, so that
+    the merge commit is in the local graph before we verify it is reachable
+    and before we delete the only local ref that held it.
+
+    Logs ``main_fast_forwarded`` with before/after SHAs.  If the checkout or
+    pull fails, returns ``success=False`` and the caller must abort cleanup —
+    never delete the feature branch when the local state has not been confirmed
+    safe (M4c.4).
+    """
+    r_before = _git(["rev-parse", "main"], repo_path)
+    before_sha = r_before.output.strip() if r_before.success else ""
+
+    checkout = _git(["checkout", "main"], repo_path)
+    if not checkout.success:
+        log_event("error", {
+            "step": "fast_forward_main",
+            "merge_sha": merge_sha[:12] if merge_sha else "",
+            "reason": "could not checkout main",
+            "output": (checkout.output or "")[-400:],
+        })
+        return {"success": False, "reason": "checkout_failed", "output": checkout.output}
+
+    pull = _git(["pull", "--ff-only", "origin", "main"], repo_path)
+    if not pull.success:
+        log_event("error", {
+            "step": "fast_forward_main",
+            "merge_sha": merge_sha[:12] if merge_sha else "",
+            "reason": "ff-only pull failed — local main diverged or fetch failed",
+            "output": (pull.output or "")[-400:],
+        })
+        return {"success": False, "reason": "ff_only_failed", "output": pull.output}
+
+    r_after = _git(["rev-parse", "main"], repo_path)
+    after_sha = r_after.output.strip() if r_after.success else ""
+    log_event("main_fast_forwarded", {
+        "before": before_sha,
+        "after": after_sha,
+        "merge_sha": merge_sha[:12] if merge_sha else "",
+    })
+    return {"success": True, "before": before_sha, "after": after_sha, "output": pull.output}
+
+
+def cleanup_feature_branch(repo_path: str, branch: str, force: bool = False, merge_sha: str = "") -> dict:
     """Delete a feature branch locally and on origin.
 
-    ``force=True`` retries a failed ``-d`` with ``-D``.  Only pass it when the
-    branch's changes are already confirmed on the base branch by an external
-    authority (e.g. the GitHub merge API returned success, or the PR had no
-    diff against base).  Squash/API merges rewrite history, so git's local
-    "not fully merged" check false-positives on branches whose content HAS
-    landed — that is the case force exists for (M0.9 finding, 2026-07-06).
+    ``merge_sha`` is the commit the caller knows landed on main (e.g. the SHA
+    returned by the GitHub merge API).  When provided, the branch is not
+    deleted unless ``git merge-base --is-ancestor <merge_sha> main`` passes —
+    i.e. the merge commit is provably in the local graph.  If it is not yet
+    reachable the cleanup is skipped entirely and the branch is left intact:
+    an undeleted branch is a trivial cleanup task; a deleted one with work
+    that never reached local main can be data loss (M4c.4).
+
+    ``force=True`` retries a failed ``-d`` with ``-D``, but **only** when
+    ``merge_sha`` is confirmed reachable from main.  When the merge commit is
+    NOT reachable, ``-D`` is never issued regardless of ``force``.  If no
+    ``merge_sha`` is given, ``force`` falls back to the old squash-merge
+    behaviour (M0.9 finding, 2026-07-06).
     """
     if branch.lower() in _PROTECTED_BRANCHES:
         result = {
@@ -182,6 +234,29 @@ def cleanup_feature_branch(repo_path: str, branch: str, force: bool = False) -> 
         }
         log_event("branch_cleanup_completed", {"branch": branch, **result})
         return result
+
+    # ── Safety gate: only delete when the merge commit is on local main ──────
+    if merge_sha:
+        ancestor = _git(["merge-base", "--is-ancestor", merge_sha, "main"], repo_path)
+        if not ancestor.success:
+            result = {
+                "success": False,
+                "local_deleted": False,
+                "remote_deleted": False,
+                "output": (
+                    f"cleanup skipped: merge commit {merge_sha[:12]} is not reachable "
+                    "from local main — branch left intact to prevent data loss"
+                ),
+            }
+            log_event("branch_cleanup_skipped", {
+                "branch": branch,
+                "merge_sha": merge_sha[:12],
+                "reason": (
+                    "merge commit not reachable from local main; skipping cleanup "
+                    "to avoid deleting the only local ref holding the merged state"
+                ),
+            })
+            return result
 
     current = current_branch(repo_path)
     if current == branch:
@@ -203,11 +278,23 @@ def cleanup_feature_branch(repo_path: str, branch: str, force: bool = False) -> 
 
     local = _git(["branch", "-d", branch], repo_path)
     if not local.success and force and "not fully merged" in (local.output or ""):
-        log_event("branch_cleanup_forced", {
-            "branch": branch,
-            "reason": "squash/API merge not detectable locally; -d refused, retrying -D",
-        })
-        local = _git(["branch", "-D", branch], repo_path)
+        # Use -D only when the merge commit is confirmed reachable (ancestor
+        # check above passed), OR when no merge_sha was given and the caller
+        # confirms via the GitHub API that the work landed.
+        if not merge_sha or _git(["merge-base", "--is-ancestor", merge_sha, "main"], repo_path).success:
+            log_event("branch_cleanup_forced", {
+                "branch": branch,
+                "reason": "squash/API merge not detectable locally; -d refused, retrying -D",
+            })
+            local = _git(["branch", "-D", branch], repo_path)
+        else:
+            log_event("error", {
+                "branch": branch,
+                "reason": (
+                    "-d refused and merge commit not reachable from local main; "
+                    "refusing -D to avoid data loss"
+                ),
+            })
     remote = _git(["push", "origin", "--delete", branch], repo_path, timeout=120)
     result = {
         "success": local.success and remote.success,

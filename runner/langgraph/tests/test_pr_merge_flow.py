@@ -486,6 +486,7 @@ def _worker_done_state():
 
 def _wire_for_pr_merge(
     commit_result, *, create_result, checks_result, merge_result, wake_result=None,
+    ff_result=None,
 ):
     """Wire graph's merge path to canned results.
 
@@ -495,10 +496,14 @@ def _wire_for_pr_merge(
     empty commits on the checked-out branch. ``wake_result`` defaults to "the
     wake could not do anything", which keeps every pre-existing test's
     expectations intact.
+
+    ``fast_forward_main`` MUST also be stubbed: it checks out main and does a
+    real git pull, which would mutate the working repo.  ``ff_result`` defaults
+    to success so pre-existing happy-path tests continue to pass.
     """
     calls = {
         "push": [], "create_pr": [], "poll_checks": [], "merge_pr": [],
-        "cleanup": [], "fetch": 0, "wake": [],
+        "cleanup": [], "fast_forward": [], "wake": [],
     }
 
     def _wake(repo, branch, **kw):
@@ -529,9 +534,10 @@ def _wire_for_pr_merge(
         return merge_result
     graph.merge_pull_request = _merge_pr
 
-    def _fetch(repo):
-        calls["fetch"] += 1
-    graph.fetch_pull_main = _fetch
+    def _fast_forward(repo, merge_sha=""):
+        calls["fast_forward"].append(merge_sha)
+        return ff_result or {"success": True, "before": "before_sha", "after": "after_sha", "output": ""}
+    graph.fast_forward_main = _fast_forward
     graph.cleanup_feature_branch = lambda repo, branch, **kw: calls["cleanup"].append(branch)
     return calls
 
@@ -557,11 +563,15 @@ def test_pr_merge_happy_path_merges_and_cleans_up():
     assert calls["create_pr"] == [("owner/repo", "feature/t1")], calls
     assert calls["poll_checks"] == [("owner/repo", "deadbeef")], calls
     assert calls["merge_pr"] == [("owner/repo", 42)], calls
-    assert calls["fetch"] == 1, calls
+    assert calls["fast_forward"] == ["def456"], calls  # fast-forwarded with merge sha
     assert calls["cleanup"] == ["feature/t1"], calls
     assert state.pr_number == 42, state
     assert state.pr_url == "https://github.test/pull/42", state
     assert state.worker_result["success"] is True, state.worker_result
+    assert state.pr_merge_result == {"success": True, "sha": "def456", "pr_number": 42}, state.pr_merge_result
+    # last_commit_result updated with merge sha
+    assert state.last_commit_result["sha"] == "def456", state.last_commit_result
+    assert state.last_commit_result["nothing_to_commit"] is False, state.last_commit_result
 
 
 def test_pr_merge_checks_failure_marks_task_failed_and_leaves_pr_open():
@@ -580,7 +590,7 @@ def test_pr_merge_checks_failure_marks_task_failed_and_leaves_pr_open():
     state = graph.commit_push_merge_if_needed(_worker_done_state())
 
     assert calls["merge_pr"] == [], "must not merge when checks failed"
-    assert calls["fetch"] == 0, "must not fast-forward main when checks failed"
+    assert calls["fast_forward"] == [], "must not fast-forward main when checks failed"
     assert calls["cleanup"] == [], "PR must be left open, branch not cleaned up"
     assert state.worker_result["success"] is False, state.worker_result
     assert "pr_checks_failed" in state.worker_result["error"], state.worker_result
@@ -680,7 +690,7 @@ def test_pr_merge_checks_no_runs_marks_task_failed_distinctly():
 
     assert calls["wake"] == ["feature/t1"], "the wake ladder must be tried before giving up"
     assert calls["merge_pr"] == [], "must not merge when no check runs were ever scheduled"
-    assert calls["fetch"] == 0, calls
+    assert calls["fast_forward"] == [], calls
     assert calls["cleanup"] == [], "PR must be left open, branch not cleaned up"
     assert state.worker_result["success"] is False, state.worker_result
     assert "pr_checks_no_runs" in state.worker_result["error"], state.worker_result
@@ -702,7 +712,7 @@ def test_pr_merge_rejected_by_branch_protection_marks_task_failed():
 
     state = graph.commit_push_merge_if_needed(_worker_done_state())
 
-    assert calls["fetch"] == 0, "must not fast-forward main on a rejected merge"
+    assert calls["fast_forward"] == [], "must not fast-forward main on a rejected merge"
     assert calls["cleanup"] == [], calls
     assert state.worker_result["success"] is False, state.worker_result
     assert "pr_merge_failed" in state.worker_result["error"], state.worker_result
@@ -768,7 +778,7 @@ def test_pr_merge_no_diff_treated_as_success_and_cleans_up_branch():
     assert calls["create_pr"] == [("owner/repo", "feature/t1")], calls
     assert calls["poll_checks"] == [], "must not poll checks when there is nothing to merge"
     assert calls["merge_pr"] == [], "must not attempt a merge when there is nothing to merge"
-    assert calls["fetch"] == 0, calls
+    assert calls["fast_forward"] == [], "must not fast-forward main when there is nothing to merge"
     assert calls["cleanup"] == ["feature/t1"], "redundant branch should still be cleaned up"
     assert state.pr_number is None, state
     assert state.worker_result["success"] is True, state.worker_result
@@ -825,6 +835,130 @@ def test_pr_checks_events_are_in_curated_slack_set():
     assert "pr_checks_no_runs" in config_module._DEFAULT_SLACK_EVENTS
 
 
+# ---------------------------------------------------------------------------
+# M4c.4: post-merge main sync and branch deletion safety
+# ---------------------------------------------------------------------------
+
+def test_main_fast_forwarded_with_merge_sha():
+    """After a successful merge the fast-forward is called with the merge SHA,
+    not the feature-branch SHA."""
+    calls = _wire_for_pr_merge(
+        _LANDED_COMMIT,
+        create_result={"success": True, "created": True, "number": 42, "url": "https://github.test/pull/42"},
+        checks_result={"success": True, "timed_out": False},
+        merge_result={"success": True, "sha": "def456"},
+    )
+    graph.cfg.auto_merge = True
+    graph.cfg.auto_cleanup_branches = True
+    graph.cfg.merge_via_pr = True
+    graph.cfg.github_token = "test-token"
+    graph.cfg.github_repo = "owner/repo"
+
+    graph.commit_push_merge_if_needed(_worker_done_state())
+
+    assert calls["fast_forward"] == ["def456"], (
+        "fast_forward_main must be called with the merge sha, not the feature-branch sha"
+    )
+
+
+def test_branch_cleanup_skipped_when_fast_forward_fails():
+    """A failed fast-forward aborts branch cleanup.  The feature branch is the
+    only local ref holding the merged state until main is confirmed updated."""
+    calls = _wire_for_pr_merge(
+        _LANDED_COMMIT,
+        create_result={"success": True, "created": True, "number": 42, "url": "https://github.test/pull/42"},
+        checks_result={"success": True, "timed_out": False},
+        merge_result={"success": True, "sha": "def456"},
+        ff_result={"success": False, "reason": "ff_only_failed", "output": "fatal: not possible to fast-forward"},
+    )
+    graph.cfg.auto_merge = True
+    graph.cfg.auto_cleanup_branches = True
+    graph.cfg.merge_via_pr = True
+    graph.cfg.github_token = "test-token"
+    graph.cfg.github_repo = "owner/repo"
+
+    state = graph.commit_push_merge_if_needed(_worker_done_state())
+
+    assert calls["fast_forward"] == ["def456"], calls
+    assert calls["cleanup"] == [], "branch must NOT be deleted when fast-forward failed"
+    assert state.worker_result["success"] is True, "task itself succeeded despite the sync issue"
+
+
+def test_pr_merge_result_stored_in_state():
+    """After a successful PR merge, state.pr_merge_result holds the merge dict
+    (including pr_number) so the completion-evidence gate can use it."""
+    _wire_for_pr_merge(
+        _LANDED_COMMIT,
+        create_result={"success": True, "created": True, "number": 42, "url": "https://github.test/pull/42"},
+        checks_result={"success": True, "timed_out": False},
+        merge_result={"success": True, "sha": "def456"},
+    )
+    graph.cfg.auto_merge = True
+    graph.cfg.auto_cleanup_branches = True
+    graph.cfg.merge_via_pr = True
+    graph.cfg.github_token = "test-token"
+    graph.cfg.github_repo = "owner/repo"
+
+    state = graph.commit_push_merge_if_needed(_worker_done_state())
+
+    assert state.pr_merge_result is not None, "pr_merge_result must be set after a successful merge"
+    assert state.pr_merge_result["success"] is True, state.pr_merge_result
+    assert state.pr_merge_result["sha"] == "def456", state.pr_merge_result
+    assert state.pr_merge_result["pr_number"] == 42, state.pr_merge_result
+
+
+def test_last_commit_result_updated_with_merge_sha():
+    """After a successful PR merge, last_commit_result is updated to point at
+    the merge commit rather than the feature-branch commit.  This matters for
+    squash merges where the original sha is rewritten away."""
+    _wire_for_pr_merge(
+        _LANDED_COMMIT,
+        create_result={"success": True, "created": True, "number": 42, "url": "https://github.test/pull/42"},
+        checks_result={"success": True, "timed_out": False},
+        merge_result={"success": True, "sha": "def456"},
+    )
+    graph.cfg.auto_merge = True
+    graph.cfg.auto_cleanup_branches = True
+    graph.cfg.merge_via_pr = True
+    graph.cfg.github_token = "test-token"
+    graph.cfg.github_repo = "owner/repo"
+
+    state = graph.commit_push_merge_if_needed(_worker_done_state())
+
+    assert state.last_commit_result["sha"] == "def456", (
+        "last_commit_result.sha must be the merge sha, not the feature-branch sha"
+    )
+    assert state.last_commit_result["nothing_to_commit"] is False, (
+        "nothing_to_commit must be False for the merge commit; the gate rejects True"
+    )
+
+
+def test_nothing_to_commit_commit_also_gets_merge_sha():
+    """When the worker had already committed (runner sees 'nothing to commit'),
+    the sha in last_commit_result predates the task.  After a successful merge,
+    it must be replaced by the merge sha so the gate can verify the work."""
+    nothing_to_commit_result = {
+        "success": False, "committed": True, "nothing_to_commit": True,
+        "sha": "pre_task_sha msg", "output": "nothing to commit",
+    }
+    _wire_for_pr_merge(
+        nothing_to_commit_result,
+        create_result={"success": True, "created": True, "number": 55, "url": "https://github.test/pull/55"},
+        checks_result={"success": True, "timed_out": False},
+        merge_result={"success": True, "sha": "merged789"},
+    )
+    graph.cfg.auto_merge = True
+    graph.cfg.auto_cleanup_branches = True
+    graph.cfg.merge_via_pr = True
+    graph.cfg.github_token = "test-token"
+    graph.cfg.github_repo = "owner/repo"
+
+    state = graph.commit_push_merge_if_needed(_worker_done_state())
+
+    assert state.last_commit_result["sha"] == "merged789", state.last_commit_result
+    assert state.last_commit_result["nothing_to_commit"] is False, state.last_commit_result
+
+
 if __name__ == "__main__":
     tests = [
         test_create_pull_request_creates_new_pr,
@@ -855,6 +989,11 @@ if __name__ == "__main__":
         test_pr_merge_no_diff_treated_as_success_and_cleans_up_branch,
         test_merge_via_pr_config_defaults,
         test_pr_checks_events_are_in_curated_slack_set,
+        test_main_fast_forwarded_with_merge_sha,
+        test_branch_cleanup_skipped_when_fast_forward_fails,
+        test_pr_merge_result_stored_in_state,
+        test_last_commit_result_updated_with_merge_sha,
+        test_nothing_to_commit_commit_also_gets_merge_sha,
     ]
     passed = failed = 0
     for t in tests:

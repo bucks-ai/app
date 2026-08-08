@@ -28,6 +28,7 @@ from tools.completion_evidence import (
     EVIDENCE_COMMIT,
     EVIDENCE_DEPLOYMENT,
     EVIDENCE_FILES,
+    EVIDENCE_MERGED_PR,
     NO_OP,
     QUESTION,
     REFUSAL,
@@ -39,6 +40,7 @@ from tools.completion_evidence import (
     verify_deployment_evidence,
     verify_evidence,
     verify_files_evidence,
+    verify_merged_pr_evidence,
 )
 
 import graph
@@ -305,6 +307,94 @@ class TestCommitEvidence:
 
     def test_no_repo_path_cannot_confirm(self):
         assert verify_commit_evidence({"sha": "abc123"}, "", git_runner=_git_stub())["verified"] is False
+
+
+# ---------------------------------------------------------------------------
+# Evidence type: a successfully merged PR (M4c.4)
+# ---------------------------------------------------------------------------
+
+_MERGE_RESULT = {"success": True, "sha": "deadbeefcafe", "pr_number": 107}
+
+
+class TestMergedPrEvidence:
+    def test_a_successful_merge_with_sha_is_evidence(self):
+        ev = verify_merged_pr_evidence(_MERGE_RESULT)
+        assert ev["verified"] is True
+        assert "107" in ev["detail"]
+        assert "deadbeefcafe"[:12] in ev["detail"]
+
+    def test_detail_includes_pr_number_when_present(self):
+        ev = verify_merged_pr_evidence({"success": True, "sha": "abc123", "pr_number": 42})
+        assert "PR #42" in ev["detail"]
+
+    def test_no_merge_result_is_not_evidence(self):
+        ev = verify_merged_pr_evidence(None)
+        assert ev["verified"] is False
+        assert "no merge result" in ev["detail"]
+
+    def test_a_failed_merge_is_not_evidence(self):
+        ev = verify_merged_pr_evidence({"success": False, "sha": "deadbeefcafe"})
+        assert ev["verified"] is False
+        assert "not successful" in ev["detail"]
+
+    def test_a_merge_with_no_sha_is_not_evidence(self):
+        ev = verify_merged_pr_evidence({"success": True, "sha": ""})
+        assert ev["verified"] is False
+
+    def test_merged_pr_satisfies_artifact_evidence(self):
+        """A merged PR is accepted as artifact evidence even when no files are
+        on disk and the commit sha is not checked (working tree clean, branch gone)."""
+        ev = verify_evidence(
+            {"files_created": [], "files_modified": []},
+            repo_path="/nonexistent",
+            commit={"sha": "abc123", "nothing_to_commit": True},
+            merge_result=_MERGE_RESULT,
+            git_runner=_git_stub(),
+        )
+        assert ev[EVIDENCE_MERGED_PR]["verified"] is True
+        assert ev[EVIDENCE_ARTIFACT]["verified"] is True
+        assert "deadbeefcafe"[:12] in ev[EVIDENCE_ARTIFACT]["detail"]
+
+    def test_merged_pr_does_not_rescue_a_refusal(self):
+        """A hard signal (refusal/question) blocks even with a merged PR sha — the
+        gate cannot know if the merge was from a different run or a stale branch."""
+        verdict = evaluate_completion(
+            {"files_created": [], "files_modified": []},
+            {"id": "t1", "type": "backend"},
+            "I am not going to make this change.",
+            repo_path="/nonexistent",
+            merge_result=_MERGE_RESULT,
+            git_runner=_git_stub(),
+        )
+        assert verdict["blocked"] is True
+        assert any("refusal" in r for r in verdict["reasons"])
+
+    def test_a_task_that_produced_nothing_is_still_blocked(self):
+        """No merge result AND no files AND commit is nothing_to_commit: blocked."""
+        verdict = evaluate_completion(
+            {"files_created": [], "files_modified": []},
+            {"id": "t1", "type": "backend"},
+            "Ran the analysis, no changes needed.",
+            repo_path=_REPO,
+            commit={"sha": "abc123", "nothing_to_commit": True},
+            merge_result=None,
+            git_runner=_git_stub(),
+        )
+        assert verdict["blocked"] is True
+        assert verdict["evidence"][EVIDENCE_ARTIFACT]["verified"] is False
+
+    def test_artifact_can_be_satisfied_by_merged_pr_alone(self):
+        """evaluate_completion accepts merged PR as evidence for a backend task."""
+        verdict = evaluate_completion(
+            {"files_created": [], "files_modified": []},
+            {"id": "t1", "type": "backend"},
+            "Completed the work and pushed.\n- Check Result: pass\n- Commit Result: abc1234",
+            repo_path="/nonexistent",
+            merge_result=_MERGE_RESULT,
+            git_runner=_git_stub(),
+        )
+        assert verdict["complete"] is True, verdict["reasons"]
+        assert EVIDENCE_ARTIFACT in verdict["satisfied"]
 
 
 # ---------------------------------------------------------------------------
