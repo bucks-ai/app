@@ -522,6 +522,16 @@ class RunnerConfig:
     merge_approval_policy: str = field(
         default_factory=lambda: os.getenv("MERGE_APPROVAL_POLICY", "require_approval_on_high")
     )
+    # M4c: "I approve everything, dont wait for me." (founder, 2026-07-31).
+    # When enabled the runner writes the same inbox fulfillment files a human
+    # approve-click would: non-destructive merges, additive SQL, and the
+    # strategic gate.  Two classes are never auto-approved: (a) genuinely
+    # irreversible actions (DROP TABLE, spend past the session cap); (b)
+    # resource/credential gates that need a human to create a new account —
+    # auto-clicking approve cannot conjure a token into existence.
+    auto_approve_enabled: bool = field(
+        default_factory=lambda: os.getenv("AUTO_APPROVE_ENABLED", "true").lower() == "true"
+    )
     e2e_enabled: bool = field(
         default_factory=lambda: os.getenv("E2E_ENABLED", "false").lower() == "true"
     )
@@ -875,6 +885,7 @@ class RunnerConfig:
             "max_auto_repair_attempts": self.max_auto_repair_attempts,
             "risk_based_merge_approval_enabled": self.risk_based_merge_approval_enabled,
             "merge_approval_policy": self.merge_approval_policy,
+            "auto_approve_enabled": self.auto_approve_enabled,
             "e2e_enabled": self.e2e_enabled,
             "e2e_base_url": self.e2e_base_url,
             "e2e_timeout_ms": self.e2e_timeout_ms,

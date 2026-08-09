@@ -350,6 +350,86 @@ def requeue_fulfilled_blocked_tasks(inbox_dir) -> list[str]:
     return requeued
 
 
+def auto_requeue_credential_satisfied_tasks(
+    inbox_dir,
+    outbox_dir,
+    available_credentials: set,
+) -> list:
+    """Create inbox unblock files for blocked tasks whose credentials are now in env.
+
+    When a task was blocked only on credentials (no non-credential resources),
+    and those credentials have since been added to the runner's env, write the
+    ``{task_id}_resources_provided.txt`` inbox file so that
+    ``requeue_fulfilled_blocked_tasks`` picks it up on the same pass and
+    requeues the task.
+
+    Tasks that were blocked on non-credential resources (e.g. "access to the
+    Stripe dashboard") are left alone — those require a human action, not just
+    an env-var.  Tasks that already have an inbox file or an
+    ``unblock_requeued_at`` stamp are skipped (already handled).
+
+    Returns the list of task ids for which an inbox file was created.
+    """
+    from tools.resource_gate import env_names_in
+
+    inbox_dir = Path(inbox_dir)
+    outbox_dir = Path(outbox_dir)
+    created = []
+    tasks = load_tasks()
+
+    for task in tasks:
+        if task.get("status") != "blocked" or task.get("unblock_requeued_at"):
+            continue
+        task_id = task.get("id")
+        if not task_id:
+            continue
+
+        outbox_file = outbox_dir / f"{task_id}_resource_request.txt"
+        inbox_file = inbox_dir / f"{task_id}_resources_provided.txt"
+        if not outbox_file.exists() or inbox_file.exists():
+            continue
+
+        try:
+            text = outbox_file.read_text()
+        except OSError:
+            continue
+
+        # Parse the outbox request file to discover what was needed.
+        credentials_section: list = []
+        resources_section: list = []
+        in_credentials = in_resources = False
+        for line in text.splitlines():
+            stripped = line.strip()
+            if stripped == "## Credentials needed":
+                in_credentials, in_resources = True, False
+            elif stripped == "## Resources needed":
+                in_credentials, in_resources = False, True
+            elif stripped.startswith("## ") or stripped.startswith("# "):
+                in_credentials = in_resources = False
+            elif stripped.startswith("- ") and in_credentials:
+                credentials_section.append(stripped[2:])
+            elif stripped.startswith("- ") and in_resources:
+                resources_section.append(stripped[2:])
+
+        # Resources (non-credential items) cannot be auto-satisfied.
+        if resources_section:
+            continue
+        if not credentials_section:
+            continue
+
+        # Check whether every named credential is now available.
+        all_satisfied = all(
+            names and all(name in available_credentials for name in names)
+            for item in credentials_section
+            for names in [env_names_in(item)]
+        )
+        if all_satisfied:
+            inbox_file.write_text("auto-satisfied by runner (credentials now in env)")
+            created.append(task_id)
+
+    return created
+
+
 def next_retry_eta() -> Optional[str]:
     """Earliest future ``retry_not_before`` among queued tasks, or None.
 

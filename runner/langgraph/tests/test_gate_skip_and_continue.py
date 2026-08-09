@@ -130,6 +130,7 @@ def test_merge_approval_pending_skips_the_task_only():
         risk_based_merge_approval_enabled=True,
         merge_approval_policy="require_approval_on_high",
         gate_block_scope="proportionate",
+        auto_approve_enabled=False,
     )
 
 

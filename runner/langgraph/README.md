@@ -395,6 +395,7 @@ Copy `.env.example` to `.env` and fill in:
 | `MAX_REPAIR_DEPTH` | Maximum nesting depth for deterministic-failure repairs (CI check failure, merge conflict, evidence block, gate block); depth ≥ MAX_REPAIR_DEPTH escalates to human instead of attempting another repair (default: 3) |
 | `RISK_BASED_MERGE_APPROVAL_ENABLED` | Classify merge risk and pause the loop for human approval when risk exceeds the policy threshold (default: true) |
 | `MERGE_APPROVAL_POLICY` | Controls when human approval is required before merging: `auto`, `require_approval_on_high` (default), `require_approval_on_medium_and_high`, `always_require` |
+| `AUTO_APPROVE_ENABLED` | Runner auto-approves routine decisions by writing the inbox fulfillment files a human would otherwise create: non-destructive merges (CI passed, no DROP/TRUNCATE/DELETE FROM in diff), additive SQL migrations, and the strategic gate (default: true). Never auto-approves destructive SQL or resource/credential gates that require a human to create a new account. Credential-only-blocked tasks are auto-requeued the instant the credential appears in env. Set to `false` to restore full human-approval behaviour. |
 | `E2E_ENABLED` | Run Playwright browser E2E smoke tests after each successful deployment (default: false — requires `python -m playwright install`) |
 | `E2E_BASE_URL` | Base URL for E2E tests (e.g. `https://my-app.vercel.app`); falls back to the URL from `deploy_result` when unset |
 | `E2E_TIMEOUT_MS` | Page navigation timeout in milliseconds for E2E tests (default: 15000) |

@@ -21,6 +21,7 @@ from tools.task_tools import (
     next_retry_eta,
     remove_tasks,
     requeue_fulfilled_blocked_tasks,
+    auto_requeue_credential_satisfied_tasks,
     requeue_task,
     add_task,
     update_task_branch,
@@ -116,6 +117,12 @@ from tools.risk_based_merge_approval import (
     format_approval_request,
     classify_merge_risk,
     requires_approval,
+)
+from tools.auto_approval import (
+    should_auto_approve_merge,
+    should_auto_approve_sql,
+    should_auto_approve_strategic,
+    is_destructive_diff,
 )
 from tools.strategic_decision_gate import (
     evaluate_strategic_gate,
@@ -703,6 +710,19 @@ def self_heal_task_state(state: RunnerState) -> RunnerState:
 
 
 def load_next_task(state: RunnerState) -> RunnerState:
+    # Auto-requeue tasks blocked on credentials that have since appeared in env.
+    # Runs before requeue_fulfilled_blocked_tasks so the inbox files it creates
+    # are picked up on the same pass.
+    for _tid in auto_requeue_credential_satisfied_tasks(
+        _RUNNER_DIR / "inbox",
+        _RUNNER_DIR / "outbox",
+        available_credential_names(config=cfg),
+    ):
+        log_event("resource_request_auto_requeued", {
+            "task_id": _tid,
+            "message": "credentials now available in env; task auto-requeued",
+        }, task_id=_tid)
+
     # Auto-requeue any blocked task whose resource fulfillment file has
     # landed in inbox/ (written by the approvals daemon or by hand).
     for _tid in requeue_fulfilled_blocked_tasks(_RUNNER_DIR / "inbox"):
@@ -2235,6 +2255,28 @@ def check_merge_approval_if_needed(state: RunnerState) -> RunnerState:
         state.merge_approval_status = "approved"
         state.merge_risk_level = decision["risk_level"]
     else:
+        # Human approval would normally be required — check auto-approve first.
+        if cfg.auto_approve_enabled and should_auto_approve_merge(decision, diff_text):
+            # Write the inbox fulfillment file the human would otherwise create,
+            # keeping the gate contract intact.  Never written for destructive
+            # SQL (should_auto_approve_merge returns False for those).
+            if not provided_path.exists():
+                provided_path.write_text("auto-approved by runner (non-destructive merge)")
+            state.merge_approval_status = "approved"
+            state.merge_risk_level = decision["risk_level"]
+            log_event("merge_auto_approved", {
+                "task_id": task_id,
+                "risk_level": decision["risk_level"],
+                "score": decision["classification"]["score"],
+                "reasons": decision["classification"]["reasons"],
+                "policy": cfg.merge_approval_policy,
+                "message": (
+                    f"Auto-approved merge (risk={decision['risk_level']}): "
+                    "non-destructive, CI passed."
+                ),
+            }, task_id=task_id)
+            return _persist(state, "check_merge_approval_if_needed")
+
         state.merge_approval_status = "pending"
         state.merge_risk_level = decision["risk_level"]
 
@@ -2758,18 +2800,44 @@ def apply_sql_if_needed(state: RunnerState) -> RunnerState:
                 log_event("error", {"task_id": task_id, "error": f"SQL file not found: {sql_file}"})
                 return _persist(state, "apply_sql_if_needed")
 
-        # Check for human approval.
+        # Check for human approval (or auto-approve additive SQL).
         if not inbox_approved.exists():
-            state.sql_approval_status = "pending"
-            # Task-scoped by construction: the SQL simply isn't applied. The
-            # loop is never halted here, and the SQL guard remains the authority
-            # on whether a statement is destructive (M4c.0).
-            log_event("sql_approval_waiting", authority_payload(
-                "sql_approval",
-                task_id=task_id,
-                message=f"Waiting for approval file: {inbox_approved}",
-            ), task_id=task_id)
-            return _persist(state, "apply_sql_if_needed")
+            if cfg.auto_approve_enabled:
+                try:
+                    sql_text = Path(sql_file).read_text()
+                except OSError:
+                    sql_text = ""
+                if should_auto_approve_sql(sql_text):
+                    inbox_approved.write_text("auto-approved by runner (additive SQL)")
+                    log_event("sql_auto_approved", {
+                        "task_id": task_id,
+                        "sql_file": sql_file,
+                        "message": "SQL auto-approved (no destructive statements detected).",
+                    }, task_id=task_id)
+                    state.sql_approval_status = "approved"
+                    # Fall through to apply the SQL below.
+                else:
+                    state.sql_approval_status = "pending"
+                    log_event("sql_approval_waiting", authority_payload(
+                        "sql_approval",
+                        task_id=task_id,
+                        message=(
+                            f"Waiting for approval file: {inbox_approved} "
+                            "(auto-approve blocked: destructive SQL detected)"
+                        ),
+                    ), task_id=task_id)
+                    return _persist(state, "apply_sql_if_needed")
+            else:
+                state.sql_approval_status = "pending"
+                # Task-scoped by construction: the SQL simply isn't applied. The
+                # loop is never halted here, and the SQL guard remains the authority
+                # on whether a statement is destructive (M4c.0).
+                log_event("sql_approval_waiting", authority_payload(
+                    "sql_approval",
+                    task_id=task_id,
+                    message=f"Waiting for approval file: {inbox_approved}",
+                ), task_id=task_id)
+                return _persist(state, "apply_sql_if_needed")
 
         approval_text = inbox_approved.read_text().strip().lower()
         if approval_text in ("rejected", "reject", "no"):
@@ -3853,19 +3921,32 @@ def run_strategic_gate(state: RunnerState) -> RunnerState:
             ))
 
         if not approved_path.exists():
-            state.strategic_gate_status = "pending"
-            state.strategic_gate_at_loop = gate_loop
-            state.stop_reason = STRATEGIC_GATE_STOP
-            log_event("strategic_gate_triggered", {
-                "loop_count": gate_loop,
-                "tasks_since_gate": cfg.strategic_pause_interval,
-                "review_path": str(review_path),
-                "approve_by": str(approved_path),
-                "message": (
-                    f"Strategic review required after {cfg.strategic_pause_interval} tasks. "
-                    f"See {review_path.name}; create {approved_path.name} to resume."
-                ),
-            })
+            if cfg.auto_approve_enabled and should_auto_approve_strategic():
+                # Write the fulfillment file so the gate resolves immediately.
+                # The outbox review file is still written above for observability.
+                approved_path.write_text("auto-approved by runner")
+                state.strategic_tasks_since_gate = 0
+                log_event("strategic_gate_auto_approved", {
+                    "gate_loop": gate_loop,
+                    "message": (
+                        f"Strategic review auto-approved after {cfg.strategic_pause_interval} "
+                        "tasks; resuming autonomous run."
+                    ),
+                })
+            else:
+                state.strategic_gate_status = "pending"
+                state.strategic_gate_at_loop = gate_loop
+                state.stop_reason = STRATEGIC_GATE_STOP
+                log_event("strategic_gate_triggered", {
+                    "loop_count": gate_loop,
+                    "tasks_since_gate": cfg.strategic_pause_interval,
+                    "review_path": str(review_path),
+                    "approve_by": str(approved_path),
+                    "message": (
+                        f"Strategic review required after {cfg.strategic_pause_interval} tasks. "
+                        f"See {review_path.name}; create {approved_path.name} to resume."
+                    ),
+                })
         else:
             # Pre-approved (edge case: operator already created the file).
             log_event("strategic_gate_auto_approved", {"gate_loop": gate_loop})
