@@ -47,9 +47,7 @@ test.describe("business detail tabs", () => {
 
     await login(page);
 
-    const demoCardHeading = page.getByRole("heading", {
-      name: DEMO_BUSINESS.idea_name,
-    });
+    const demoCardHeading = page.getByText(DEMO_BUSINESS.idea_name, { exact: true });
     await expect(demoCardHeading).toBeVisible();
     await demoCardHeading.click();
     await expect(page).toHaveURL(/\/dashboard\/businesses\/.+$/);
