@@ -163,6 +163,11 @@ from tools.state_self_healing import (
     run_startup_heal,
 )
 from tools.dispatch_preflight import verify_origin_remote
+from tools.environment_ownership import (
+    check_sentry_after_deploy,
+    trigger_deploy_for_sha_mismatch,
+    verify_push_destination,
+)
 from tools.wip_checkpoint import (
     checkpoint_wip,
     detect_wip_checkpoint,
@@ -478,6 +483,17 @@ def run_startup_preflight_if_needed(state: RunnerState) -> RunnerState:
         else:
             state.stop_reason = "preflight_unsafe"
 
+    # M4c: if production is serving a stale commit and AUTO_DEPLOY is on,
+    # trigger a deploy immediately rather than waiting for the next push.
+    # FAIL-OPEN: deploy errors are logged but never set stop_reason.
+    if not summary.get("unsafe") and cfg.deploy_on_sha_mismatch:
+        sha_check = next(
+            (c for c in (summary.get("checks") or []) if c.get("name") == "production_sha"),
+            {},
+        )
+        if sha_check.get("status") == "fail":
+            trigger_deploy_for_sha_mismatch(cfg, sha_check)
+
     return _persist(state, "run_startup_preflight_if_needed")
 
 
@@ -525,6 +541,11 @@ def check_launch_readiness_if_needed(state: RunnerState) -> RunnerState:
 
 _MIGRATIONS_DIR_NAME = "supabase/migrations"
 
+# M4c: session-level dedup so a set of non-auto-appliable pending migrations
+# only emits `migrations_pending` ONCE per session rather than every loop.
+# Keyed on frozenset(filenames); a new file appearing clears the dedup.
+_migrations_warned_this_session: set = set()
+
 
 def check_pending_migrations_if_needed(state: RunnerState) -> RunnerState:
     """Startup migration awareness — the fix for merged migrations that
@@ -559,17 +580,24 @@ def check_pending_migrations_if_needed(state: RunnerState) -> RunnerState:
 
     pending = pending_result["data"]["pending"]
     if not pending:
+        # Any previously warned set is now resolved — clear dedup so a future
+        # pending set (new migration added) is always announced.
+        _migrations_warned_this_session.discard(frozenset())
         return _persist(state, "check_pending_migrations_if_needed")
 
-    log_event("migrations_pending", {
-        "pending": pending,
-        "count": len(pending),
-        "auto_apply_migrations": cfg.auto_apply_migrations,
-        "message": (
-            f"{len(pending)} migration(s) not yet applied to the database: "
-            + ", ".join(pending)
-        ),
-    })
+    pending_key = frozenset(pending)
+    already_warned = pending_key in _migrations_warned_this_session
+    if not already_warned:
+        log_event("migrations_pending", {
+            "pending": pending,
+            "count": len(pending),
+            "auto_apply_migrations": cfg.auto_apply_migrations,
+            "message": (
+                f"{len(pending)} migration(s) not yet applied to the database: "
+                + ", ".join(pending)
+            ),
+        })
+        _migrations_warned_this_session.add(pending_key)
 
     if not cfg.auto_apply_migrations:
         return _persist(state, "check_pending_migrations_if_needed")
@@ -598,6 +626,9 @@ def check_pending_migrations_if_needed(state: RunnerState) -> RunnerState:
             "filename": filename,
             "sha256": result["data"]["sha256"],
         })
+        # A migration was applied — the pending set changed, so clear all dedup
+        # keys so the next loop re-announces any remaining pending files.
+        _migrations_warned_this_session.clear()
 
     return _persist(state, "check_pending_migrations_if_needed")
 
@@ -635,6 +666,9 @@ _TASK_SCOPED_STATE_DEFAULTS = {
     "auto_repair_attempt": 0,
     "auto_repair_status": None,
     "retry_pending": None,
+    # M4c environment-ownership fields — scoped per task
+    "task_started_at": None,
+    "sentry_post_deploy_result": None,
 }
 
 
@@ -718,6 +752,7 @@ def load_next_task(state: RunnerState) -> RunnerState:
         _reset_task_scoped_state(state)
         state.current_task = task
         state.current_task_id = task["id"]
+        state.task_started_at = datetime.utcnow().isoformat()
         log_event("task_loaded", {"task": task}, task_id=task["id"])
     else:
         state.current_task = None
@@ -2280,6 +2315,34 @@ def commit_push_merge_if_needed(state: RunnerState) -> RunnerState:
         state.last_commit = commit["sha"]
         push_branch(repo_path, branch)
 
+        # M4c: for business repos, re-verify the remote after push to confirm
+        # the commit actually landed in the business's repo and not in a stale
+        # workspace pointing somewhere else. HARD-FAIL on mismatch; FAIL-OPEN
+        # on infra errors (transient git error → log and continue).
+        business_repo_full_name = task.get("business_repo_full_name")
+        if business_repo_full_name and cfg.push_destination_verify:
+            dest = verify_push_destination(repo_path, business_repo_full_name)
+            if not dest.get("ok") and not dest.get("degraded"):
+                log_event("push_destination_mismatch_abort", {
+                    "task_id": state.current_task_id,
+                    "expected": dest.get("expected"),
+                    "actual": dest.get("actual"),
+                    "reason": dest.get("reason"),
+                    "message": (
+                        "push landed in the wrong repo — aborting merge to prevent "
+                        "cross-business contamination"
+                    ),
+                }, task_id=state.current_task_id)
+                state.worker_result = {
+                    **(state.worker_result or {}),
+                    "success": False,
+                    "error": (
+                        f"push_destination_mismatch: expected {dest.get('expected')} "
+                        f"but origin is {dest.get('actual')}"
+                    ),
+                }
+                return _persist(state, "commit_push_merge_if_needed")
+
         if cfg.auto_merge:
             if cfg.merge_via_pr:
                 _merge_via_pull_request(state, task, branch)
@@ -2853,6 +2916,34 @@ def deploy_if_needed(state: RunnerState) -> RunnerState:
         }, task_id=task_id)
 
     return _persist(state, "deploy_if_needed")
+
+
+def check_sentry_post_deploy_if_needed(state: RunnerState) -> RunnerState:
+    """M4c: check Sentry for new errors after each successful deploy.
+
+    Runs immediately after ``deploy_if_needed`` when:
+    - A deploy completed (state.deploy_result is set and deploy_ready is True)
+    - SENTRY_POST_DEPLOY_CHECK=true (default)
+
+    FAIL-OPEN: Sentry unavailable, unconfigured, or erroring is logged as
+    ``sentry_post_deploy_degraded`` and the loop continues. This node never
+    sets stop_reason.
+
+    Uses ``state.task_started_at`` as the ``since_iso`` so only errors that
+    first appeared during or after this task's run are surfaced.
+    """
+    if not cfg.sentry_post_deploy_enabled:
+        return state
+
+    # Only run when a deploy actually completed (ready or failed — both are
+    # interesting from an error-regression perspective).
+    if not state.deploy_result:
+        return state
+
+    since_iso = state.task_started_at
+    result = check_sentry_after_deploy(since_iso=since_iso)
+    state.sentry_post_deploy_result = result
+    return _persist(state, "check_sentry_post_deploy_if_needed")
 
 
 def run_e2e_if_needed(state: RunnerState) -> RunnerState:
@@ -4128,6 +4219,7 @@ def build_graph():
     builder.add_node("deterministic_repair_if_needed", deterministic_repair_if_needed)
     builder.add_node("apply_sql_if_needed", apply_sql_if_needed)
     builder.add_node("deploy_if_needed", deploy_if_needed)
+    builder.add_node("check_sentry_post_deploy_if_needed", check_sentry_post_deploy_if_needed)
     builder.add_node("run_e2e_if_needed", run_e2e_if_needed)
     builder.add_node("run_ui_flow_validation_if_needed", run_ui_flow_validation_if_needed)
     builder.add_node("run_product_eval_if_needed", run_product_eval_if_needed)
@@ -4229,7 +4321,8 @@ def build_graph():
     builder.add_edge("commit_push_merge_if_needed", "deterministic_repair_if_needed")
     builder.add_edge("deterministic_repair_if_needed", "apply_sql_if_needed")
     builder.add_edge("apply_sql_if_needed", "deploy_if_needed")
-    builder.add_edge("deploy_if_needed", "run_e2e_if_needed")
+    builder.add_edge("deploy_if_needed", "check_sentry_post_deploy_if_needed")
+    builder.add_edge("check_sentry_post_deploy_if_needed", "run_e2e_if_needed")
     builder.add_edge("run_e2e_if_needed", "run_ui_flow_validation_if_needed")
     builder.add_edge("run_ui_flow_validation_if_needed", "run_product_eval_if_needed")
     builder.add_edge("run_product_eval_if_needed", "update_github_if_needed")

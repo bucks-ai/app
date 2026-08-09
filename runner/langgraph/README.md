@@ -368,6 +368,9 @@ Copy `.env.example` to `.env` and fill in:
 | `ROLLBACK_REVERT_POLICY` | Recovery plan to write after a failed/timed-out deploy: `manual`, `rollback`, `revert`, `rollback_then_revert`, or `disabled` (default: `manual`) |
 | `VERCEL_POLL_TIMEOUT` | Max seconds to poll a deployment before giving up (default: 180) |
 | `VERCEL_POLL_INTERVAL` | Seconds between deployment status reads (default: 5) |
+| `DEPLOY_ON_SHA_MISMATCH` | When startup preflight finds production serving a stale commit (production SHA ≠ origin/main) and `AUTO_DEPLOY=true`, immediately trigger a Vercel deploy to catch up (default: true). FAIL-OPEN: a deploy error logs a warning and the loop continues. |
+| `SENTRY_POST_DEPLOY_CHECK` | After each successful deploy, query Sentry for new errors since the task started and log a summary (default: true). FAIL-OPEN: Sentry unconfigured or unreachable logs `sentry_post_deploy_degraded` and the loop continues. |
+| `PUSH_DESTINATION_VERIFY` | After a push for business missions, re-verify that the git remote still points to the business's repo (default: true). A confirmed mismatch aborts the merge; a transient git error degrades to a warning and the loop continues. |
 | `POSTHOG_PERSONAL_API_KEY` | Personal API key used by `tools/posthog_tools.py` to read event counts / funnels via the PostHog query API (optional — reads degrade to an error result when unset) |
 | `POSTHOG_PROJECT_ID` | PostHog project id to scope queries to (optional — required alongside `POSTHOG_PERSONAL_API_KEY`) |
 | `POSTHOG_HOST` | PostHog API host (default: `https://us.i.posthog.com`) |

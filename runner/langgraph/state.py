@@ -127,3 +127,5 @@ class RunnerState(BaseModel):
     startup_self_heal: Optional[dict] = None         # m4c-03 summary of what the startup heal requeued, parked, or pruned
     wip_checkpoint: Optional[dict] = None            # M4c.4 outcome of the last checkpoint_wip() — carries the sha the stop report quotes
     last_check_environmental: Optional[bool] = None  # M4c.4: True when the last check.sh failure was classified as pre-existing (environmental), not introduced by the task
+    task_started_at: Optional[str] = None            # M4c: ISO-8601 UTC when the current task's worker was dispatched; used as Sentry post-deploy since_iso
+    sentry_post_deploy_result: Optional[dict] = None  # M4c: result of check_sentry_after_deploy for the current task

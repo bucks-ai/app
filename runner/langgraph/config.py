@@ -287,6 +287,23 @@ class RunnerConfig:
     vercel_poll_interval: int = field(
         default_factory=lambda: int(os.getenv("VERCEL_POLL_INTERVAL", "5"))
     )
+    # M4c: when startup preflight detects a SHA mismatch (production ≠ main)
+    # AND auto_deploy is on, immediately trigger a deploy to catch up. Default
+    # on so the runner fixes stale production without founder intervention.
+    deploy_on_sha_mismatch: bool = field(
+        default_factory=lambda: os.getenv("DEPLOY_ON_SHA_MISMATCH", "true").lower() == "true"
+    )
+    # M4c: check Sentry for new errors after each successful deploy; logs but
+    # never halts the loop (fail-open). Disable only in environments without
+    # Sentry or when the noise is undesirable.
+    sentry_post_deploy_enabled: bool = field(
+        default_factory=lambda: os.getenv("SENTRY_POST_DEPLOY_CHECK", "true").lower() == "true"
+    )
+    # M4c: re-verify the git remote after push for business repos. Ensures the
+    # commit actually landed in the business's repo, not a stale workspace.
+    push_destination_verify: bool = field(
+        default_factory=lambda: os.getenv("PUSH_DESTINATION_VERIFY", "true").lower() == "true"
+    )
     auto_apply_sql: bool = field(
         default_factory=lambda: os.getenv("AUTO_APPLY_SQL", "true").lower() == "true"
     )
@@ -796,6 +813,9 @@ class RunnerConfig:
             "rollback_revert_policy": self.rollback_revert_policy,
             "vercel_poll_timeout": self.vercel_poll_timeout,
             "vercel_poll_interval": self.vercel_poll_interval,
+            "deploy_on_sha_mismatch": self.deploy_on_sha_mismatch,
+            "sentry_post_deploy_enabled": self.sentry_post_deploy_enabled,
+            "push_destination_verify": self.push_destination_verify,
             "auto_apply_sql": self.auto_apply_sql,
             "require_sql_approval": self.require_sql_approval,
             "sql_environment": self.sql_environment,
