@@ -82,6 +82,16 @@ _DEFAULT_SLACK_EVENTS = frozenset({
     # (M4c.4). It is the failure, not the success, that has to reach a human;
     # the sha of a successful checkpoint rides along in the stop report.
     "wip_checkpoint_failed",
+    # M4c: watchdog wrapper events.  "watchdog_restart" and "watchdog_stopped"
+    # are the most operationally important — the first confirms the loop is
+    # self-healing, the second means a human gate fired and a human needs to act.
+    "watchdog_started",
+    "watchdog_restart",
+    "watchdog_stopped",
+    "watchdog_stall_detected",
+    # Periodic pulse so operators can confirm the watchdog process is alive even
+    # when the inner loop is sleeping through a cooldown window.
+    "babysitter_heartbeat",
 })
 
 
@@ -569,6 +579,26 @@ class RunnerConfig:
     startup_preflight_enabled: bool = field(
         default_factory=lambda: os.getenv("STARTUP_PREFLIGHT", "true").lower() == "true"
     )
+    # M4c: watchdog wrapper process — auto-restarts run-loop on any non-human-gate
+    # exit.  The wrapper lives in main.py (python main.py watchdog) and is the
+    # process an operator leaves running.  These knobs tune how it behaves.
+    watchdog_heartbeat_interval_s: int = field(
+        default_factory=lambda: int(os.getenv("WATCHDOG_HEARTBEAT_INTERVAL_S", "300"))
+    )
+    # Seconds of subprocess silence before the watchdog kills and restarts the
+    # inner loop.  0 disables stall detection.  Default 30 min gives enough
+    # headroom for long PR-checks waits and cooldown sleeps.
+    watchdog_stall_threshold_s: int = field(
+        default_factory=lambda: int(os.getenv("WATCHDOG_STALL_THRESHOLD_S", "1800"))
+    )
+    # 0 = unlimited restarts (the "constantly running" spec).  Set > 0 to cap
+    # total restarts in a single watchdog session for controlled experiments.
+    watchdog_max_restarts: int = field(
+        default_factory=lambda: int(os.getenv("WATCHDOG_MAX_RESTARTS", "0"))
+    )
+    watchdog_restart_delay_s: int = field(
+        default_factory=lambda: int(os.getenv("WATCHDOG_RESTART_DELAY_S", "30"))
+    )
     # M4c.4: run scripts/check.sh ONCE at session start, before any task is
     # dispatched. If it fails, the repo is already broken and no amount of
     # worker retries will produce a passing check — stop immediately with
@@ -843,6 +873,10 @@ class RunnerConfig:
             "claude_subscription_cooldown_enabled": self.claude_subscription_cooldown_enabled,
             "claude_subscription_cooldown_wait_s": self.claude_subscription_cooldown_wait_s,
             "claude_subscription_cooldown_max_waits": self.claude_subscription_cooldown_max_waits,
+            "watchdog_heartbeat_interval_s": self.watchdog_heartbeat_interval_s,
+            "watchdog_stall_threshold_s": self.watchdog_stall_threshold_s,
+            "watchdog_max_restarts": self.watchdog_max_restarts,
+            "watchdog_restart_delay_s": self.watchdog_restart_delay_s,
         }
 
     def threshold_violations(self) -> list:

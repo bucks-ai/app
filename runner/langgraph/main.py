@@ -323,6 +323,209 @@ def cmd_run_loop(args):
         print("\nLoop interrupted by user.")
 
 
+def cmd_watchdog(args):
+    """M4c: babysitter wrapper — auto-restart run-loop on any non-human-gate exit.
+
+    Runs ``python main.py run-loop`` as a subprocess and monitors it:
+    - A background thread emits ``babysitter_heartbeat`` every
+      WATCHDOG_HEARTBEAT_INTERVAL_S seconds so operators can confirm the
+      wrapper is alive.
+    - If the inner process has not updated its state file for more than
+      WATCHDOG_STALL_THRESHOLD_S seconds, the thread kills the subprocess and
+      the main loop restarts it (``watchdog_stall_detected``).
+    - On subprocess exit, reads .runtime/state.local.json to get the
+      stop_reason, then evaluates the restart decision:
+        · Hard human gates (awaiting_resources, merge_approval_required, etc.)
+          log ``watchdog_stopped`` and exit — a human must act first.
+        · Everything else (rate limits, quota exhaustion, max_loop_tasks, …)
+          logs ``watchdog_restart``, sleeps the appropriate wait, and restarts.
+    - Ctrl+C propagates a clean stop.
+
+    Slack pings are sent on start, each restart, and on permanent stop, using
+    the existing ``notify_event`` machinery (degrades gracefully when the
+    webhook is not configured).
+    """
+    import subprocess
+    import threading
+    import time
+    from pathlib import Path
+
+    from config import get_config
+    from tools.log_tools import log_event, read_state
+    from tools.loop_watchdog import evaluate_restart_decision
+
+    cfg = get_config()
+    heartbeat_interval_s = cfg.watchdog_heartbeat_interval_s
+    stall_threshold_s = cfg.watchdog_stall_threshold_s
+    max_restarts = cfg.watchdog_max_restarts
+    restart_delay_s = cfg.watchdog_restart_delay_s
+    # CLI flag overrides the env var
+    if getattr(args, "max_restarts", None) is not None:
+        max_restarts = args.max_restarts
+
+    base_dir = Path(__file__).parent
+    state_file = base_dir / ".runtime" / "state.local.json"
+    python_bin = sys.executable
+    run_loop_cmd = [python_bin, str(base_dir / "main.py"), "run-loop"]
+
+    def _slack(event_type, payload):
+        try:
+            from tools.slack_tools import notify_event
+            notify_event(event_type, payload)
+        except Exception:
+            pass  # Never interrupt the watchdog for a Slack error
+
+    restart_count = 0
+    log_event("watchdog_started", {
+        "heartbeat_interval_s": heartbeat_interval_s,
+        "stall_threshold_s": stall_threshold_s,
+        "max_restarts": max_restarts,
+    })
+    _slack("watchdog_started", {
+        "heartbeat_interval_s": heartbeat_interval_s,
+        "stall_threshold_s": stall_threshold_s,
+        "max_restarts": max_restarts,
+    })
+    print(
+        f"Watchdog starting (heartbeat={heartbeat_interval_s}s "
+        f"stall={stall_threshold_s}s max_restarts={max_restarts or 'unlimited'})"
+    )
+
+    while True:
+        log_event("watchdog_loop_starting", {"restart_count": restart_count})
+
+        try:
+            proc = subprocess.Popen(run_loop_cmd, cwd=str(base_dir))
+        except Exception as exc:
+            log_event("watchdog_spawn_failed", {
+                "error": str(exc),
+                "restart_count": restart_count,
+            })
+            time.sleep(restart_delay_s)
+            restart_count += 1
+            continue
+
+        stop_monitor = threading.Event()
+        stall_triggered = threading.Event()
+
+        def _monitor(proc=proc, stop=stop_monitor, stall=stall_triggered):
+            last_heartbeat = time.time()
+            last_mtime = state_file.stat().st_mtime if state_file.exists() else None
+
+            while not stop.is_set() and proc.poll() is None:
+                time.sleep(10)
+                now = time.time()
+
+                if now - last_heartbeat >= heartbeat_interval_s:
+                    log_event("babysitter_heartbeat", {
+                        "restart_count": restart_count,
+                        "pid": proc.pid,
+                    })
+                    last_heartbeat = now
+
+                if stall_threshold_s > 0 and state_file.exists():
+                    try:
+                        mtime = state_file.stat().st_mtime
+                        if mtime != last_mtime:
+                            last_mtime = mtime
+                        else:
+                            stale_age = now - (last_mtime or now)
+                            if stale_age > stall_threshold_s:
+                                log_event("watchdog_stall_detected", {
+                                    "stale_seconds": round(stale_age),
+                                    "pid": proc.pid,
+                                    "restart_count": restart_count,
+                                })
+                                _slack("watchdog_stall_detected", {
+                                    "stale_seconds": round(stale_age),
+                                    "restart_count": restart_count,
+                                })
+                                stall.set()
+                                proc.kill()
+                                break
+                    except OSError:
+                        pass
+
+        monitor = threading.Thread(target=_monitor, daemon=True, name="watchdog-monitor")
+        monitor.start()
+
+        try:
+            proc.wait()
+        except KeyboardInterrupt:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+            stop_monitor.set()
+            log_event("watchdog_stopped", {"reason": "keyboard_interrupt"})
+            _slack("watchdog_stopped", {"reason": "keyboard_interrupt"})
+            print("\nWatchdog stopped by user.")
+            return
+        finally:
+            stop_monitor.set()
+
+        monitor.join(timeout=5)
+
+        state = read_state() or {}
+        stop_reason = state.get("stop_reason")
+
+        if stall_triggered.is_set():
+            restart_count += 1
+            log_event("watchdog_restart", {
+                "reason": "stall detected — inner loop was silent",
+                "restart_count": restart_count,
+                "stop_reason": stop_reason,
+            })
+            _slack("watchdog_restart", {
+                "reason": "stall detected — inner loop was silent",
+                "restart_count": restart_count,
+            })
+            print(f"  Watchdog restarting after stall (restart #{restart_count})")
+            time.sleep(restart_delay_s)
+            continue
+
+        decision = evaluate_restart_decision(
+            stop_reason,
+            state,
+            max_restarts=max_restarts,
+            restart_count=restart_count,
+            default_delay_s=restart_delay_s,
+        )
+
+        if not decision["should_restart"]:
+            log_event("watchdog_stopped", {
+                "reason": decision["reason"],
+                "stop_reason": stop_reason,
+                "restart_count": restart_count,
+            })
+            _slack("watchdog_stopped", {
+                "reason": decision["reason"],
+                "stop_reason": stop_reason,
+                "restart_count": restart_count,
+            })
+            print(f"Watchdog stopping: {decision['reason']}")
+            return
+
+        wait = decision["wait_seconds"]
+        restart_count += 1
+        log_event("watchdog_restart", {
+            "reason": decision["reason"],
+            "restart_count": restart_count,
+            "wait_seconds": round(wait),
+            "stop_reason": stop_reason,
+        })
+        _slack("watchdog_restart", {
+            "reason": decision["reason"],
+            "restart_count": restart_count,
+            "wait_seconds": round(wait),
+            "stop_reason": stop_reason,
+        })
+        print(f"  Watchdog restarting in {round(wait)}s: {decision['reason']}")
+        if wait > 0:
+            time.sleep(wait)
+
+
 def cmd_reset_state(args):
     from tools.log_tools import update_state, log_event, _logs_path
 
@@ -545,6 +748,21 @@ def main():
     sub.add_parser("run-once", help="Run one LangGraph cycle")
     sub.add_parser("run-loop", help="Run continuous autonomous loop")
 
+    p_watchdog = sub.add_parser(
+        "watchdog",
+        help=(
+            "M4c babysitter: run run-loop as a subprocess and auto-restart on "
+            "any non-human-gate exit (rate limits, session endings, crashes)"
+        ),
+    )
+    p_watchdog.add_argument(
+        "--max-restarts",
+        type=int,
+        default=None,
+        dest="max_restarts",
+        help="Override WATCHDOG_MAX_RESTARTS (0 = unlimited)",
+    )
+
     p_soak = sub.add_parser("soak", help="Run the 100-task in-memory soak harness")
     p_soak.add_argument("--tasks", type=int, default=100, help="Number of tasks to simulate (default 100)")
     p_soak.add_argument("--seed", type=int, default=None, help="Random seed for reproducibility")
@@ -598,6 +816,7 @@ def main():
         "sync-github-issues": cmd_sync_github_issues,
         "run-once": cmd_run_once,
         "run-loop": cmd_run_loop,
+        "watchdog": cmd_watchdog,
         "analytics-report": cmd_analytics_report,
         "scan-sql": cmd_scan_sql,
         "logs": cmd_logs,
