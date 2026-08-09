@@ -98,6 +98,7 @@ _ENV_NAME_OVERRIDES = {
     "claude_subscription_cooldown_enabled": "CLAUDE_SUBSCRIPTION_COOLDOWN",
     "planner_quality_gate_v2_enabled": "PLANNER_QUALITY_GATE_V2",
     "planner_scope_guard_enabled": "PLANNER_SCOPE_GUARD",
+    "repo_health_preflight_enabled": "REPO_HEALTH_PREFLIGHT",
 }
 
 # Never render a config value whose key looks like a credential. The handler
@@ -742,6 +743,23 @@ STOP_HANDLERS: dict[str, StopHandler] = dict([
     )),
 
     # ── Startup refusals ────────────────────────────────────────────────────
+    _h(StopHandler(
+        reason="repo_unhealthy",
+        headline="Repo health preflight found a blocking issue before task dispatch",
+        cause=(
+            "The per-task repo health check found one or more blocking conditions in "
+            "{repo_path} (e.g., uncommitted changes, wrong branch, or broken CI state) "
+            "before dispatching a worker. Dispatching into a broken repo risks workers "
+            "compounding the damage rather than fixing the task."
+        ),
+        action=(
+            "Read outbox/repo_health.txt (or the repo_unhealthy event below) for the "
+            "exact failing checks. Restore the repo to a clean, deployable state in "
+            "{repo_path}, then re-run `python main.py run-loop`."
+        ),
+        config_keys=("repo_health_preflight_enabled", "repo_path"),
+        evidence_events=("repo_unhealthy",),
+    )),
     _h(StopHandler(
         reason="preflight_unsafe",
         headline="Startup preflight refused to run from this state",

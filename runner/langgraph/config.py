@@ -459,6 +459,12 @@ class RunnerConfig:
     max_auto_repair_attempts: int = field(
         default_factory=lambda: int(os.getenv("MAX_AUTO_REPAIR_ATTEMPTS", "2"))
     )
+    # M4c.4: maximum repair nesting depth for deterministic failures. Depth 0 is
+    # the first repair; depth >= max triggers escalation to human instead of
+    # another repair attempt.
+    max_repair_depth: int = field(
+        default_factory=lambda: int(os.getenv("MAX_REPAIR_DEPTH", "3"))
+    )
     risk_based_merge_approval_enabled: bool = field(
         default_factory=lambda: os.getenv("RISK_BASED_MERGE_APPROVAL_ENABLED", "true").lower() == "true"
     )

@@ -87,7 +87,20 @@ from tools.completion_evidence import guard_completion_evidence
 from tools.independent_code_review import guard_code_review, get_diff_text
 from tools.high_risk_claude_review import guard_high_risk_claude_review
 from tools.codex_to_claude_escalation import should_escalate, build_repair_prompt
-from tools.auto_repair_loop import should_auto_repair, build_auto_repair_prompt
+from tools.auto_repair_loop import (
+    should_auto_repair,
+    build_auto_repair_prompt,
+    classify_deterministic_failure,
+    make_failure_signature,
+    should_deterministic_repair,
+    fetch_ci_failure_evidence,
+    fetch_merge_conflict_evidence,
+    build_deterministic_repair_prompt,
+    CI_CHECK_FAILURE,
+    MERGE_CONFLICT,
+    COMPLETION_EVIDENCE_BLOCK,
+    GATE_BLOCK,
+)
 from tools.playwright_harness import run_e2e_suite, is_playwright_available, build_business_smoke_scenarios
 from tools.deploy_target import resolve_target_url
 from tools.ui_flow_validator import (
@@ -2205,6 +2218,173 @@ def commit_push_merge_if_needed(state: RunnerState) -> RunnerState:
     return _persist(state, "commit_push_merge_if_needed")
 
 
+def deterministic_repair_if_needed(state: RunnerState) -> RunnerState:
+    """Deterministic-Failure Repair (M4c.4).
+
+    When commit_push_merge_if_needed sets a deterministic failure on
+    worker_result (CI check failure or merge conflict), dispatch a fresh repair
+    worker whose prompt contains the actual failure evidence — the failing check
+    name, CI log excerpt, or conflicted file list and diff.  After the repair
+    worker runs, re-attempt local checks and, if they pass, re-run the
+    commit/push/merge cycle inline.
+
+    Repair attempts consume the ``repair_depth`` budget (MAX_REPAIR_DEPTH=3),
+    not MAX_TASK_RETRIES.  Two identical failure signatures in a row escalate
+    to human without a further attempt.  Transient failures are never routed
+    here — they keep the retry-with-backoff path unchanged.
+
+    Skipped when AUTO_REPAIR_LOOP_ENABLED=false.
+    """
+    if not cfg.auto_repair_loop_enabled:
+        return state
+
+    result = state.worker_result or {}
+    # Only act when the pipeline step that ran produced a failure — not a
+    # clean pass that already went through.
+    if result.get("success"):
+        return state
+
+    error = result.get("error") or ""
+    failure_class = classify_deterministic_failure(error)
+    if not failure_class:
+        return state  # transient or unclassifiable → let failure guard handle
+
+    task = state.current_task or {}
+    task_id = state.current_task_id or "unknown"
+    repo_path = _effective_repo_path(state)
+
+    # Build failure signature before attempting repair so we can detect repeats.
+    if failure_class == CI_CHECK_FAILURE:
+        evidence = fetch_ci_failure_evidence(
+            check_runs=[],  # full check_run objects not available here; use error text
+            repo=_effective_github_repo(task),
+            token=_effective_github_token(task),
+        )
+        # Supplement with check names parsed from the error string for a stable signature.
+        evidence["failed_checks"] = [
+            part.strip()
+            for part in error.replace("pr_checks_failed:", "").split(",")
+            if part.strip()
+        ] or [error[:80]]
+    elif failure_class == MERGE_CONFLICT:
+        evidence = fetch_merge_conflict_evidence(repo_path)
+    else:
+        evidence = {}
+
+    current_sig = make_failure_signature(failure_class, evidence)
+    ok, stop_reason = should_deterministic_repair(
+        state.repair_depth, cfg.max_repair_depth, state.last_failure_signature, current_sig
+    )
+
+    if not ok:
+        if stop_reason == "repeated_signature":
+            log_event("deterministic_repair_stopped", {
+                "task_id": task_id,
+                "reason": "identical failure signature repeated — escalating to human",
+                "signature": current_sig,
+                "failure_class": failure_class,
+            }, task_id=task_id)
+        else:
+            log_event("deterministic_repair_stopped", {
+                "task_id": task_id,
+                "reason": f"repair depth exceeded ({state.repair_depth} >= {cfg.max_repair_depth})",
+                "failure_class": failure_class,
+            }, task_id=task_id)
+        return _persist(state, "deterministic_repair_if_needed")
+
+    state.last_failure_signature = current_sig
+    state.repair_depth += 1
+    attempt = state.repair_depth
+    max_attempts = cfg.max_repair_depth
+
+    original_prompt = next(
+        (m["content"] for m in reversed(state.messages) if m.get("role") == "user"),
+        "",
+    )
+    repair_prompt = build_deterministic_repair_prompt(
+        failure_class, original_prompt, evidence, task, attempt, max_attempts
+    )
+
+    log_event("deterministic_repair_attempted", {
+        "task_id": task_id,
+        "failure_class": failure_class,
+        "repair_depth": attempt,
+        "max_repair_depth": max_attempts,
+        "worker": state.current_worker,
+    }, task_id=task_id)
+
+    repair_task = dict(task)
+    if state.resolved_model:
+        repair_task["resolved_model"] = state.resolved_model
+
+    if state.current_worker == "codex":
+        worker = CodexWorker()
+    else:
+        worker = ClaudeWorker()
+
+    _start = time.monotonic()
+    repair_result = worker.run_worker_prompt(repair_prompt, repair_task)
+    elapsed = round(time.monotonic() - _start, 2)
+
+    if not repair_result.success:
+        log_event("deterministic_repair_worker_failed", {
+            "task_id": task_id,
+            "failure_class": failure_class,
+            "repair_depth": attempt,
+            "elapsed_seconds": elapsed,
+            "error": (repair_result.error or "")[:200],
+        }, task_id=task_id)
+        return _persist(state, "deterministic_repair_if_needed")
+
+    # Worker succeeded — run local checks.
+    check = run_check(repo_path)
+    if not check["success"]:
+        state.check_passed = False
+        state.check_output = check.get("output") or ""
+        log_event("deterministic_repair_check_failed", {
+            "task_id": task_id,
+            "failure_class": failure_class,
+            "repair_depth": attempt,
+            "elapsed_seconds": elapsed,
+        }, task_id=task_id)
+        return _persist(state, "deterministic_repair_if_needed")
+
+    state.check_passed = True
+    state.check_output = check.get("output") or ""
+    state.worker_result = repair_result.model_dump()
+
+    # Re-attempt the merge step inline so the repaired work actually lands.
+    branch = task.get("branch", f"feature/{task.get('id', 'task')}")
+    if cfg.merge_via_pr:
+        # Reset worker_result to success so _merge_via_pull_request can proceed;
+        # _mark_merge_step_failed will flip it back if the merge fails again.
+        state.worker_result = {**state.worker_result, "success": True, "error": None}
+        _merge_via_pull_request(state, task, branch)
+        if not (state.worker_result or {}).get("success"):
+            log_event("deterministic_repair_merge_failed", {
+                "task_id": task_id,
+                "failure_class": failure_class,
+                "repair_depth": attempt,
+                "error": (state.worker_result or {}).get("error", "")[:200],
+            }, task_id=task_id)
+        else:
+            log_event("deterministic_repair_succeeded", {
+                "task_id": task_id,
+                "failure_class": failure_class,
+                "repair_depth": attempt,
+                "elapsed_seconds": elapsed,
+            }, task_id=task_id)
+    else:
+        log_event("deterministic_repair_succeeded", {
+            "task_id": task_id,
+            "failure_class": failure_class,
+            "repair_depth": attempt,
+            "elapsed_seconds": elapsed,
+        }, task_id=task_id)
+
+    return _persist(state, "deterministic_repair_if_needed")
+
+
 def _mark_merge_step_failed(state: RunnerState, error: str) -> None:
     """Fail the task through the normal worker-result path so it feeds the same
     failure_guard / retry / circuit-breaker handling as any other worker failure
@@ -3433,6 +3613,8 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
     state.auto_repair_attempt = 0
     state.auto_repair_status = None
     state.check_output = None
+    state.repair_depth = 0
+    state.last_failure_signature = None
     state.resolved_model = None
     state.context_compression = None
     state.merge_approval_status = None
@@ -3861,6 +4043,7 @@ def build_graph():
     builder.add_node("auto_repair_if_needed", auto_repair_if_needed)
     builder.add_node("check_merge_approval_if_needed", check_merge_approval_if_needed)
     builder.add_node("commit_push_merge_if_needed", commit_push_merge_if_needed)
+    builder.add_node("deterministic_repair_if_needed", deterministic_repair_if_needed)
     builder.add_node("apply_sql_if_needed", apply_sql_if_needed)
     builder.add_node("deploy_if_needed", deploy_if_needed)
     builder.add_node("run_e2e_if_needed", run_e2e_if_needed)
@@ -3958,7 +4141,8 @@ def build_graph():
         "decide_continue_or_stop": "decide_continue_or_stop",
         "commit_push_merge_if_needed": "commit_push_merge_if_needed",
     })
-    builder.add_edge("commit_push_merge_if_needed", "apply_sql_if_needed")
+    builder.add_edge("commit_push_merge_if_needed", "deterministic_repair_if_needed")
+    builder.add_edge("deterministic_repair_if_needed", "apply_sql_if_needed")
     builder.add_edge("apply_sql_if_needed", "deploy_if_needed")
     builder.add_edge("deploy_if_needed", "run_e2e_if_needed")
     builder.add_edge("run_e2e_if_needed", "run_ui_flow_validation_if_needed")
