@@ -82,6 +82,13 @@ _DEFAULT_SLACK_EVENTS = frozenset({
     # (M4c.4). It is the failure, not the success, that has to reach a human;
     # the sha of a successful checkpoint rides along in the stop report.
     "wip_checkpoint_failed",
+    # M4c.4: pre-execution planning events. Conflicts and duplicates reach Slack
+    # because they surface work that will collide or has already been done —
+    # both need a human decision before the queue runs. Oversized plans are a
+    # splitting recommendation, not a block, but they're also worth seeing.
+    "plan_conflict_detected",
+    "plan_duplicate_detected",
+    "plan_oversized_detected",
     # M4c: watchdog wrapper events.  "watchdog_restart" and "watchdog_stopped"
     # are the most operationally important — the first confirms the loop is
     # self-healing, the second means a human gate fired and a human needs to act.
@@ -408,6 +415,23 @@ class RunnerConfig:
     )
     seeded_mission_queue_strict: bool = field(
         default_factory=lambda: os.getenv("SEEDED_MISSION_QUEUE_STRICT", "false").lower() == "true"
+    )
+    # M4c.4: cheap pre-execution planning pass. For each seeded task a short LLM
+    # call predicts which files will be touched, whether the deliverable already
+    # exists, and which other tasks must land first. The resulting plans drive
+    # conflict detection (shared files → sequential queue ordering), duplicate
+    # detection (deliverable exists → founder review), and right-sizing (too many
+    # files → flag for splitting). Plans are persisted as the declared scope for
+    # M4c.5 enforcement. The whole pass degrades gracefully: if a plan call fails
+    # or planning is disabled, execution proceeds exactly as it does today.
+    mission_planning_enabled: bool = field(
+        default_factory=lambda: os.getenv("MISSION_PLANNING", "true").lower() == "true"
+    )
+    mission_planning_max_files: int = field(
+        default_factory=lambda: int(os.getenv("MISSION_PLANNING_MAX_FILES", "10"))
+    )
+    mission_planning_model: str = field(
+        default_factory=lambda: os.getenv("MISSION_PLANNING_MODEL", "claude-haiku-4-5-20251001")
     )
     business_execution_enabled: bool = field(
         default_factory=lambda: os.getenv("BUSINESS_EXECUTION_ENABLED", "false").lower() == "true"
@@ -807,6 +831,9 @@ class RunnerConfig:
             "mission_compiler_enabled": self.mission_compiler_enabled,
             "seeded_mission_queue_enabled": self.seeded_mission_queue_enabled,
             "seeded_mission_queue_strict": self.seeded_mission_queue_strict,
+            "mission_planning_enabled": self.mission_planning_enabled,
+            "mission_planning_max_files": self.mission_planning_max_files,
+            "mission_planning_model": self.mission_planning_model,
             "business_execution_enabled": self.business_execution_enabled,
             "planner_quality_gate_v2_enabled": self.planner_quality_gate_v2_enabled,
             "planner_scope_guard_enabled": self.planner_scope_guard_enabled,

@@ -133,6 +133,11 @@ from tools.mission_compiler import (
     compile_mission,
     format_mission_summary,
 )
+from tools.mission_planner import (
+    run_mission_planning_pass,
+    load_all_plans,
+    save_plan,
+)
 from tools.seeded_mission_queue import (
     fetch_next_queued_mission,
     fetch_mission_tasks,
@@ -929,6 +934,76 @@ def seed_mission_queue_if_needed(state: RunnerState) -> RunnerState:
     })
 
     return _persist(state, "seed_mission_queue_if_needed")
+
+
+def plan_mission_if_needed(state: RunnerState) -> RunnerState:
+    """Run a cheap planning pass over all queued tasks that lack a plan.
+
+    M4c.4: for each unplanned task, a short Anthropic API call with a cheap
+    model (MISSION_PLANNING_MODEL, default Haiku) predicts which files the
+    task will touch, whether the deliverable already exists, and which other
+    tasks must land first.  Plans are persisted to .runtime/plans/<task_id>.json
+    as the declared scope for M4c.5 enforcement.
+
+    Side-effects on the local queue:
+    - When tasks share expected files, the queue is rewritten in
+      conflict-resolved order and a ``plan_conflict_detected`` event is logged.
+    - When a task's deliverable already exists, ``plan_duplicate_detected`` is
+      logged for founder review.
+    - When a plan lists more than MISSION_PLANNING_MAX_FILES files,
+      ``plan_oversized_detected`` is logged as a splitting recommendation.
+
+    Degrades gracefully: if planning fails or MISSION_PLANNING=false, execution
+    continues exactly as before this node existed.
+    """
+    if not cfg.mission_planning_enabled:
+        return _persist(state, "plan_mission_if_needed")
+
+    queued = [t for t in load_tasks() if t.get("status") == "queued"]
+    if not queued:
+        return _persist(state, "plan_mission_if_needed")
+
+    try:
+        result = run_mission_planning_pass(
+            tasks=queued,
+            repo_path=cfg.repo_path,
+            model=cfg.mission_planning_model,
+            api_key=cfg.anthropic_api_key,
+        )
+    except Exception as exc:
+        log_event("mission_planning_failed", {"error": str(exc)})
+        return _persist(state, "plan_mission_if_needed")
+
+    for conflict in result.get("conflicts", []):
+        log_event("plan_conflict_detected", conflict)
+
+    for dup in result.get("duplicates", []):
+        log_event("plan_duplicate_detected", dup)
+
+    for oversized in result.get("oversized", []):
+        log_event("plan_oversized_detected", oversized)
+
+    # Reorder the queue when conflict analysis produced a different ordering
+    reordered_ids = result.get("reordered_task_ids", [])
+    if reordered_ids:
+        all_tasks = load_tasks()
+        id_to_task = {t["id"]: t for t in all_tasks}
+        non_queued = [t for t in all_tasks if t.get("status") != "queued"]
+        reordered_queued = [id_to_task[tid] for tid in reordered_ids if tid in id_to_task]
+        remaining_queued = [
+            t for t in all_tasks
+            if t.get("status") == "queued" and t["id"] not in set(reordered_ids)
+        ]
+        from tools.task_tools import save_tasks
+        save_tasks(non_queued + reordered_queued + remaining_queued)
+
+        # Update current_task to match the new first queued task
+        new_first = get_next_queued_task()
+        if new_first:
+            state.current_task = new_first
+            state.current_task_id = new_first["id"]
+
+    return _persist(state, "plan_mission_if_needed")
 
 
 def ask_chatgpt_for_task_if_needed(state: RunnerState) -> RunnerState:
@@ -3937,6 +4012,12 @@ def _route_after_seed_mission_queue(state: RunnerState) -> str:
     # falling through to the ChatGPT planner, which strict mode must never consult.
     if state.stop_reason == "seeded_queue_exhausted":
         return "decide_continue_or_stop"
+    # Always run the planning pass (M4c.4) — it is a no-op when disabled or when
+    # all tasks already have plans, so it is safe to visit on every cycle.
+    return "plan_mission_if_needed"
+
+
+def _route_after_plan_mission(state: RunnerState) -> str:
     if state.current_task:
         return "choose_worker"
     return "ask_chatgpt_for_task_if_needed"
@@ -4025,6 +4106,7 @@ def build_graph():
     builder.add_node("load_next_task", load_next_task)
     builder.add_node("compile_mission_if_needed", compile_mission_if_needed)
     builder.add_node("seed_mission_queue_if_needed", seed_mission_queue_if_needed)
+    builder.add_node("plan_mission_if_needed", plan_mission_if_needed)
     builder.add_node("ask_chatgpt_for_task_if_needed", ask_chatgpt_for_task_if_needed)
     builder.add_node("choose_worker", choose_worker)
     builder.add_node("resolve_business_repo_if_needed", resolve_business_repo_if_needed)
@@ -4095,9 +4177,12 @@ def build_graph():
         "seed_mission_queue_if_needed": "seed_mission_queue_if_needed",
     })
     builder.add_conditional_edges("seed_mission_queue_if_needed", _route_after_seed_mission_queue, {
+        "plan_mission_if_needed": "plan_mission_if_needed",
+        "decide_continue_or_stop": "decide_continue_or_stop",
+    })
+    builder.add_conditional_edges("plan_mission_if_needed", _route_after_plan_mission, {
         "choose_worker": "choose_worker",
         "ask_chatgpt_for_task_if_needed": "ask_chatgpt_for_task_if_needed",
-        "decide_continue_or_stop": "decide_continue_or_stop",
     })
 
     builder.add_conditional_edges("ask_chatgpt_for_task_if_needed", _route_after_chatgpt, {
