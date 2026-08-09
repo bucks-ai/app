@@ -60,18 +60,25 @@ def test_sentry_check_degrades_on_exception():
     """If list_new_issues raises, the function returns available=False."""
     import tools.environment_ownership as _eo
     import tools.sentry_tools as st
+    import config as _cfg_mod
 
+    class _FakeCfg:
+        has_sentry = True
+
+    orig_get = _cfg_mod.get_config
     original = st.list_new_issues
 
     def _boom(since_iso):
         raise RuntimeError("network error")
 
+    _cfg_mod.get_config = lambda: _FakeCfg()
     st.list_new_issues = _boom
     try:
         result = _eo.check_sentry_after_deploy(since_iso="2026-01-01T00:00:00")
         assert result["available"] is False
         assert "network error" in result.get("reason", "")
     finally:
+        _cfg_mod.get_config = orig_get
         st.list_new_issues = original
 
 
