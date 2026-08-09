@@ -886,14 +886,16 @@ def test_route_compile_with_task_to_choose_worker():
     assert graph._route_after_compile_mission(s) == "choose_worker"
 
 
-def test_route_seed_queue_no_task_to_chatgpt():
+def test_route_seed_queue_no_task_goes_to_plan_mission():
+    # M4c.4: seed → planning pass (even when no task was seeded; the node is a no-op then)
     s = RunnerState(current_task=None)
-    assert graph._route_after_seed_mission_queue(s) == "ask_chatgpt_for_task_if_needed"
+    assert graph._route_after_seed_mission_queue(s) == "plan_mission_if_needed"
 
 
-def test_route_seed_queue_with_task_to_choose_worker():
+def test_route_seed_queue_with_task_goes_to_plan_mission():
+    # M4c.4: planning pass always runs between seeding and worker dispatch
     s = RunnerState(current_task={"id": "t1", "title": "T"})
-    assert graph._route_after_seed_mission_queue(s) == "choose_worker"
+    assert graph._route_after_seed_mission_queue(s) == "plan_mission_if_needed"
 
 
 def test_route_seed_queue_exhausted_to_decide_continue_or_stop():
@@ -902,10 +904,20 @@ def test_route_seed_queue_exhausted_to_decide_continue_or_stop():
     assert graph._route_after_seed_mission_queue(s) == "decide_continue_or_stop"
 
 
-def test_route_seed_queue_other_stop_reason_still_asks_chatgpt():
-    """Non-strict stop reasons (e.g. no_queued_tasks) must still fall through to the planner."""
+def test_route_seed_queue_other_stop_reason_goes_to_plan_mission():
+    """Non-strict stop reasons fall through to the planning pass (which is a no-op here)."""
     s = RunnerState(current_task=None, stop_reason="no_queued_tasks")
-    assert graph._route_after_seed_mission_queue(s) == "ask_chatgpt_for_task_if_needed"
+    assert graph._route_after_seed_mission_queue(s) == "plan_mission_if_needed"
+
+
+def test_route_after_plan_mission_no_task_to_chatgpt():
+    s = RunnerState(current_task=None)
+    assert graph._route_after_plan_mission(s) == "ask_chatgpt_for_task_if_needed"
+
+
+def test_route_after_plan_mission_with_task_to_choose_worker():
+    s = RunnerState(current_task={"id": "t1", "title": "T"})
+    assert graph._route_after_plan_mission(s) == "choose_worker"
 
 
 # ---------------------------------------------------------------------------
@@ -1179,10 +1191,12 @@ if __name__ == "__main__":
         test_node_gives_a_seeded_task_a_unique_id_when_one_is_taken,
         test_route_compile_no_task_to_seed_queue,
         test_route_compile_with_task_to_choose_worker,
-        test_route_seed_queue_no_task_to_chatgpt,
-        test_route_seed_queue_with_task_to_choose_worker,
+        test_route_seed_queue_no_task_goes_to_plan_mission,
+        test_route_seed_queue_with_task_goes_to_plan_mission,
         test_route_seed_queue_exhausted_to_decide_continue_or_stop,
-        test_route_seed_queue_other_stop_reason_still_asks_chatgpt,
+        test_route_seed_queue_other_stop_reason_goes_to_plan_mission,
+        test_route_after_plan_mission_no_task_to_chatgpt,
+        test_route_after_plan_mission_with_task_to_choose_worker,
         test_node_is_wired_into_graph,
         test_compile_still_routes_to_chatgpt_via_seed_node,
         test_strict_mode_sets_stop_reason_when_no_mission,
