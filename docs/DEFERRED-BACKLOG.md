@@ -15,10 +15,28 @@ the planner, not just to the founder.
 
 ---
 
-## 1. m4c4-05 — Network pause (no network is a PAUSE, not a failure)
+## 1. m4c4-05 — Network pause — ✅ RESOLVED 2026-08-09, SUPERSEDED
 
-**Status:** seeded, moved to back of queue
-**Original spec:** `runner/langgraph/seed_m4c4.py`, TASKS entry `m4c4-05-network-pause`
+**Status:** SUPERSEDED by `m4c4-05b-network-pause-watchdog`, seeded at the
+front of the queue (`runner/langgraph/seed_network_pause.py`). The original
+`m4c4-05` stays at the back of the queue marked `superseded_by`. **Do not build
+both.**
+
+**What changed:** `m4c-06` merged (PR 111, `f10358d`) and
+`tools/loop_watchdog.py` now owns the entire sleep-and-restart mechanism the
+original spec would have duplicated — hard-gate exclusions, limits-aware
+waits, and a 30s default restart delay that IS the poll interval m4c4-05
+asked for. The derived task therefore builds only the three genuinely missing
+pieces: a connectivity probe, network-error classification that touches no
+counters, and a cumulative patience ceiling.
+
+**Founder decision 2026-08-09 — no VPS.** Of everything the VPS would have
+solved for this setup, only "losing wifi while driving" mattered, and the
+derived task covers it directly. Overnight-run capability is already in place
+(see §5, which is now optional rather than recommended).
+
+**Original spec (retained for reference):** `runner/langgraph/seed_m4c4.py`,
+TASKS entry `m4c4-05-network-pause`
 
 **What it does:** treats total connectivity loss as an environmental pause
 (probe before dispatch, classify network-shaped errors mid-call, touch no
@@ -147,10 +165,19 @@ single task's cost ever surprises you again.
 "Do nothing", sleep = "Never". (2) durable — migrate the runner and its `.env`
 to a cheap always-on VPS ($5–10/mo, Hetzner/DO).
 
-**Why it is in this file:** it is not deferred because it is low value — it may
-be the **highest-value item on the entire roadmap per dollar**. It is here
-because it is a founder action that no runner task will ever pick up, and so it
-is the single most forgettable item of all.
+**DOWNGRADED 2026-08-09 — founder decision: no VPS for now.** The laptop
+already has overnight-run capability, and the one problem the VPS uniquely
+solved for this setup — losing wifi while driving — is handled directly by
+`m4c4-05b-network-pause-watchdog` (§1). The remaining VPS benefits (surviving
+Windows updates, reboots, power loss; killing the stale-shell-export env-drift
+class) are real but not currently blocking anything. Keep the power settings;
+treat the VPS as optional.
+
+**Why it stays in this file:** it is a founder action that no runner task will
+ever pick up, which makes it the single most forgettable item here. Revisit if
+the runner starts losing overnight runs to machine-level failures (updates,
+reboots, sleep) rather than to network or quota — that is the signal the
+laptop has become the bottleneck.
 
 **Why it matters:** the babysitter keeps the *loop* alive; it cannot keep the
 *machine* alive. Closing the laptop sleeps WSL and kills the runner regardless
