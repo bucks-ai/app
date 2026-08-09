@@ -89,7 +89,7 @@ test.describe("auth", () => {
 
       await expect(page).toHaveURL(/\/dashboard$/);
       await expect(
-        page.getByRole("heading", { name: "Your businesses" })
+        page.getByRole("region", { name: "Mission canvas" })
       ).toBeVisible();
     } finally {
       if (userId) await admin!.auth.admin.deleteUser(userId);
@@ -104,7 +104,7 @@ test.describe("auth", () => {
 
     await expect(page).toHaveURL(/\/dashboard$/);
     await expect(
-      page.getByRole("heading", { name: "Your businesses" })
+      page.getByRole("region", { name: "Mission canvas" })
     ).toBeVisible();
   });
 
@@ -137,9 +137,7 @@ test.describe("auth", () => {
     // renders the signed-out prompt in place instead of navigating away.
     await page.goto("/dashboard");
     await expect(
-      page.getByRole("heading", {
-        name: "Sign in to load your saved businesses.",
-      })
+      page.getByText("Sign in to load your saved businesses.")
     ).toBeVisible();
   });
 });
