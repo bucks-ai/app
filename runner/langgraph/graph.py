@@ -157,6 +157,10 @@ from tools.seeded_mission_queue import (
     mark_mission_completed,
     mark_mission_failed,
 )
+from tools.mission_backlog import (
+    auto_seed_next_backlog_entry,
+    load_strategy_doc,
+)
 from tools.agent_run_sync import start_agent_run, complete_agent_run, fail_agent_run
 from tools.business_sandbox import fetch_business_sandbox
 from tools.foreign_repo_workspace import (
@@ -1032,12 +1036,17 @@ def plan_mission_if_needed(state: RunnerState) -> RunnerState:
     if not queued:
         return _persist(state, "plan_mission_if_needed")
 
+    strategy_context = ""
+    if cfg.planner_strategy_context_enabled:
+        strategy_context = load_strategy_doc(cfg.repo_path, max_chars=cfg.strategy_context_max_chars)
+
     try:
         result = run_mission_planning_pass(
             tasks=queued,
             repo_path=cfg.repo_path,
             model=cfg.mission_planning_model,
             api_key=cfg.anthropic_api_key,
+            strategy_context=strategy_context,
         )
     except Exception as exc:
         log_event("mission_planning_failed", {"error": str(exc)})
@@ -3793,6 +3802,18 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
         completion = check_mission_completion(seeded_mission_id)
         if completion.get("status") == "completed":
             mark_mission_completed(seeded_mission_id)
+            # M4c: auto-seed the next approved backlog entry when a mission
+            # completes cleanly. The machine never idles while approved work
+            # exists — per-mission seeding by the founder is abolished.
+            if cfg.mission_backlog_enabled and cfg.has_supabase:
+                _backlog_result = auto_seed_next_backlog_entry()
+                if _backlog_result.get("seeded"):
+                    log_event("mission_backlog_chained", {
+                        "completed_mission_id": seeded_mission_id,
+                        "next_mission_id": _backlog_result.get("mission_id"),
+                        "next_mission_name": _backlog_result.get("name"),
+                        "backlog_id": _backlog_result.get("backlog_id"),
+                    })
         elif completion.get("status") == "failed":
             mark_mission_failed(seeded_mission_id)
 

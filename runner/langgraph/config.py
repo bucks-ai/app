@@ -96,6 +96,10 @@ _DEFAULT_SLACK_EVENTS = frozenset({
     "watchdog_restart",
     "watchdog_stopped",
     "watchdog_stall_detected",
+    # M4c: backlog auto-seeding — when a mission completes and the next approved
+    # backlog entry is promoted into missions, this confirms the chain fired.
+    "mission_backlog_auto_seeded",
+    "mission_backlog_chained",
     # Periodic pulse so operators can confirm the watchdog process is alive even
     # when the inner loop is sleeping through a cooldown window.
     "babysitter_heartbeat",
@@ -752,6 +756,27 @@ class RunnerConfig:
     dependency_batch_ahead_enabled: bool = field(
         default_factory=lambda: os.getenv("DEPENDENCY_BATCH_AHEAD", "true").lower() == "true"
     )
+    # M4c: mission backlog auto-seeding. When enabled the runner checks the
+    # mission_backlog table after each completed mission and promotes the next
+    # approved, unstarted entry into missions/mission_tasks automatically.
+    # Requires has_supabase. Off only for environments without a backlog table.
+    mission_backlog_enabled: bool = field(
+        default_factory=lambda: os.getenv("MISSION_BACKLOG", "true").lower() == "true"
+    )
+    # M4c: doctrine ingestion — inject STRATEGY.md context into planner prompts
+    # on every planning call so mission plans are doctrine-shaped by construction.
+    planner_strategy_context_enabled: bool = field(
+        default_factory=lambda: os.getenv("PLANNER_STRATEGY_CONTEXT", "true").lower() == "true"
+    )
+    # Path to STRATEGY.md, relative to repo_path (default: STRATEGY.md).
+    strategy_doc_path: str = field(
+        default_factory=lambda: os.getenv("STRATEGY_DOC_PATH", "STRATEGY.md")
+    )
+    # Maximum characters of STRATEGY.md injected into each planner prompt.
+    # ~3 kB keeps token cost negligible while covering the doctrine core.
+    strategy_context_max_chars: int = field(
+        default_factory=lambda: int(os.getenv("STRATEGY_CONTEXT_MAX_CHARS", "3000"))
+    )
 
     @property
     def has_ntfy(self) -> bool:
@@ -974,6 +999,10 @@ class RunnerConfig:
             "supabase_management_api_key_configured": bool(self.supabase_management_api_key),
             "supabase_org_id_configured": bool(self.supabase_org_id),
             "dependency_batch_ahead_enabled": self.dependency_batch_ahead_enabled,
+            "mission_backlog_enabled": self.mission_backlog_enabled,
+            "planner_strategy_context_enabled": self.planner_strategy_context_enabled,
+            "strategy_doc_path": self.strategy_doc_path,
+            "strategy_context_max_chars": self.strategy_context_max_chars,
         }
 
     def threshold_violations(self) -> list:

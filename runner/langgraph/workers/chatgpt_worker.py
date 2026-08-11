@@ -13,7 +13,9 @@ Your job is to:
 3. Return a JSON object with keys: id, title, type, preferred_worker, branch, status="queued".
 
 Prefer: Claude for backend/schema/API/agent tasks. Codex for UI/frontend/polish tasks.
-Always return valid JSON."""
+Always return valid JSON.
+
+{strategy_context}"""
 
 _NEXT_TASK_PROMPT = """Here is the current project state and latest worker summary:
 
@@ -21,9 +23,29 @@ _NEXT_TASK_PROMPT = """Here is the current project state and latest worker summa
 
 Based on this, what is the next development task? Return a JSON task object."""
 
+_STRATEGY_HEADER = """## bucks.ai Strategy Doctrine (STRATEGY.md excerpt — read before deciding)
+
+The following is the canonical strategy document. Every mission plan must be
+doctrine-shaped: consistent with the convenience doctrine, the market-selection
+algorithm, and the approved ideas ledger below. Reject tasks that contradict
+any hard rule in this document.
+
+"""
+
 
 class ChatGPTWorker(BaseWorker):
     name = "chatgpt"
+
+    def _build_system_prompt(self) -> str:
+        """Build the system prompt, injecting STRATEGY.md doctrine when enabled."""
+        cfg = get_config()
+        strategy_context = ""
+        if cfg.planner_strategy_context_enabled:
+            from tools.mission_backlog import load_strategy_doc
+            raw = load_strategy_doc(cfg.repo_path, max_chars=cfg.strategy_context_max_chars)
+            if raw:
+                strategy_context = _STRATEGY_HEADER + raw
+        return _PLANNER_SYSTEM.format(strategy_context=strategy_context).strip()
 
     def run_worker_prompt(self, prompt: str, task: dict) -> WorkerResult:
         cfg = get_config()
@@ -43,7 +65,7 @@ class ChatGPTWorker(BaseWorker):
             response = client.chat.completions.create(
                 model=model,
                 messages=[
-                    {"role": "system", "content": _PLANNER_SYSTEM},
+                    {"role": "system", "content": self._build_system_prompt()},
                     {"role": "user", "content": prompt},
                 ],
                 temperature=0.2,
