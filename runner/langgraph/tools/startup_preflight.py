@@ -461,6 +461,83 @@ def check_credentials(config_snapshot: dict) -> dict:
     return make_check("credentials", PASS, f"all {len(reqs)} required credential(s) resolvable")
 
 
+def check_pr_gate_alignment(
+    repo: str,
+    branch: str,
+    pr_checks_non_blocking: list,
+    has_github: bool,
+    fetch_required_checks_fn: Optional[Callable] = None,
+) -> dict:
+    """Compare the repo's required-status-check contexts against what the runner
+    treats as blocking (M4c supervisory rule d).
+
+    A mismatch occurs when a check context required by branch protection would
+    also be classified as non-blocking by the runner's PR_CHECKS_NON_BLOCKING
+    filter — meaning the runner silently ignores something the repo enforces.
+
+    Reports only: does not auto-change either side.  A WARN (not FAIL) because
+    the runner successfully polled before; this is a configuration notice, not
+    evidence that work is blocked.
+    """
+    if not has_github:
+        return make_check(
+            "pr_gate_alignment", SKIP, "GITHUB_TOKEN not configured"
+        )
+    if not repo:
+        return make_check(
+            "pr_gate_alignment", SKIP, "GITHUB_REPO not set"
+        )
+
+    if fetch_required_checks_fn is None:
+        from tools.github_tools import get_branch_required_checks
+        fetch_required_checks_fn = lambda: get_branch_required_checks(repo, branch)
+
+    try:
+        result = fetch_required_checks_fn()
+    except Exception as e:
+        return make_check(
+            "pr_gate_alignment", WARN,
+            f"could not fetch branch-protection required checks: {e}",
+        )
+
+    if not result.get("available"):
+        return make_check(
+            "pr_gate_alignment", WARN,
+            f"branch-protection required checks unreachable: {result.get('error') or 'unknown'}",
+        )
+
+    from tools.supervisory_early_stop import reconcile_pr_gate_sets
+    reconcile = reconcile_pr_gate_sets(
+        pr_checks_non_blocking or [],
+        result.get("contexts") or [],
+    )
+
+    if reconcile["mismatch"]:
+        ignored = reconcile.get("runner_ignores_repo_requires") or []
+        log_event("pr_gate_mismatch", {
+            "repo": repo,
+            "branch": branch,
+            "runner_non_blocking_when_repo_required": ignored,
+            "runner_pr_checks_non_blocking": list(pr_checks_non_blocking or []),
+            "repo_required_contexts": list(result.get("contexts") or []),
+            "reason": reconcile["reason"],
+        })
+        return make_check(
+            "pr_gate_alignment", WARN,
+            reconcile["reason"],
+            data={
+                "runner_ignores": ignored,
+                "repo_contexts": result.get("contexts"),
+            },
+        )
+
+    return make_check(
+        "pr_gate_alignment", PASS,
+        f"runner gate set matches repo branch-protection "
+        f"({len(result.get('contexts', []))} required check(s))",
+    )
+
+
 def check_repo_health(
     repo_path: str,
     *,
@@ -692,6 +769,15 @@ def run_startup_preflight(cfg, probes: Optional[list] = None) -> dict:
             _named("required_tables",
                    lambda: check_required_tables(required_tables, table_exists_fn)),
             _named("credentials", lambda: check_credentials(cfg.report())),
+            # M4c supervisory rule (d): compare runner's non-blocking list with
+            # the repo's actual required-status-checks so mismatches are visible
+            # at startup instead of discovered mid-task.
+            _named("pr_gate_alignment", lambda: check_pr_gate_alignment(
+                cfg.github_repo,
+                "main",
+                getattr(cfg, "pr_checks_non_blocking", []),
+                cfg.has_github,
+            )),
         ]
 
     checks = []

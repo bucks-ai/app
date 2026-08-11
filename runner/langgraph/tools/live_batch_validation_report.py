@@ -97,6 +97,8 @@ def format_batch_report(
     stop_reason = session_state.get("stop_reason") or "none"
     loop_count = int(session_state.get("loop_count") or 0)
     session_cost = float(session_state.get("session_cost") or 0.0)
+    session_tokens = int(session_state.get("session_tokens") or 0)
+    merges_this_session = int(session_state.get("merges_this_session") or 0)
     worker_timeout_count = int(session_state.get("worker_timeout_count") or 0)
     consecutive_failures = int(session_state.get("consecutive_failures") or 0)
     elapsed = compute_elapsed_minutes(session_state.get("started_at"))
@@ -114,6 +116,8 @@ def format_batch_report(
         f"  Stop reason     : {stop_reason}",
         f"  Loop count      : {loop_count}",
         f"  Session cost    : ${session_cost:.4f}",
+        f"  Session tokens  : {session_tokens:,}",
+        f"  Merges          : {merges_this_session}",
         f"  Elapsed         : {elapsed_str}",
         f"  Worker timeouts : {worker_timeout_count}",
         f"  Consec failures : {consecutive_failures}",
@@ -180,6 +184,8 @@ def generate_live_batch_report(
         "stop_reason": stop_reason,
         "loop_count": session_state.get("loop_count"),
         "session_cost": session_state.get("session_cost"),
+        "session_tokens": session_state.get("session_tokens", 0),
+        "merges_this_session": session_state.get("merges_this_session", 0),
         "metrics": batch_metrics,
         "passed": passed,
         "context": context,

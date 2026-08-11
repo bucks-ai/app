@@ -472,6 +472,9 @@ Copy `.env.example` to `.env` and fill in:
 | `PLANNER_STRATEGY_CONTEXT` | M4c doctrine ingestion: inject an excerpt from `STRATEGY.md` into every ChatGPT planner prompt and every mission-planning pass so plans are doctrine-shaped by construction (default: true) |
 | `STRATEGY_DOC_PATH` | Path to the strategy doctrine file, relative to `BUCKS_AI_REPO_PATH` (default: `STRATEGY.md`) |
 | `STRATEGY_CONTEXT_MAX_CHARS` | Maximum characters of `STRATEGY.md` injected per planner prompt; ~3 kB keeps token cost negligible while covering the doctrine core (default: 3000) |
+| `SUPERVISORY_EARLY_STOP_ENABLED` | Enable the M4c supervisory early-stop rules that judge the RUN rather than just individual tasks: environmental CI classification, auth-failure halt, check-count stability gate, PR gate reconciliation at startup, and spend-without-progress ceiling. When false, all five rules are no-ops (default: true) |
+| `MAX_SESSION_TOKENS_WITHOUT_MERGE` | Cumulative Claude CLI tokens consumed without a single successful merge before the spend-without-progress ceiling fires; 0 disables the token ceiling (default: 0). Counted across all worker runs this session; a merge resets the risk — any merge keeps the loop running regardless of spend |
+| `MAX_SESSION_MINUTES_WITHOUT_MERGE` | Elapsed session minutes without a successful merge before the spend-without-progress ceiling fires; 0 disables the time ceiling (default: 0). Mirrors `MAX_SESSION_TOKENS_WITHOUT_MERGE` but watches the clock instead of the token counter; both can be active simultaneously |
 
 #### Threshold ordering invariants
 
