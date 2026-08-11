@@ -457,6 +457,12 @@ Copy `.env.example` to `.env` and fill in:
 | `CLAUDE_SUBSCRIPTION_COOLDOWN` | When Claude in subscription mode returns a rate-limit/cooldown response, automatically wait until the cooldown expires and resume rather than failing the task (default: true) |
 | `CLAUDE_SUBSCRIPTION_COOLDOWN_WAIT_S` | Default cooldown wait in seconds when the reset time cannot be parsed from the Claude response (default: 3600) |
 | `CLAUDE_SUBSCRIPTION_COOLDOWN_MAX_WAITS` | Maximum number of auto-resume cooldown waits per session before halting the loop; 0 disables the limit (default: 3) |
+| `NTFY_TOPIC` | ntfy.sh topic name for phone push — ONLY credential/account-request events (`resource_request_pending`, `dependency_batch_request`) cross this channel; install ntfy app on your phone and subscribe to the same topic; no signup required at ntfy.sh (optional — phone push is silently skipped when unset) |
+| `PROVISIONING_GITHUB_ORG` | GitHub org under which child business repos are created via `tools/provisioning.py`; the parent `GITHUB_TOKEN` must have `admin:org` read + `repo` scopes on this org (required for GitHub child provisioning) |
+| `PROVISIONING_VERCEL_TEAM_ID` | Vercel team ID for child project creation via `tools/provisioning.py`; omit when using a personal Vercel account (optional) |
+| `SUPABASE_MANAGEMENT_API_KEY` | Supabase Management API key for creating child projects via `tools/provisioning.py` — distinct from `SUPABASE_SERVICE_ROLE_KEY`; generate at app.supabase.com → Account → Access Tokens (required for Supabase child provisioning) |
+| `SUPABASE_ORG_ID` | Supabase organisation ID required for child project creation via `tools/provisioning.py`; find at app.supabase.com → your org → Settings → General (required alongside `SUPABASE_MANAGEMENT_API_KEY`) |
+| `DEPENDENCY_BATCH_AHEAD` | Scan the entire approved task queue on startup and issue ONE consolidated credential request for all missing roadmap dependencies (default: true); set false to skip the scan (e.g. in CI with no task queue) |
 
 #### Threshold ordering invariants
 

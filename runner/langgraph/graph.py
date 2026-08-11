@@ -132,6 +132,7 @@ from tools.strategic_decision_gate import (
 from tools.model_routing_policy import evaluate_model_routing_policy
 from tools.launch_readiness_scorecard import guard_launch_readiness
 from tools.startup_preflight import guard_startup_preflight
+from tools.dependency_batch_ahead import run_batch_ahead_check
 from tools.live_batch_validation_report import generate_live_batch_report
 from tools.stop_diagnostics import report_loop_stop
 from tools.mission_compiler import (
@@ -489,6 +490,19 @@ def run_startup_preflight_if_needed(state: RunnerState) -> RunnerState:
             })
         else:
             state.stop_reason = "preflight_unsafe"
+
+    # M4c: dependency batch-ahead — scan the full task queue once per session
+    # and issue ONE consolidated credential request. Phone push fires if ntfy
+    # is configured. FAIL-OPEN: errors never set stop_reason.
+    if cfg.dependency_batch_ahead_enabled:
+        try:
+            run_batch_ahead_check()
+        except Exception as _batch_err:
+            log_event("error", {
+                "node": "run_startup_preflight_if_needed",
+                "action": "dependency_batch_ahead",
+                "error": str(_batch_err),
+            })
 
     # M4c: if production is serving a stale commit and AUTO_DEPLOY is on,
     # trigger a deploy immediately rather than waiting for the next push.

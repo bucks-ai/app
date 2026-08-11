@@ -56,7 +56,7 @@ test.describe("dashboard", () => {
 
     await expect(page).toHaveURL(/\/dashboard\/businesses\/.+$/);
     await expect(
-      page.getByRole("heading", { level: 1, name: DEMO_BUSINESS.idea_name })
+      page.getByRole("heading", { level: 2, name: DEMO_BUSINESS.idea_name })
     ).toBeVisible();
   });
 
