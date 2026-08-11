@@ -123,6 +123,23 @@ _ROADMAP_DEPS: dict[str, str] = {
         "(dashboard.stripe.com → Developers → API Keys → Restricted key; "
         "scopes: read/write on Connect; paste into .env as STRIPE_SECRET_KEY)"
     ),
+    # Twilio — voice/SMS for customer businesses
+    "TWILIO_ACCOUNT_SID": (
+        "Twilio master account SID — parent credential for creating subaccounts "
+        "(console.twilio.com → Account → General Settings → Account SID; "
+        "paste into .env as TWILIO_ACCOUNT_SID)"
+    ),
+    "TWILIO_AUTH_TOKEN": (
+        "Twilio master auth token — paired with TWILIO_ACCOUNT_SID "
+        "(console.twilio.com → Account → General Settings → Auth Token; "
+        "paste into .env as TWILIO_AUTH_TOKEN)"
+    ),
+    # PostHog — analytics child project provisioning (Type B: org → projects API)
+    "POSTHOG_ORG_ID": (
+        "PostHog organisation slug — required for child project creation via API "
+        "(posthog.com → your org → Settings → General → Organisation ID/slug; "
+        "paste into .env as POSTHOG_ORG_ID)"
+    ),
 }
 
 

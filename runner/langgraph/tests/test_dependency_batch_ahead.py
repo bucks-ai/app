@@ -32,6 +32,14 @@ def test_roadmap_deps_contains_vercel_token():
     assert "VERCEL_TOKEN" in _ROADMAP_DEPS
 
 
+def test_roadmap_deps_contains_twilio_account_sid():
+    assert "TWILIO_ACCOUNT_SID" in _ROADMAP_DEPS
+
+
+def test_roadmap_deps_contains_posthog_org_id():
+    assert "POSTHOG_ORG_ID" in _ROADMAP_DEPS
+
+
 def test_roadmap_deps_all_screaming_snake_case():
     import re
     pattern = re.compile(r"^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$")

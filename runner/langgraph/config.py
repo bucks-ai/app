@@ -749,6 +749,27 @@ class RunnerConfig:
     supabase_org_id: Optional[str] = field(
         default_factory=lambda: os.getenv("SUPABASE_ORG_ID")
     )
+    # Stripe Connect — parent restricted key for creating Express sub-accounts.
+    # Scopes: write on Connect accounts; never the main payment processing key.
+    stripe_secret_key: Optional[str] = field(
+        default_factory=lambda: os.getenv("STRIPE_SECRET_KEY")
+    )
+    # Resend — parent API key for domain + scoped child key creation.
+    resend_api_key: Optional[str] = field(
+        default_factory=lambda: os.getenv("RESEND_API_KEY")
+    )
+    # Twilio — master account credentials for subaccount creation.
+    twilio_account_sid: Optional[str] = field(
+        default_factory=lambda: os.getenv("TWILIO_ACCOUNT_SID")
+    )
+    twilio_auth_token: Optional[str] = field(
+        default_factory=lambda: os.getenv("TWILIO_AUTH_TOKEN")
+    )
+    # PostHog — organisation slug for child project creation (Type B provider).
+    # The POSTHOG_PERSONAL_API_KEY field above is reused as the API credential.
+    posthog_org_id: Optional[str] = field(
+        default_factory=lambda: os.getenv("POSTHOG_ORG_ID")
+    )
     # M4c: dependency batch-ahead. When enabled the runner scans the entire
     # approved task queue on startup and issues ONE consolidated credential
     # request. Off only for environments where the queue is empty or the scan
@@ -998,6 +1019,11 @@ class RunnerConfig:
             "provisioning_vercel_team_id": self.provisioning_vercel_team_id,
             "supabase_management_api_key_configured": bool(self.supabase_management_api_key),
             "supabase_org_id_configured": bool(self.supabase_org_id),
+            "stripe_secret_key_configured": bool(self.stripe_secret_key),
+            "resend_api_key_configured": bool(self.resend_api_key),
+            "twilio_account_sid_configured": bool(self.twilio_account_sid),
+            "twilio_auth_token_configured": bool(self.twilio_auth_token),
+            "posthog_org_id": self.posthog_org_id,
             "dependency_batch_ahead_enabled": self.dependency_batch_ahead_enabled,
             "mission_backlog_enabled": self.mission_backlog_enabled,
             "planner_strategy_context_enabled": self.planner_strategy_context_enabled,

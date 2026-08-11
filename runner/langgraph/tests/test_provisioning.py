@@ -8,9 +8,16 @@ from tools.provisioning import (
     create_vercel_project,
     set_vercel_env,
     link_vercel_git,
+    add_vercel_domain,
     create_supabase_project,
     get_supabase_api_keys,
     wait_supabase_project_ready,
+    create_stripe_connect_account,
+    create_stripe_account_link,
+    create_resend_domain,
+    create_resend_api_key,
+    create_twilio_subaccount,
+    create_posthog_project,
 )
 
 
@@ -281,3 +288,225 @@ class TestWaitSupabaseProjectReady:
                     result = wait_supabase_project_ready("proj_abc", timeout_s=1)
         assert result["ready"] is False
         assert result["status"] == "timeout"
+
+
+# ---------------------------------------------------------------------------
+# Vercel — add_vercel_domain
+# ---------------------------------------------------------------------------
+
+class TestAddVercelDomain:
+    def test_no_token(self, monkeypatch):
+        monkeypatch.setattr("tools.provisioning._vercel_token", lambda: None)
+        result = add_vercel_domain("prj_abc", "example.com")
+        assert result["available"] is False
+
+    def test_success(self, monkeypatch):
+        monkeypatch.setattr("tools.provisioning._vercel_token", lambda: "vtok")
+        monkeypatch.setattr("tools.provisioning._vercel_team_id", lambda: None)
+        resp = _mock_response(200, {"name": "example.com"})
+        with patch("tools.provisioning.retry_request", return_value=resp):
+            result = add_vercel_domain("prj_abc", "example.com")
+        assert result["available"] is True
+        assert result["added"] is True
+
+    def test_already_exists_409(self, monkeypatch):
+        monkeypatch.setattr("tools.provisioning._vercel_token", lambda: "vtok")
+        monkeypatch.setattr("tools.provisioning._vercel_team_id", lambda: None)
+        resp = _mock_response(409)
+        with patch("tools.provisioning.retry_request", return_value=resp):
+            result = add_vercel_domain("prj_abc", "example.com")
+        assert result["added"] is False
+        assert result["reason"] == "already_exists"
+
+    def test_error(self, monkeypatch):
+        monkeypatch.setattr("tools.provisioning._vercel_token", lambda: "vtok")
+        monkeypatch.setattr("tools.provisioning._vercel_team_id", lambda: None)
+        with patch("tools.provisioning.retry_request", side_effect=Exception("422")):
+            result = add_vercel_domain("prj_abc", "example.com")
+        assert result["added"] is False
+        assert "422" in result.get("error", "")
+
+
+# ---------------------------------------------------------------------------
+# Stripe Connect — create_stripe_connect_account
+# ---------------------------------------------------------------------------
+
+class TestCreateStripeConnectAccount:
+    def test_no_key_returns_unavailable(self, monkeypatch):
+        monkeypatch.setattr("tools.provisioning._stripe_secret_key", lambda: None)
+        result = create_stripe_connect_account("user@example.com")
+        assert result["available"] is False
+        assert "STRIPE_SECRET_KEY" in result.get("reason", "")
+
+    def test_success(self, monkeypatch):
+        monkeypatch.setattr("tools.provisioning._stripe_secret_key", lambda: "sk_test_abc")
+        resp = _mock_response(200, {"id": "acct_123", "type": "express"})
+        with patch("tools.provisioning.retry_request", return_value=resp):
+            result = create_stripe_connect_account("user@example.com")
+        assert result["available"] is True
+        assert result["created"] is True
+        assert result["account_id"] == "acct_123"
+
+    def test_http_error(self, monkeypatch):
+        monkeypatch.setattr("tools.provisioning._stripe_secret_key", lambda: "sk_test_abc")
+        with patch("tools.provisioning.retry_request", side_effect=Exception("401 Unauthorized")):
+            result = create_stripe_connect_account("user@example.com")
+        assert result["created"] is False
+        assert "401" in result.get("error", "")
+
+    def test_key_not_in_log(self, monkeypatch, capsys):
+        monkeypatch.setattr("tools.provisioning._stripe_secret_key", lambda: "sk_SECRET_VALUE_XYZ")
+        with patch("tools.provisioning.retry_request", side_effect=Exception("err")):
+            create_stripe_connect_account("user@example.com")
+        captured = capsys.readouterr()
+        assert "sk_SECRET_VALUE_XYZ" not in captured.out
+        assert "sk_SECRET_VALUE_XYZ" not in captured.err
+
+
+class TestCreateStripeAccountLink:
+    def test_no_key_returns_unavailable(self, monkeypatch):
+        monkeypatch.setattr("tools.provisioning._stripe_secret_key", lambda: None)
+        result = create_stripe_account_link("acct_123", "https://r.com", "https://ret.com")
+        assert result["available"] is False
+
+    def test_success(self, monkeypatch):
+        monkeypatch.setattr("tools.provisioning._stripe_secret_key", lambda: "sk_test_abc")
+        resp = _mock_response(200, {"url": "https://connect.stripe.com/setup/e/xxx"})
+        with patch("tools.provisioning.retry_request", return_value=resp):
+            result = create_stripe_account_link("acct_123", "https://r.com", "https://ret.com")
+        assert result["available"] is True
+        assert result["created"] is True
+        assert "stripe.com" in result["url"]
+
+
+# ---------------------------------------------------------------------------
+# Resend — create_resend_domain
+# ---------------------------------------------------------------------------
+
+class TestCreateResendDomain:
+    def test_no_key_returns_unavailable(self, monkeypatch):
+        monkeypatch.setattr("tools.provisioning._resend_api_key", lambda: None)
+        result = create_resend_domain("mail.example.com")
+        assert result["available"] is False
+        assert "RESEND_API_KEY" in result.get("reason", "")
+
+    def test_success(self, monkeypatch):
+        monkeypatch.setattr("tools.provisioning._resend_api_key", lambda: "re_key")
+        resp = _mock_response(201, {
+            "id": "d_abc123",
+            "name": "mail.example.com",
+            "records": [{"type": "MX", "name": "mail.example.com", "value": "feedback-smtp.us-east-1.amazonses.com"}],
+        })
+        with patch("tools.provisioning.retry_request", return_value=resp):
+            result = create_resend_domain("mail.example.com")
+        assert result["available"] is True
+        assert result["created"] is True
+        assert result["domain_id"] == "d_abc123"
+        assert isinstance(result["records"], list)
+
+    def test_error(self, monkeypatch):
+        monkeypatch.setattr("tools.provisioning._resend_api_key", lambda: "re_key")
+        with patch("tools.provisioning.retry_request", side_effect=Exception("422")):
+            result = create_resend_domain("bad.example")
+        assert result["created"] is False
+
+
+class TestCreateResendApiKey:
+    def test_no_key_returns_unavailable(self, monkeypatch):
+        monkeypatch.setattr("tools.provisioning._resend_api_key", lambda: None)
+        result = create_resend_api_key("business-x-sender")
+        assert result["available"] is False
+
+    def test_success(self, monkeypatch):
+        monkeypatch.setattr("tools.provisioning._resend_api_key", lambda: "re_key")
+        resp = _mock_response(201, {"id": "key_abc", "token": "re_scoped_token_xyz"})
+        with patch("tools.provisioning.retry_request", return_value=resp):
+            result = create_resend_api_key("business-x-sender", domain_id="d_abc123")
+        assert result["available"] is True
+        assert result["created"] is True
+        assert result["token"] == "re_scoped_token_xyz"
+
+    def test_token_not_in_log(self, monkeypatch, capsys):
+        monkeypatch.setattr("tools.provisioning._resend_api_key", lambda: "re_key")
+        with patch("tools.provisioning.retry_request", side_effect=Exception("err")):
+            create_resend_api_key("biz-sender")
+        captured = capsys.readouterr()
+        assert "re_scoped_token" not in captured.out
+
+
+# ---------------------------------------------------------------------------
+# Twilio — create_twilio_subaccount
+# ---------------------------------------------------------------------------
+
+class TestCreateTwilioSubaccount:
+    def test_no_credentials_returns_unavailable(self, monkeypatch):
+        monkeypatch.setattr("tools.provisioning._twilio_credentials", lambda: (None, None))
+        result = create_twilio_subaccount("Business X")
+        assert result["available"] is False
+        assert "TWILIO_ACCOUNT_SID" in result.get("reason", "")
+
+    def test_missing_auth_token(self, monkeypatch):
+        monkeypatch.setattr("tools.provisioning._twilio_credentials", lambda: ("AC123", None))
+        result = create_twilio_subaccount("Business X")
+        assert result["available"] is False
+
+    def test_success(self, monkeypatch):
+        monkeypatch.setattr(
+            "tools.provisioning._twilio_credentials", lambda: ("AC_parent", "tok_parent")
+        )
+        resp = _mock_response(201, {"sid": "AC_sub_123", "friendly_name": "Business X"})
+        with patch("tools.provisioning.retry_request", return_value=resp):
+            result = create_twilio_subaccount("Business X")
+        assert result["available"] is True
+        assert result["created"] is True
+        assert result["subaccount_sid"] == "AC_sub_123"
+
+    def test_auth_token_not_in_log(self, monkeypatch, capsys):
+        monkeypatch.setattr(
+            "tools.provisioning._twilio_credentials", lambda: ("AC_parent", "SECRET_AUTH_TOKEN")
+        )
+        with patch("tools.provisioning.retry_request", side_effect=Exception("err")):
+            create_twilio_subaccount("Business X")
+        captured = capsys.readouterr()
+        assert "SECRET_AUTH_TOKEN" not in captured.out
+        assert "SECRET_AUTH_TOKEN" not in captured.err
+
+
+# ---------------------------------------------------------------------------
+# PostHog — create_posthog_project
+# ---------------------------------------------------------------------------
+
+class TestCreatePosthogProject:
+    def test_no_api_key_returns_unavailable(self, monkeypatch):
+        monkeypatch.setattr("tools.provisioning._posthog_credentials", lambda: (None, "org_slug"))
+        result = create_posthog_project("business-x-analytics")
+        assert result["available"] is False
+        assert "POSTHOG_PERSONAL_API_KEY" in result.get("reason", "")
+
+    def test_no_org_id_returns_unavailable(self, monkeypatch):
+        monkeypatch.setattr("tools.provisioning._posthog_credentials", lambda: ("ph_key", None))
+        result = create_posthog_project("business-x-analytics")
+        assert result["available"] is False
+        assert "POSTHOG_ORG_ID" in result.get("reason", "")
+
+    def test_success(self, monkeypatch):
+        monkeypatch.setattr(
+            "tools.provisioning._posthog_credentials", lambda: ("ph_key", "bucks-ai")
+        )
+        monkeypatch.setattr("tools.provisioning._posthog_host", lambda: "https://us.posthog.com")
+        resp = _mock_response(201, {"id": 42, "name": "business-x-analytics"})
+        with patch("tools.provisioning.retry_request", return_value=resp):
+            result = create_posthog_project("business-x-analytics")
+        assert result["available"] is True
+        assert result["created"] is True
+        assert result["project_id"] == 42
+
+    def test_http_error(self, monkeypatch):
+        monkeypatch.setattr(
+            "tools.provisioning._posthog_credentials", lambda: ("ph_key", "bucks-ai")
+        )
+        monkeypatch.setattr("tools.provisioning._posthog_host", lambda: "https://us.posthog.com")
+        with patch("tools.provisioning.retry_request", side_effect=Exception("403 Forbidden")):
+            result = create_posthog_project("business-x-analytics")
+        assert result["created"] is False
+        assert "403" in result.get("error", "")
