@@ -723,6 +723,39 @@ class RunnerConfig:
     claude_subscription_cooldown_max_waits: int = field(
         default_factory=lambda: int(os.getenv("CLAUDE_SUBSCRIPTION_COOLDOWN_MAX_WAITS", "3"))
     )
+    # M4c: phone push — NTFY_TOPIC is the ntfy.sh topic name for credential
+    # requests. Only resource_request_pending and dependency_batch_request events
+    # cross this channel; everything else stays in Slack. ntfy is used instead of
+    # Slack because Slack only notifies with the app open.
+    ntfy_topic: Optional[str] = field(
+        default_factory=lambda: os.getenv("NTFY_TOPIC")
+    )
+    # M4c: parent-child provisioning — credentials for creating child resources
+    # under bucks.ai's master vendor accounts. Never holds user passwords; only
+    # scoped API tokens that are revocable per STRATEGY.md §3.
+    provisioning_github_org: Optional[str] = field(
+        default_factory=lambda: os.getenv("PROVISIONING_GITHUB_ORG")
+    )
+    provisioning_vercel_team_id: Optional[str] = field(
+        default_factory=lambda: os.getenv("PROVISIONING_VERCEL_TEAM_ID")
+    )
+    supabase_management_api_key: Optional[str] = field(
+        default_factory=lambda: os.getenv("SUPABASE_MANAGEMENT_API_KEY")
+    )
+    supabase_org_id: Optional[str] = field(
+        default_factory=lambda: os.getenv("SUPABASE_ORG_ID")
+    )
+    # M4c: dependency batch-ahead. When enabled the runner scans the entire
+    # approved task queue on startup and issues ONE consolidated credential
+    # request. Off only for environments where the queue is empty or the scan
+    # would produce noise (e.g. CI with no task queue).
+    dependency_batch_ahead_enabled: bool = field(
+        default_factory=lambda: os.getenv("DEPENDENCY_BATCH_AHEAD", "true").lower() == "true"
+    )
+
+    @property
+    def has_ntfy(self) -> bool:
+        return bool(self.ntfy_topic)
 
     @property
     def has_openai(self) -> bool:
@@ -935,6 +968,12 @@ class RunnerConfig:
             "watchdog_stall_threshold_s": self.watchdog_stall_threshold_s,
             "watchdog_max_restarts": self.watchdog_max_restarts,
             "watchdog_restart_delay_s": self.watchdog_restart_delay_s,
+            "ntfy_topic_configured": self.has_ntfy,
+            "provisioning_github_org": self.provisioning_github_org,
+            "provisioning_vercel_team_id": self.provisioning_vercel_team_id,
+            "supabase_management_api_key_configured": bool(self.supabase_management_api_key),
+            "supabase_org_id_configured": bool(self.supabase_org_id),
+            "dependency_batch_ahead_enabled": self.dependency_batch_ahead_enabled,
         }
 
     def threshold_violations(self) -> list:

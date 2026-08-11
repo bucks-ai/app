@@ -84,8 +84,30 @@ def _maybe_notify_slack(event_type: str, payload: dict, task_id: str = None):
         pass
 
 
+def _maybe_notify_phone(event_type: str, payload: dict, task_id: str = None):
+    """Fan the event out to ntfy.sh for the credential-request phone push.
+
+    Only events in tools.ntfy_tools.PHONE_PUSH_EVENTS cross this channel.
+    Same test-guard logic as _maybe_notify_slack: a monkeypatched stub has a
+    different __module__, so tests that assert the fan-out still work.
+    """
+    try:
+        from tools.ntfy_tools import notify_phone_event, PHONE_PUSH_EVENTS
+        if event_type not in PHONE_PUSH_EVENTS:
+            return
+        if (
+            os.environ.get("PYTEST_CURRENT_TEST")
+            and getattr(notify_phone_event, "__module__", "") == "tools.ntfy_tools"
+        ):
+            return
+        notify_phone_event(event_type, payload, task_id)
+    except Exception:
+        pass
+
+
 def log_event(event_type: str, payload: dict, task_id: str = None):
     event = new_event(event_type, payload, task_id)
     append_jsonl_event(event)
     _maybe_notify_slack(event_type, payload, task_id)
+    _maybe_notify_phone(event_type, payload, task_id)
     return event
