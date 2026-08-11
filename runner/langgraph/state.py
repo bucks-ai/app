@@ -131,3 +131,4 @@ class RunnerState(BaseModel):
     sentry_post_deploy_result: Optional[dict] = None  # M4c: result of check_sentry_after_deploy for the current task
     session_tokens: int = 0                           # M4c supervisory: cumulative tokens this session (all workers, all tasks)
     merges_this_session: int = 0                      # M4c supervisory: PRs successfully merged this session
+    task_already_satisfied: Optional[bool] = None     # M4c.0: True when precheck found all named artifacts present; routes past dispatch
