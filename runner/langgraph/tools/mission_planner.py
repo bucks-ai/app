@@ -36,7 +36,7 @@ _MAX_EXPECTED_FILES = 20  # hard cap per plan before right-sizing flag
 
 _PLANNING_PROMPT = """\
 You are a senior software engineer doing a quick pre-task planning pass.
-
+{strategy_context}
 Task ID: {task_id}
 Title: {title}
 Type: {task_type}
@@ -56,12 +56,21 @@ Return ONLY a JSON object — no explanation, no markdown fences:
 
 Field rules:
 - expected_files: file paths relative to repo root that this task will CREATE or MODIFY; max {max_files}; do not list directories
-- approach: 2–3 sentences only
+- approach: 2–3 sentences only; ensure the approach is consistent with bucks.ai strategy doctrine (convenience, minimal interruption, ownership)
 - deliverable_exists: true if the main thing being built already exists in the codebase
 - deliverable_path: relative path to existing deliverable, or null
 - depends_on: list of peer task IDs that must land before this task starts; empty list if none
 
 JSON only:\
+"""
+
+_STRATEGY_CONTEXT_TEMPLATE = """\
+
+## bucks.ai Strategy Doctrine (read before planning)
+The following is an excerpt from STRATEGY.md. Plans must be doctrine-shaped.
+
+{strategy_text}
+
 """
 
 
@@ -230,8 +239,17 @@ def compute_sequential_order(tasks: list, plans: dict) -> list:
 
 # ── Prompt, response parsing, and LLM call ───────────────────────────────────
 
-def build_planning_prompt(task: dict, peer_task_ids: list) -> str:
+def build_planning_prompt(task: dict, peer_task_ids: list, strategy_context: str = "") -> str:
+    """Build the planning prompt for a single task.
+
+    *strategy_context* is the STRATEGY.md excerpt (or ``""``).  When provided
+    it is injected into the prompt so plans are doctrine-shaped by construction.
+    """
+    formatted_strategy = ""
+    if strategy_context:
+        formatted_strategy = _STRATEGY_CONTEXT_TEMPLATE.format(strategy_text=strategy_context)
     return _PLANNING_PROMPT.format(
+        strategy_context=formatted_strategy,
         task_id=task.get("id", ""),
         title=task.get("title", "(untitled)"),
         task_type=task.get("type", "general"),
@@ -300,6 +318,7 @@ def run_mission_planning_pass(
     repo_path: str,
     model: str,
     api_key: Optional[str],
+    strategy_context: str = "",
 ) -> dict:
     """Run a cheap planning pass over all tasks that don't have plans yet.
 
@@ -330,7 +349,7 @@ def run_mission_planning_pass(
             continue
 
         peer_ids = [t.get("id", "") for t in tasks if t.get("id") != tid]
-        prompt = build_planning_prompt(task, peer_ids)
+        prompt = build_planning_prompt(task, peer_ids, strategy_context=strategy_context)
         result = call_planning_model(prompt, model, api_key)
 
         if result["error"]:

@@ -463,6 +463,10 @@ Copy `.env.example` to `.env` and fill in:
 | `SUPABASE_MANAGEMENT_API_KEY` | Supabase Management API key for creating child projects via `tools/provisioning.py` — distinct from `SUPABASE_SERVICE_ROLE_KEY`; generate at app.supabase.com → Account → Access Tokens (required for Supabase child provisioning) |
 | `SUPABASE_ORG_ID` | Supabase organisation ID required for child project creation via `tools/provisioning.py`; find at app.supabase.com → your org → Settings → General (required alongside `SUPABASE_MANAGEMENT_API_KEY`) |
 | `DEPENDENCY_BATCH_AHEAD` | Scan the entire approved task queue on startup and issue ONE consolidated credential request for all missing roadmap dependencies (default: true); set false to skip the scan (e.g. in CI with no task queue) |
+| `MISSION_BACKLOG` | M4c roadmap-as-data: after a mission completes cleanly, automatically promote the next approved, unstarted `mission_backlog` row into `missions`/`mission_tasks`. Requires Supabase. Off only for environments without the `mission_backlog` table (default: true) |
+| `PLANNER_STRATEGY_CONTEXT` | M4c doctrine ingestion: inject an excerpt from `STRATEGY.md` into every ChatGPT planner prompt and every mission-planning pass so plans are doctrine-shaped by construction (default: true) |
+| `STRATEGY_DOC_PATH` | Path to the strategy doctrine file, relative to `BUCKS_AI_REPO_PATH` (default: `STRATEGY.md`) |
+| `STRATEGY_CONTEXT_MAX_CHARS` | Maximum characters of `STRATEGY.md` injected per planner prompt; ~3 kB keeps token cost negligible while covering the doctrine core (default: 3000) |
 
 #### Threshold ordering invariants
 
