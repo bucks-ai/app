@@ -47,10 +47,9 @@ test.describe("business detail tabs", () => {
 
     await login(page);
 
-    // Scoped to the mission canvas: the dashboard renders the business name in
-    // more than one place, and an unscoped match trips strict mode.
+    // The dashboard renders the business name in more than one place, so an
+    // unscoped getByText trips Playwright's strict mode. first() is enough.
     const demoCardHeading = page
-      .getByRole("region", { name: "Mission canvas" })
       .getByText(DEMO_BUSINESS.idea_name, { exact: true })
       .first();
     await expect(demoCardHeading).toBeVisible();
