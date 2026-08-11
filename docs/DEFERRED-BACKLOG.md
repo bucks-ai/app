@@ -88,7 +88,40 @@ is NOT the dominant cost, which removes the main argument against it.
 
 ---
 
-## 3. m4c-09 — Speculative vendor adapters (PARTIAL deferral)
+## 3. m4c-09 — Speculative vendor adapters — ✅ BUILT ANYWAY 2026-08-11
+
+**Outcome: the deferral did not hold, and that is a process finding, not a
+worker error.** PR 118 (`bc3a998`) shipped real implementations of Stripe
+Connect (sub-accounts + hosted onboarding links), Resend (domains + scoped
+keys), Twilio (subaccounts) and PostHog (projects) — verified in
+`runner/langgraph/tools/provisioning.py`, not stubs. **AWS Organizations
+remains out**, deliberately, with the reason documented in that module's
+header. Nothing needs re-adding.
+
+**WHY THE DEFERRAL FAILED — the lesson worth keeping.** `m4c-09`'s task
+description (seeded 2026-08-02) lists all eight vendors explicitly. The
+deferral was recorded only in `seed_trimmed_sequence.py`'s docstring and in
+this file — **neither of which a worker ever reads.** The worker was handed a
+description saying "build all eight" and complied. The first attempt mentioned
+the deferral only because that seed file happened to be in its context; the
+repair worker's context did not include it.
+
+**RULE GOING FORWARD: a scope decision that is not in the task description does
+not exist.** Deferring part of a task means EDITING THE TASK DESCRIPTION in
+`.runtime/tasks.local.json`, not just recording the decision in a document.
+This file is for tracking and triggers; it is not a channel to the runner.
+(`m4c-08`'s roadmap-as-data is instructed to ingest this file — once that is
+live, deferrals here become visible to the planner. Until verified, assume
+they are not.)
+
+**No cost incurred:** the adapters are useful and were going to be needed
+eventually. The concern is the mechanism, not this outcome.
+
+---
+
+## 3a. Original entry (retained for context)
+
+## m4c-09 — Speculative vendor adapters (PARTIAL deferral)
 
 **Status:** m4c-09 REMAINS IN THE ACTIVE SEQUENCE. Only the speculative
 adapters below are deferred.
