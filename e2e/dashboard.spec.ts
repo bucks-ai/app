@@ -45,7 +45,13 @@ test.describe("dashboard", () => {
       page.getByRole("region", { name: "Mission canvas" })
     ).toBeVisible();
 
-    const demoCardHeading = page.getByText(DEMO_BUSINESS.idea_name, { exact: true });
+    // The dashboard renders the business name in more than one place, so an
+    // unscoped getByText trips Playwright's strict mode. Scope to the mission
+    // canvas — that's the instance this test means to click.
+    const demoCardHeading = page
+      .getByRole("region", { name: "Mission canvas" })
+      .getByText(DEMO_BUSINESS.idea_name, { exact: true })
+      .first();
     await expect(demoCardHeading).toBeVisible();
 
     await demoCardHeading.click();

@@ -47,7 +47,12 @@ test.describe("business detail tabs", () => {
 
     await login(page);
 
-    const demoCardHeading = page.getByText(DEMO_BUSINESS.idea_name, { exact: true });
+    // Scoped to the mission canvas: the dashboard renders the business name in
+    // more than one place, and an unscoped match trips strict mode.
+    const demoCardHeading = page
+      .getByRole("region", { name: "Mission canvas" })
+      .getByText(DEMO_BUSINESS.idea_name, { exact: true })
+      .first();
     await expect(demoCardHeading).toBeVisible();
     await demoCardHeading.click();
     await expect(page).toHaveURL(/\/dashboard\/businesses\/.+$/);
