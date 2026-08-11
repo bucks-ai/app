@@ -827,6 +827,25 @@ class RunnerConfig:
     task_already_satisfied_precheck_enabled: bool = field(
         default_factory=lambda: os.getenv("TASK_ALREADY_SATISFIED_PRECHECK", "true").lower() == "true"
     )
+    # M4c.4: network-pause watchdog. When the connectivity probe determines the
+    # machine is offline, the loop pauses with `network_unavailable` instead of
+    # recording worker failures. The watchdog restarts every NETWORK_RETRY_DELAY_S
+    # seconds (5 min) and gives up after NETWORK_MAX_PATIENCE_MINUTES of
+    # consecutive offline time.
+    network_pause_enabled: bool = field(
+        default_factory=lambda: os.getenv("NETWORK_PAUSE_ENABLED", "true").lower() == "true"
+    )
+    network_probe_timeout_s: float = field(
+        default_factory=lambda: float(os.getenv("NETWORK_PROBE_TIMEOUT_S", "5"))
+    )
+    # Founder decision 2026-08-09: 5-minute cadence is deliberate — the probe is
+    # free but each restart re-enters the startup flow (hook install, etc.).
+    network_retry_delay_s: int = field(
+        default_factory=lambda: int(os.getenv("NETWORK_RETRY_DELAY_S", "300"))
+    )
+    network_max_patience_minutes: int = field(
+        default_factory=lambda: int(os.getenv("NETWORK_MAX_PATIENCE_MINUTES", "90"))
+    )
 
     @property
     def has_ntfy(self) -> bool:
@@ -1062,6 +1081,10 @@ class RunnerConfig:
             "max_session_tokens_without_merge": self.max_session_tokens_without_merge,
             "max_session_minutes_without_merge": self.max_session_minutes_without_merge,
             "task_already_satisfied_precheck_enabled": self.task_already_satisfied_precheck_enabled,
+            "network_pause_enabled": self.network_pause_enabled,
+            "network_probe_timeout_s": self.network_probe_timeout_s,
+            "network_retry_delay_s": self.network_retry_delay_s,
+            "network_max_patience_minutes": self.network_max_patience_minutes,
         }
 
     def threshold_violations(self) -> list:

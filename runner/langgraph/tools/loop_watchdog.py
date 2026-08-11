@@ -63,6 +63,11 @@ _NO_TASK_RESTART_DELAY_S: int = 300     # 5 min
 _QUOTA_RESTART_DELAY_S: int = 3600      # 1 hour
 _COOLDOWN_BUFFER_S: int = 120           # 2-min buffer after cooldown_until
 
+# M4c.4: network-pause watchdog. Separate from _DEFAULT_RESTART_DELAY_S so
+# that a 30s default restart never triggers the ~90s repo-health check.sh.
+NETWORK_RETRY_DELAY_S: int = 300        # 5 min between offline retries
+_NETWORK_MAX_PATIENCE_S: int = 90 * 60  # 90 min before giving up
+
 
 def evaluate_restart_decision(
     stop_reason: Optional[str],
@@ -71,6 +76,8 @@ def evaluate_restart_decision(
     max_restarts: int = 0,
     restart_count: int = 0,
     default_delay_s: int = _DEFAULT_RESTART_DELAY_S,
+    network_retry_delay_s: int = NETWORK_RETRY_DELAY_S,
+    network_max_patience_s: int = _NETWORK_MAX_PATIENCE_S,
     _now: Optional[datetime] = None,
 ) -> dict:
     """Decide whether the watchdog should restart the loop after it exits.
@@ -148,6 +155,34 @@ def evaluate_restart_decision(
         return _restart(
             _QUOTA_RESTART_DELAY_S,
             "codex usage limit exhausted — waiting 1h before restart",
+        )
+
+    # M4c.4: network pause — NOT a hard gate (driver arrives, network returns).
+    # Uses its own delay so the watchdog does not re-run check.sh every 30s.
+    # Past the patience ceiling, stop restarting and report the total outage.
+    if stop_reason == "network_unavailable":
+        now = _now or datetime.now(timezone.utc)
+        started_at = (state or {}).get("network_unavailable_started_at")
+        if started_at:
+            try:
+                start_dt = datetime.fromisoformat(started_at)
+                if start_dt.tzinfo is None:
+                    start_dt = start_dt.replace(tzinfo=timezone.utc)
+                offline_s = max(0.0, (now - start_dt).total_seconds())
+                if offline_s >= network_max_patience_s:
+                    offline_m = int(offline_s // 60)
+                    return {
+                        **_no_restart,
+                        "reason": (
+                            f"network offline for {offline_m} minutes — "
+                            f"patience ceiling reached, stopping watchdog"
+                        ),
+                    }
+            except (ValueError, TypeError):
+                pass
+        return _restart(
+            network_retry_delay_s,
+            "network unavailable — retrying after 5-minute delay",
         )
 
     # Empty queue — restart is safe but pointless until tasks arrive

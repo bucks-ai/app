@@ -408,6 +408,49 @@ def _compress_context_if_needed(state: RunnerState, *, reason: str) -> RunnerSta
     return state
 
 
+# ── Network-pause helpers (M4c.4) ────────────────────────────────────────────
+
+def _record_network_unavailable(state: RunnerState, probe: dict) -> None:
+    """Set stop_reason, record offline start time, and log the detection event.
+
+    Only sets network_unavailable_started_at on the FIRST call in a consecutive
+    offline period — subsequent calls leave it unchanged so the watchdog can
+    calculate cumulative offline duration.
+    """
+    from datetime import datetime, timezone
+    if not state.network_unavailable_started_at:
+        state.network_unavailable_started_at = datetime.now(timezone.utc).isoformat()
+    state.stop_reason = "network_unavailable"
+    log_event("network_unavailable_detected", {
+        "probe_online": probe.get("online"),
+        "probe_detail": probe.get("detail"),
+        "dns_ok": probe.get("dns_ok"),
+        "http_ok": probe.get("http_ok"),
+        "offline_since": state.network_unavailable_started_at,
+    })
+
+
+def _record_network_restored(state: RunnerState) -> None:
+    """Clear the offline-start timestamp and log outage duration."""
+    from datetime import datetime, timezone
+    started_at = state.network_unavailable_started_at
+    if not started_at:
+        return
+    try:
+        start_dt = datetime.fromisoformat(started_at)
+        if start_dt.tzinfo is None:
+            start_dt = start_dt.replace(tzinfo=timezone.utc)
+        duration_s = max(0.0, (datetime.now(timezone.utc) - start_dt).total_seconds())
+    except (ValueError, TypeError):
+        duration_s = 0.0
+    log_event("network_restored", {
+        "offline_since": started_at,
+        "outage_duration_s": round(duration_s, 1),
+        "outage_duration_minutes": round(duration_s / 60, 1),
+    })
+    state.network_unavailable_started_at = None
+
+
 # ── Nodes ────────────────────────────────────────────────────────────────────
 
 def install_hooks(state: RunnerState) -> RunnerState:
@@ -454,6 +497,18 @@ def run_startup_preflight_if_needed(state: RunnerState) -> RunnerState:
     Guarded to once per session by ``session_started_at``, so a multi-loop run
     pays for these network round-trips exactly once.
     """
+    # M4c.4 cheap-path short-circuit: probe connectivity BEFORE repo-health
+    # preflight and any other expensive startup work. An offline restart must
+    # cost approximately nothing — no check.sh, no npm, no git fetch.
+    if cfg.network_pause_enabled:
+        from tools.network_probe import probe_connectivity
+        _probe = probe_connectivity(timeout_s=cfg.network_probe_timeout_s)
+        if not _probe["online"]:
+            _record_network_unavailable(state, _probe)
+            return _persist(state, "run_startup_preflight_if_needed")
+        elif state.network_unavailable_started_at:
+            _record_network_restored(state)
+
     if not cfg.startup_preflight_enabled:
         return state
 
@@ -736,6 +791,17 @@ def self_heal_task_state(state: RunnerState) -> RunnerState:
 
 
 def load_next_task(state: RunnerState) -> RunnerState:
+    # M4c.4: probe connectivity before claiming a task. If the machine is
+    # offline, do not claim or touch anything — let the watchdog retry.
+    if cfg.network_pause_enabled:
+        from tools.network_probe import probe_connectivity
+        _probe = probe_connectivity(timeout_s=cfg.network_probe_timeout_s)
+        if not _probe["online"]:
+            _record_network_unavailable(state, _probe)
+            return _persist(state, "load_next_task")
+        elif state.network_unavailable_started_at:
+            _record_network_restored(state)
+
     # Auto-requeue tasks blocked on credentials that have since appeared in env.
     # Runs before requeue_fulfilled_blocked_tasks so the inbox files it creates
     # are picked up on the same pass.
@@ -3532,6 +3598,12 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
     # mission sync below, which must not report a network blip to Supabase as a
     # failed mission task.
     _transient_failure = False
+    # M4c.4: set when a mid-call failure is confirmed network-layer loss (not a
+    # single-provider error). Like _transient_failure, it suppresses Supabase
+    # sync and all failure counters, but it also stops the loop so the watchdog
+    # can retry after NETWORK_RETRY_DELAY_S rather than spinning on the same
+    # broken wall.
+    _network_failure = False
 
     # ── Completion evidence gate (M4c) ───────────────────────────────────────
     # A successful worker exit is not evidence that the work happened. Score the
@@ -3776,7 +3848,23 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
                     requeue_task(task_id, current_retry_count, csc["resume_at_iso"])
                     state.retry_pending = True
 
-        if not _cooldown_detected:
+        # M4c.4: network-pause mid-call detection. If the error looks like a
+        # network-layer failure AND the connectivity probe confirms offline, treat
+        # as network_unavailable: requeue the task with the SAME retry_count (no
+        # counter increment), set stop_reason, and skip all failure accounting.
+        # A single failing endpoint is NOT network loss — the probe confirms.
+        if not _cooldown_detected and cfg.network_pause_enabled:
+            from tools.network_probe import is_network_error_string, probe_connectivity
+            if is_network_error_string(err):
+                _probe = probe_connectivity(timeout_s=cfg.network_probe_timeout_s)
+                if not _probe["online"]:
+                    _network_failure = True
+                    current_retry_count = task.get("retry_count", 0)
+                    requeue_task(task_id, current_retry_count)
+                    state.retry_pending = True
+                    _record_network_unavailable(state, _probe)
+
+        if not _cooldown_detected and not _network_failure:
             # m4c-03: an infrastructure failure (network, DNS, rate limit, 5xx)
             # is never allowed to make a task terminal — the work was never
             # attempted, so nothing about it has been proven wrong. Decided
@@ -3979,15 +4067,16 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
                     cost_usd=result.get("api_cost"),
                     duration_seconds=state.worker_elapsed_seconds,
                 )
-        elif _transient_failure:
-            # m4c-03: the local task is queued or blocked, never failed — so
-            # telling Supabase it failed would open a divergence that outlives
+        elif _transient_failure or _network_failure:
+            # m4c-03/m4c4: the local task is queued or blocked, never failed —
+            # so telling Supabase it failed would open a divergence that outlives
             # the outage and, once every row is "failed", completes the mission
             # as failed. The agent_run still records what happened.
+            _sync_skip_reason = "network_unavailable" if _network_failure else "transient_failure"
             log_event("seeded_mission_failure_sync_skipped", {
                 "task_id": task_id,
                 "seeded_task_id": seeded_task_id,
-                "reason": "transient_failure",
+                "reason": _sync_skip_reason,
                 "error": (result.get("error") or "")[:200],
             }, task_id=task_id)
             if state.current_agent_run_id:
@@ -4436,6 +4525,10 @@ def _route_after_precheck(state: RunnerState) -> str:
 
 
 def _route_after_load(state: RunnerState) -> str:
+    # M4c.4: network_unavailable is a watchdog-restart stop, not a task failure.
+    # Skip mission compilation and go straight to the stop decision.
+    if state.stop_reason == "network_unavailable":
+        return "decide_continue_or_stop"
     if state.stop_reason:
         return "compile_mission_if_needed"
     return "choose_worker"
@@ -4592,7 +4685,7 @@ def build_graph():
         "run_startup_preflight_if_needed",
         lambda s: (
             "decide_continue_or_stop"
-            if s.stop_reason in ("preflight_unsafe", "repo_unhealthy")
+            if s.stop_reason in ("preflight_unsafe", "repo_unhealthy", "network_unavailable")
             else "check_launch_readiness_if_needed"
         ),
         {
@@ -4614,6 +4707,7 @@ def build_graph():
     builder.add_conditional_edges("load_next_task", _route_after_load, {
         "compile_mission_if_needed": "compile_mission_if_needed",
         "choose_worker": "choose_worker",
+        "decide_continue_or_stop": "decide_continue_or_stop",
     })
     builder.add_conditional_edges("compile_mission_if_needed", _route_after_compile_mission, {
         "choose_worker": "choose_worker",

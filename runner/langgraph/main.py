@@ -491,6 +491,8 @@ def cmd_watchdog(args):
             max_restarts=max_restarts,
             restart_count=restart_count,
             default_delay_s=restart_delay_s,
+            network_retry_delay_s=cfg.network_retry_delay_s,
+            network_max_patience_s=cfg.network_max_patience_minutes * 60,
         )
 
         if not decision["should_restart"]:
