@@ -42,6 +42,12 @@ HARD_GATE_REASONS = frozenset({
     "cost_budget_exceeded",
     "loop_blocked_on_worker_health",
     "worker_health_blocked",
+    # M4c supervisory early-stop: auth failures require re-authentication
+    # by a human; retrying cannot fix a revoked or expired credential.
+    "worker_auth_failed",
+    # M4c supervisory early-stop: tokens/time spent with zero merges — the
+    # run is not making progress and a human must inspect before restarting.
+    "no_progress_for_spend",
 })
 
 # Queue-empty stops: restart is safe but pointless until new tasks appear.

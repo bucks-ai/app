@@ -492,6 +492,53 @@ STOP_HANDLERS: dict[str, StopHandler] = dict([
         ),
     )),
 
+    # ── M4c supervisory early-stop rules ────────────────────────────────────
+    _h(StopHandler(
+        reason="worker_auth_failed",
+        headline="Worker authentication failed — re-login required",
+        cause=(
+            "The worker CLI returned a 401/403 or its output contained a revoked-token "
+            "or failed-to-authenticate signal on task {task_id}. This is never a "
+            "transient error: the session token is gone and every subsequent dispatch "
+            "will fail the same way."
+        ),
+        action=(
+            "Re-authenticate the CLI on this host: run `claude`, then `/login`, and "
+            "confirm the new session with `claude --version`. Then re-run "
+            "`python main.py run-loop`. If using an API key (CLAUDE_AUTH_MODE=api_key), "
+            "check that ANTHROPIC_API_KEY is valid and not expired."
+        ),
+        config_keys=(
+            "supervisory_early_stop_enabled",
+            "claude_auth_mode",
+        ),
+        evidence_events=("worker_auth_failed",),
+    )),
+    _h(StopHandler(
+        reason="no_progress_for_spend",
+        headline="Spend ceiling reached with zero merges this session",
+        cause=(
+            "The session consumed {session_tokens} token(s) and ran for "
+            "{elapsed_minutes} minute(s) without completing a single merge. The "
+            "spend-without-progress ceiling was reached: MAX_SESSION_TOKENS_WITHOUT_MERGE "
+            "({max_session_tokens_without_merge}) or MAX_SESSION_MINUTES_WITHOUT_MERGE "
+            "({max_session_minutes_without_merge}). Continuing would consume more budget "
+            "with no demonstrable output."
+        ),
+        action=(
+            "Investigate why no merge landed (read 'error' and 'gate_blocked' events "
+            "below), fix the underlying problem, and re-run `python main.py run-loop`. "
+            "To raise the ceiling set MAX_SESSION_TOKENS_WITHOUT_MERGE or "
+            "MAX_SESSION_MINUTES_WITHOUT_MERGE in .env. "
+            "Set SUPERVISORY_EARLY_STOP_ENABLED=false to disable the rule entirely."
+        ),
+        config_keys=(
+            "supervisory_early_stop_enabled",
+            "max_session_minutes_without_merge",
+        ),
+        evidence_events=("no_progress_for_spend",),
+    )),
+
     # ── Waiting on a human ──────────────────────────────────────────────────
     _h(StopHandler(
         reason="awaiting_resources",

@@ -378,6 +378,39 @@ def _is_non_blocking_check(run: dict, cfg) -> bool:
     return any(marker in name for marker in getattr(cfg, "pr_checks_non_blocking", []))
 
 
+def get_branch_required_checks(
+    repo: str,
+    branch: str = "main",
+    token: Optional[str] = None,
+) -> dict:
+    """Fetch the required-status-check context names from branch protection.
+
+    Returns ``{"available": bool, "contexts": list[str], "error": str|None}``.
+    Degrades gracefully: an unreachable API or no branch protection configured
+    returns ``available=False`` — the caller treats that as "unknown".
+    """
+    cfg = get_config()
+    effective_token = token or cfg.github_token
+    if not effective_token or not repo:
+        return {"available": False, "contexts": [], "error": "no GITHUB_TOKEN or repo"}
+
+    try:
+        r = retry_request(
+            requests.get,
+            f"{_API_BASE}/repos/{repo}/branches/{branch}/protection/required_status_checks",
+            headers=_rest_headers(effective_token),
+            timeout=10,
+        )
+        if r.status_code == 404:
+            return {"available": True, "contexts": [], "error": None}
+        r.raise_for_status()
+        data = r.json()
+        contexts = list(data.get("contexts") or [])
+        return {"available": True, "contexts": contexts, "error": None}
+    except Exception as e:
+        return {"available": False, "contexts": [], "error": str(e)}
+
+
 def poll_pr_checks(
     repo: str,
     sha: str,
@@ -388,6 +421,7 @@ def poll_pr_checks(
     pr_number: Optional[int] = None,
     empty_grace_s: float = None,
     token: Optional[str] = None,
+    required_checks: Optional[list] = None,
 ) -> dict:
     """Poll the check-runs API for ``sha`` until every run completes or the
     timeout elapses.
@@ -407,7 +441,16 @@ def poll_pr_checks(
     ``check_runs`` is still empty after a further ``empty_grace_s`` seconds,
     polling fails fast with ``reason: "pr_checks_no_runs"`` — a distinct,
     actionable reason rather than the generic timeout.
+
+    M4c supervisory: check-count stability (rule c). A check set is only
+    trustworthy once its total has been stable across two consecutive
+    all-complete polls, or matches ``required_checks`` (the repo's
+    branch-protection required-status-checks list). Until then polling
+    continues — this fixes the bug where 1-of-5 checks registered first, all
+    completed, and the runner concluded and merged before the other 4 appeared.
     """
+    from tools.supervisory_early_stop import check_count_is_stable
+
     cfg = get_config()
     effective_token = token or cfg.github_token
     if not effective_token:
@@ -425,6 +468,12 @@ def poll_pr_checks(
     start = now()
     polls = 0
     branch_update_attempted = False
+    # M4c supervisory rule (c): track total count across polls to detect
+    # stability before concluding.  prev_all_complete_total is the run count
+    # from the most recent poll where all_complete was True; None until that
+    # first occurs.
+    prev_all_complete_total: Optional[int] = None
+    supervisory_enabled = getattr(cfg, "supervisory_early_stop_enabled", True)
     log_event("pr_checks_poll_started", {"repo": repo, "sha": sha, "timeout": timeout, "interval": interval})
 
     while True:
@@ -446,37 +495,59 @@ def poll_pr_checks(
             }
 
         elapsed = round(now() - start, 2)
+        curr_total = len(runs)
         # An empty check_runs list means Actions hasn't registered a run yet —
         # treat that as "not complete", not a vacuous success.
         all_complete = bool(runs) and all(run.get("status") == "completed" for run in runs)
         log_event("pr_checks_poll_tick", {
             "sha": sha, "poll": polls, "elapsed": elapsed,
-            "total": len(runs),
+            "total": curr_total,
             "completed": sum(1 for run in runs if run.get("status") == "completed"),
         })
 
         if all_complete:
-            blocking = [run for run in runs if not _is_non_blocking_check(run, cfg)]
-            advisory_failures = {
-                run.get("name"): run.get("conclusion")
-                for run in runs
-                if _is_non_blocking_check(run, cfg)
-                and run.get("conclusion") not in ("success", "skipped")
-            }
-            ok = all(run.get("conclusion") in ("success", "skipped") for run in blocking)
-            if advisory_failures:
-                # Reported, never fatal: an advisory job is not a merge gate.
-                log_event("pr_checks_advisory_failed", {
-                    "sha": sha, "conclusions": advisory_failures,
-                    "note": "non-blocking by PR_CHECKS_NON_BLOCKING; merge not gated on these",
+            # M4c supervisory rule (c): verify check-count stability before
+            # trusting the conclusion.  A single poll with N completed checks
+            # may still be missing checks that haven't registered yet — wait
+            # for a stable count or a required-checks anchor.
+            stable = (
+                not supervisory_enabled
+                or required_checks is None  # no anchor provided → trust single poll (old behaviour)
+                or check_count_is_stable(curr_total, prev_all_complete_total, required_checks)
+            )
+            if not stable:
+                log_event("pr_checks_count_unstable", {
+                    "sha": sha, "poll": polls, "elapsed": elapsed,
+                    "curr_total": curr_total, "prev_total": prev_all_complete_total,
+                    "note": "all runs completed but count not yet stable — polling again",
                 })
-            log_event("pr_checks_completed" if ok else "pr_checks_failed", authority_payload(
-                "pr_checks",
-                sha=sha, polls=polls, elapsed=elapsed,
-                conclusions={run.get("name"): run.get("conclusion") for run in runs},
-                advisory_ignored=sorted(advisory_failures),
-            ))
-            return {"success": ok, "timed_out": False, "runs": runs, "polls": polls, "elapsed": elapsed}
+                prev_all_complete_total = curr_total
+                # Fall through to the sleep at the bottom, then poll again.
+            else:
+                blocking = [run for run in runs if not _is_non_blocking_check(run, cfg)]
+                advisory_failures = {
+                    run.get("name"): run.get("conclusion")
+                    for run in runs
+                    if _is_non_blocking_check(run, cfg)
+                    and run.get("conclusion") not in ("success", "skipped")
+                }
+                ok = all(run.get("conclusion") in ("success", "skipped") for run in blocking)
+                if advisory_failures:
+                    # Reported, never fatal: an advisory job is not a merge gate.
+                    log_event("pr_checks_advisory_failed", {
+                        "sha": sha, "conclusions": advisory_failures,
+                        "note": "non-blocking by PR_CHECKS_NON_BLOCKING; merge not gated on these",
+                    })
+                log_event("pr_checks_completed" if ok else "pr_checks_failed", authority_payload(
+                    "pr_checks",
+                    sha=sha, polls=polls, elapsed=elapsed,
+                    conclusions={run.get("name"): run.get("conclusion") for run in runs},
+                    advisory_ignored=sorted(advisory_failures),
+                ))
+                return {"success": ok, "timed_out": False, "runs": runs, "polls": polls, "elapsed": elapsed}
+        else:
+            # Not all complete yet — reset stability tracking.
+            prev_all_complete_total = None
 
         if not runs:
             if not branch_update_attempted and elapsed >= grace and pr_number is not None:

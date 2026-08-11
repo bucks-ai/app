@@ -129,3 +129,5 @@ class RunnerState(BaseModel):
     last_check_environmental: Optional[bool] = None  # M4c.4: True when the last check.sh failure was classified as pre-existing (environmental), not introduced by the task
     task_started_at: Optional[str] = None            # M4c: ISO-8601 UTC when the current task's worker was dispatched; used as Sentry post-deploy since_iso
     sentry_post_deploy_result: Optional[dict] = None  # M4c: result of check_sentry_after_deploy for the current task
+    session_tokens: int = 0                           # M4c supervisory: cumulative tokens this session (all workers, all tasks)
+    merges_this_session: int = 0                      # M4c supervisory: PRs successfully merged this session

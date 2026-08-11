@@ -415,6 +415,7 @@ def test_default_probes_run_without_network_or_git():
     assert names == [
         "git_state", "repo_health", "pending_migrations", "production_sha",
         "vercel_project", "github_repo", "required_tables", "credentials",
+        "pr_gate_alignment",
     ]
     assert summary["unsafe"] is False
 

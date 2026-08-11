@@ -96,6 +96,12 @@ _DEFAULT_SLACK_EVENTS = frozenset({
     "watchdog_restart",
     "watchdog_stopped",
     "watchdog_stall_detected",
+    # M4c supervisory early-stop: environmental CI classification and no-progress
+    # spend ceiling both require immediate human attention.
+    "ci_failure_environmental",
+    "worker_auth_failed",
+    "pr_gate_mismatch",
+    "no_progress_for_spend",
     # M4c: backlog auto-seeding — when a mission completes and the next approved
     # backlog entry is promoted into missions, this confirms the chain fired.
     "mission_backlog_auto_seeded",
@@ -798,6 +804,21 @@ class RunnerConfig:
     strategy_context_max_chars: int = field(
         default_factory=lambda: int(os.getenv("STRATEGY_CONTEXT_MAX_CHARS", "3000"))
     )
+    # M4c supervisory early-stop rules — the babysitter that judges the RUN,
+    # not just individual tasks.  When disabled, all five rules are no-ops and
+    # the loop behaves exactly as it did before this feature was added.
+    supervisory_early_stop_enabled: bool = field(
+        default_factory=lambda: os.getenv("SUPERVISORY_EARLY_STOP_ENABLED", "true").lower() == "true"
+    )
+    # Spend-without-progress ceiling (rule e). 0 disables each check.
+    # When session_tokens >= max OR elapsed >= max AND merges_this_session == 0,
+    # stop with no_progress_for_spend (a hard gate — requires human action).
+    max_session_tokens_without_merge: int = field(
+        default_factory=lambda: int(os.getenv("MAX_SESSION_TOKENS_WITHOUT_MERGE", "0"))
+    )
+    max_session_minutes_without_merge: int = field(
+        default_factory=lambda: int(os.getenv("MAX_SESSION_MINUTES_WITHOUT_MERGE", "0"))
+    )
 
     @property
     def has_ntfy(self) -> bool:
@@ -1029,6 +1050,9 @@ class RunnerConfig:
             "planner_strategy_context_enabled": self.planner_strategy_context_enabled,
             "strategy_doc_path": self.strategy_doc_path,
             "strategy_context_max_chars": self.strategy_context_max_chars,
+            "supervisory_early_stop_enabled": self.supervisory_early_stop_enabled,
+            "max_session_tokens_without_merge": self.max_session_tokens_without_merge,
+            "max_session_minutes_without_merge": self.max_session_minutes_without_merge,
         }
 
     def threshold_violations(self) -> list:

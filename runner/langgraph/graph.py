@@ -2469,6 +2469,41 @@ def deterministic_repair_if_needed(state: RunnerState) -> RunnerState:
             for part in error.replace("pr_checks_failed:", "").split(",")
             if part.strip()
         ] or [error[:80]]
+
+        # M4c supervisory rule (a): classify the CI failure as environmental
+        # BEFORE spending any repair budget.  A check that is also failing on
+        # the base commit or on other open PRs cannot be fixed by re-running
+        # the worker — it is a pre-existing broken environment.  Skip to
+        # skip-and-continue rather than routing to the repair loop.
+        if cfg.supervisory_early_stop_enabled:
+            from tools.supervisory_early_stop import classify_ci_failure_environmental
+            from tools.startup_preflight import origin_main_sha
+            base_sha = origin_main_sha(repo_path)
+            env_verdict = classify_ci_failure_environmental(
+                failed_checks=evidence.get("failed_checks") or [],
+                repo=_effective_github_repo(task),
+                base_sha=base_sha,
+                token=_effective_github_token(task),
+                current_pr_number=state.pr_number,
+                enabled=cfg.supervisory_early_stop_enabled,
+            )
+            if env_verdict["environmental"]:
+                log_event("ci_failure_environmental", {
+                    "task_id": task_id,
+                    "failed_checks": evidence.get("failed_checks"),
+                    "corroborating": env_verdict["corroborating"],
+                    "reason": env_verdict["reason"],
+                    "note": "classified environmental — skipping repair budget, marking task skip-and-continue",
+                }, task_id=task_id)
+                # Mark the task blocked (not failed), preserving the repair budget
+                # for real task failures.  The runner will continue with the next task.
+                mark_task_blocked(
+                    task_id,
+                    f"ci_failure_environmental: {env_verdict['reason']}",
+                )
+                state.worker_result = {**(state.worker_result or {}), "success": False}
+                return _persist(state, "deterministic_repair_if_needed")
+
     elif failure_class == MERGE_CONFLICT:
         evidence = fetch_merge_conflict_evidence(repo_path)
     else:
@@ -2727,6 +2762,10 @@ def _merge_via_pull_request(state: RunnerState, task: dict, branch: str) -> None
     # local working tree hasn't been fast-forwarded yet (M4c.4).
     merge_sha = merge.get("sha") or ""
     state.pr_merge_result = {**merge, "pr_number": state.pr_number}
+
+    # M4c supervisory rule (e): track successful merges for spend-without-
+    # progress guard — a merge is the only evidence of forward progress.
+    state.merges_this_session = getattr(state, "merges_this_session", 0) + 1
 
     # Update last_commit_result to point at the merge commit rather than the
     # feature-branch commit.  For squash merges the original sha is rewritten
@@ -3306,9 +3345,45 @@ def update_github_if_needed(state: RunnerState) -> RunnerState:
 
 
 def update_logs_and_state(state: RunnerState) -> RunnerState:
+    from tools.supervisory_early_stop import (
+        detect_worker_auth_failure,
+        evaluate_spend_without_progress,
+        NO_PROGRESS_STOP,
+    )
+
     task = state.current_task or {}
     result = state.worker_result or {}
     task_id = task.get("id", "")
+
+    # ── M4c supervisory rule (b): auth failure early exit ───────────────────
+    # A 401/403 or a revoked/expired token cannot be fixed by retrying. Halt
+    # the loop immediately with worker_auth_failed — a hard gate that requires
+    # a human to re-authenticate. Checked BEFORE the cooldown guard so a 401
+    # never accidentally accumulates cooldown_count or consumes retry budget.
+    if (
+        not result.get("success")
+        and cfg.supervisory_early_stop_enabled
+        and result.get("worker") == "claude"
+    ):
+        auth = detect_worker_auth_failure(
+            result.get("error") or "", result.get("output") or ""
+        )
+        if auth["auth_failed"]:
+            log_event("worker_auth_failed", {
+                "task_id": task_id,
+                "pattern": auth["pattern"],
+                "report": (
+                    "Worker authentication failed. Re-authentication is required. "
+                    "Run `claude` then `/login` to restore the session, "
+                    "then restart the loop."
+                ),
+                "command": "claude /login",
+            }, task_id=task_id)
+            if not state.stop_reason:
+                state.stop_reason = "worker_auth_failed"
+            # Mark the task blocked (not failed) — it was not the task's fault.
+            mark_task_blocked(task_id, f"worker_auth_failed: {auth['pattern']}")
+            return _persist(state, "update_logs_and_state")
 
     # A Claude subscription cooldown is a PAUSE, not an attempt and not a
     # failure. Computed once here because two separate guards below would
@@ -3739,6 +3814,50 @@ def update_logs_and_state(state: RunnerState) -> RunnerState:
                 pre_completion=False,
             )
 
+    # ── M4c supervisory: token accumulation ─────────────────────────────────
+    # Accumulate tokens on BOTH success and failure so session_tokens is a
+    # complete picture of what this run consumed.  Required for rule (e).
+    task_tokens = int(result.get("tokens_used") or 0)
+    state.session_tokens = getattr(state, "session_tokens", 0) + task_tokens
+    if task_tokens > 0:
+        log_event("tokens_per_worker_run", {
+            "task_id": task_id,
+            "task_tokens": task_tokens,
+            "session_tokens": state.session_tokens,
+        }, task_id=task_id)
+
+    # ── M4c supervisory rule (e): spend-without-progress ceiling ────────────
+    if cfg.supervisory_early_stop_enabled and not state.stop_reason:
+        elapsed_min: Optional[float] = None
+        if state.started_at:
+            try:
+                from datetime import datetime as _dt
+                elapsed_min = (
+                    _dt.utcnow() - _dt.fromisoformat(state.started_at)
+                ).total_seconds() / 60
+            except (ValueError, TypeError):
+                pass
+        spw = evaluate_spend_without_progress(
+            session_tokens=state.session_tokens,
+            elapsed_minutes=float(elapsed_min or 0),
+            merges_this_session=getattr(state, "merges_this_session", 0),
+            max_tokens=cfg.max_session_tokens_without_merge,
+            max_minutes=cfg.max_session_minutes_without_merge,
+            enabled=cfg.supervisory_early_stop_enabled,
+        )
+        if spw["ceiling_hit"]:
+            log_event("no_progress_for_spend", {
+                "task_id": task_id,
+                "session_tokens": state.session_tokens,
+                "session_cost": state.session_cost,
+                "elapsed_minutes": elapsed_min,
+                "merges_this_session": getattr(state, "merges_this_session", 0),
+                "max_session_tokens_without_merge": cfg.max_session_tokens_without_merge,
+                "max_session_minutes_without_merge": cfg.max_session_minutes_without_merge,
+                "report": spw["report"],
+            }, task_id=task_id)
+            state.stop_reason = NO_PROGRESS_STOP
+
     # ── Seeded mission sync ──────────────────────────────────────────────────
     # Propagate task completion/failure back to Supabase when the task was
     # seeded from a mission row.  Only the Supabase row IDs are used here —
@@ -4049,6 +4168,8 @@ def generate_live_batch_validation_report(state: RunnerState) -> RunnerState:
         "stop_reason": state.stop_reason,
         "loop_count": state.loop_count,
         "session_cost": state.session_cost,
+        "session_tokens": getattr(state, "session_tokens", 0),
+        "merges_this_session": getattr(state, "merges_this_session", 0),
         "started_at": state.started_at,
         "consecutive_failures": state.consecutive_failures,
         "worker_timeout_count": state.worker_timeout_count,
