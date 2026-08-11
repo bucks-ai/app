@@ -126,7 +126,16 @@ adapter into one prepared 30-second credential request rather than a blocker.
 
 ---
 
-## 4. Runner usage/cost instrumentation
+## 4. Runner usage/cost instrumentation — ✅ PULLED INTO m4c-11 (2026-08-11)
+
+**No longer deferred.** It became load-bearing: `m4c-11-supervisory-early-stop`
+rule (e) is a spend-without-progress ceiling, which cannot function without
+per-task token and cost data. Parsing the CLI's `usage` block on the SUCCESS
+path is now in that task's scope. Original entry retained below for context.
+
+---
+
+## 4a. Runner usage/cost instrumentation (original entry)
 
 **Status:** NOT SEEDED — exists only here
 **Origin:** identified 2026-08-08 while trying to answer "what does a task
