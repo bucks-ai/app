@@ -42,12 +42,14 @@ test.describe("dashboard", () => {
     await login(page, TEST_USER_EMAIL!, TEST_USER_PASSWORD!);
 
     await expect(
-      page.getByRole("heading", { name: "Your businesses" })
+      page.getByRole("region", { name: "Mission canvas" })
     ).toBeVisible();
 
-    const demoCardHeading = page.getByRole("heading", {
-      name: DEMO_BUSINESS.idea_name,
-    });
+    // The dashboard renders the business name in more than one place, so an
+    // unscoped getByText trips Playwright's strict mode. first() is enough.
+    const demoCardHeading = page
+      .getByText(DEMO_BUSINESS.idea_name, { exact: true })
+      .first();
     await expect(demoCardHeading).toBeVisible();
 
     await demoCardHeading.click();
@@ -88,7 +90,7 @@ test.describe("dashboard", () => {
         page.getByRole("heading", { name: "Start your first business" })
       ).toBeVisible();
       await expect(
-        page.getByRole("heading", { name: DEMO_BUSINESS.idea_name })
+        page.getByText(DEMO_BUSINESS.idea_name, { exact: true })
       ).not.toBeVisible();
     } finally {
       if (userId) await admin!.auth.admin.deleteUser(userId);

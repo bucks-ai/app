@@ -287,6 +287,23 @@ class RunnerConfig:
     vercel_poll_interval: int = field(
         default_factory=lambda: int(os.getenv("VERCEL_POLL_INTERVAL", "5"))
     )
+    # M4c: when startup preflight detects a SHA mismatch (production ≠ main)
+    # AND auto_deploy is on, immediately trigger a deploy to catch up. Default
+    # on so the runner fixes stale production without founder intervention.
+    deploy_on_sha_mismatch: bool = field(
+        default_factory=lambda: os.getenv("DEPLOY_ON_SHA_MISMATCH", "true").lower() == "true"
+    )
+    # M4c: check Sentry for new errors after each successful deploy; logs but
+    # never halts the loop (fail-open). Disable only in environments without
+    # Sentry or when the noise is undesirable.
+    sentry_post_deploy_enabled: bool = field(
+        default_factory=lambda: os.getenv("SENTRY_POST_DEPLOY_CHECK", "true").lower() == "true"
+    )
+    # M4c: re-verify the git remote after push for business repos. Ensures the
+    # commit actually landed in the business's repo, not a stale workspace.
+    push_destination_verify: bool = field(
+        default_factory=lambda: os.getenv("PUSH_DESTINATION_VERIFY", "true").lower() == "true"
+    )
     auto_apply_sql: bool = field(
         default_factory=lambda: os.getenv("AUTO_APPLY_SQL", "true").lower() == "true"
     )
@@ -504,6 +521,16 @@ class RunnerConfig:
     )
     merge_approval_policy: str = field(
         default_factory=lambda: os.getenv("MERGE_APPROVAL_POLICY", "require_approval_on_high")
+    )
+    # M4c: "I approve everything, dont wait for me." (founder, 2026-07-31).
+    # When enabled the runner writes the same inbox fulfillment files a human
+    # approve-click would: non-destructive merges, additive SQL, and the
+    # strategic gate.  Two classes are never auto-approved: (a) genuinely
+    # irreversible actions (DROP TABLE, spend past the session cap); (b)
+    # resource/credential gates that need a human to create a new account —
+    # auto-clicking approve cannot conjure a token into existence.
+    auto_approve_enabled: bool = field(
+        default_factory=lambda: os.getenv("AUTO_APPROVE_ENABLED", "true").lower() == "true"
     )
     e2e_enabled: bool = field(
         default_factory=lambda: os.getenv("E2E_ENABLED", "false").lower() == "true"
@@ -796,6 +823,9 @@ class RunnerConfig:
             "rollback_revert_policy": self.rollback_revert_policy,
             "vercel_poll_timeout": self.vercel_poll_timeout,
             "vercel_poll_interval": self.vercel_poll_interval,
+            "deploy_on_sha_mismatch": self.deploy_on_sha_mismatch,
+            "sentry_post_deploy_enabled": self.sentry_post_deploy_enabled,
+            "push_destination_verify": self.push_destination_verify,
             "auto_apply_sql": self.auto_apply_sql,
             "require_sql_approval": self.require_sql_approval,
             "sql_environment": self.sql_environment,
@@ -855,6 +885,7 @@ class RunnerConfig:
             "max_auto_repair_attempts": self.max_auto_repair_attempts,
             "risk_based_merge_approval_enabled": self.risk_based_merge_approval_enabled,
             "merge_approval_policy": self.merge_approval_policy,
+            "auto_approve_enabled": self.auto_approve_enabled,
             "e2e_enabled": self.e2e_enabled,
             "e2e_base_url": self.e2e_base_url,
             "e2e_timeout_ms": self.e2e_timeout_ms,

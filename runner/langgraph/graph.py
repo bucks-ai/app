@@ -21,6 +21,7 @@ from tools.task_tools import (
     next_retry_eta,
     remove_tasks,
     requeue_fulfilled_blocked_tasks,
+    auto_requeue_credential_satisfied_tasks,
     requeue_task,
     add_task,
     update_task_branch,
@@ -117,6 +118,12 @@ from tools.risk_based_merge_approval import (
     classify_merge_risk,
     requires_approval,
 )
+from tools.auto_approval import (
+    should_auto_approve_merge,
+    should_auto_approve_sql,
+    should_auto_approve_strategic,
+    is_destructive_diff,
+)
 from tools.strategic_decision_gate import (
     evaluate_strategic_gate,
     format_review_file,
@@ -163,6 +170,11 @@ from tools.state_self_healing import (
     run_startup_heal,
 )
 from tools.dispatch_preflight import verify_origin_remote
+from tools.environment_ownership import (
+    check_sentry_after_deploy,
+    trigger_deploy_for_sha_mismatch,
+    verify_push_destination,
+)
 from tools.wip_checkpoint import (
     checkpoint_wip,
     detect_wip_checkpoint,
@@ -478,6 +490,17 @@ def run_startup_preflight_if_needed(state: RunnerState) -> RunnerState:
         else:
             state.stop_reason = "preflight_unsafe"
 
+    # M4c: if production is serving a stale commit and AUTO_DEPLOY is on,
+    # trigger a deploy immediately rather than waiting for the next push.
+    # FAIL-OPEN: deploy errors are logged but never set stop_reason.
+    if not summary.get("unsafe") and cfg.deploy_on_sha_mismatch:
+        sha_check = next(
+            (c for c in (summary.get("checks") or []) if c.get("name") == "production_sha"),
+            {},
+        )
+        if sha_check.get("status") == "fail":
+            trigger_deploy_for_sha_mismatch(cfg, sha_check)
+
     return _persist(state, "run_startup_preflight_if_needed")
 
 
@@ -525,6 +548,11 @@ def check_launch_readiness_if_needed(state: RunnerState) -> RunnerState:
 
 _MIGRATIONS_DIR_NAME = "supabase/migrations"
 
+# M4c: session-level dedup so a set of non-auto-appliable pending migrations
+# only emits `migrations_pending` ONCE per session rather than every loop.
+# Keyed on frozenset(filenames); a new file appearing clears the dedup.
+_migrations_warned_this_session: set = set()
+
 
 def check_pending_migrations_if_needed(state: RunnerState) -> RunnerState:
     """Startup migration awareness — the fix for merged migrations that
@@ -559,17 +587,24 @@ def check_pending_migrations_if_needed(state: RunnerState) -> RunnerState:
 
     pending = pending_result["data"]["pending"]
     if not pending:
+        # Any previously warned set is now resolved — clear dedup so a future
+        # pending set (new migration added) is always announced.
+        _migrations_warned_this_session.discard(frozenset())
         return _persist(state, "check_pending_migrations_if_needed")
 
-    log_event("migrations_pending", {
-        "pending": pending,
-        "count": len(pending),
-        "auto_apply_migrations": cfg.auto_apply_migrations,
-        "message": (
-            f"{len(pending)} migration(s) not yet applied to the database: "
-            + ", ".join(pending)
-        ),
-    })
+    pending_key = frozenset(pending)
+    already_warned = pending_key in _migrations_warned_this_session
+    if not already_warned:
+        log_event("migrations_pending", {
+            "pending": pending,
+            "count": len(pending),
+            "auto_apply_migrations": cfg.auto_apply_migrations,
+            "message": (
+                f"{len(pending)} migration(s) not yet applied to the database: "
+                + ", ".join(pending)
+            ),
+        })
+        _migrations_warned_this_session.add(pending_key)
 
     if not cfg.auto_apply_migrations:
         return _persist(state, "check_pending_migrations_if_needed")
@@ -598,6 +633,9 @@ def check_pending_migrations_if_needed(state: RunnerState) -> RunnerState:
             "filename": filename,
             "sha256": result["data"]["sha256"],
         })
+        # A migration was applied — the pending set changed, so clear all dedup
+        # keys so the next loop re-announces any remaining pending files.
+        _migrations_warned_this_session.clear()
 
     return _persist(state, "check_pending_migrations_if_needed")
 
@@ -635,6 +673,9 @@ _TASK_SCOPED_STATE_DEFAULTS = {
     "auto_repair_attempt": 0,
     "auto_repair_status": None,
     "retry_pending": None,
+    # M4c environment-ownership fields — scoped per task
+    "task_started_at": None,
+    "sentry_post_deploy_result": None,
 }
 
 
@@ -669,6 +710,19 @@ def self_heal_task_state(state: RunnerState) -> RunnerState:
 
 
 def load_next_task(state: RunnerState) -> RunnerState:
+    # Auto-requeue tasks blocked on credentials that have since appeared in env.
+    # Runs before requeue_fulfilled_blocked_tasks so the inbox files it creates
+    # are picked up on the same pass.
+    for _tid in auto_requeue_credential_satisfied_tasks(
+        _RUNNER_DIR / "inbox",
+        _RUNNER_DIR / "outbox",
+        available_credential_names(config=cfg),
+    ):
+        log_event("resource_request_auto_requeued", {
+            "task_id": _tid,
+            "message": "credentials now available in env; task auto-requeued",
+        }, task_id=_tid)
+
     # Auto-requeue any blocked task whose resource fulfillment file has
     # landed in inbox/ (written by the approvals daemon or by hand).
     for _tid in requeue_fulfilled_blocked_tasks(_RUNNER_DIR / "inbox"):
@@ -718,6 +772,7 @@ def load_next_task(state: RunnerState) -> RunnerState:
         _reset_task_scoped_state(state)
         state.current_task = task
         state.current_task_id = task["id"]
+        state.task_started_at = datetime.utcnow().isoformat()
         log_event("task_loaded", {"task": task}, task_id=task["id"])
     else:
         state.current_task = None
@@ -2200,6 +2255,28 @@ def check_merge_approval_if_needed(state: RunnerState) -> RunnerState:
         state.merge_approval_status = "approved"
         state.merge_risk_level = decision["risk_level"]
     else:
+        # Human approval would normally be required — check auto-approve first.
+        if cfg.auto_approve_enabled and should_auto_approve_merge(decision, diff_text):
+            # Write the inbox fulfillment file the human would otherwise create,
+            # keeping the gate contract intact.  Never written for destructive
+            # SQL (should_auto_approve_merge returns False for those).
+            if not provided_path.exists():
+                provided_path.write_text("auto-approved by runner (non-destructive merge)")
+            state.merge_approval_status = "approved"
+            state.merge_risk_level = decision["risk_level"]
+            log_event("merge_auto_approved", {
+                "task_id": task_id,
+                "risk_level": decision["risk_level"],
+                "score": decision["classification"]["score"],
+                "reasons": decision["classification"]["reasons"],
+                "policy": cfg.merge_approval_policy,
+                "message": (
+                    f"Auto-approved merge (risk={decision['risk_level']}): "
+                    "non-destructive, CI passed."
+                ),
+            }, task_id=task_id)
+            return _persist(state, "check_merge_approval_if_needed")
+
         state.merge_approval_status = "pending"
         state.merge_risk_level = decision["risk_level"]
 
@@ -2279,6 +2356,34 @@ def commit_push_merge_if_needed(state: RunnerState) -> RunnerState:
     if commit.get("committed"):
         state.last_commit = commit["sha"]
         push_branch(repo_path, branch)
+
+        # M4c: for business repos, re-verify the remote after push to confirm
+        # the commit actually landed in the business's repo and not in a stale
+        # workspace pointing somewhere else. HARD-FAIL on mismatch; FAIL-OPEN
+        # on infra errors (transient git error → log and continue).
+        business_repo_full_name = task.get("business_repo_full_name")
+        if business_repo_full_name and cfg.push_destination_verify:
+            dest = verify_push_destination(repo_path, business_repo_full_name)
+            if not dest.get("ok") and not dest.get("degraded"):
+                log_event("push_destination_mismatch_abort", {
+                    "task_id": state.current_task_id,
+                    "expected": dest.get("expected"),
+                    "actual": dest.get("actual"),
+                    "reason": dest.get("reason"),
+                    "message": (
+                        "push landed in the wrong repo — aborting merge to prevent "
+                        "cross-business contamination"
+                    ),
+                }, task_id=state.current_task_id)
+                state.worker_result = {
+                    **(state.worker_result or {}),
+                    "success": False,
+                    "error": (
+                        f"push_destination_mismatch: expected {dest.get('expected')} "
+                        f"but origin is {dest.get('actual')}"
+                    ),
+                }
+                return _persist(state, "commit_push_merge_if_needed")
 
         if cfg.auto_merge:
             if cfg.merge_via_pr:
@@ -2695,18 +2800,44 @@ def apply_sql_if_needed(state: RunnerState) -> RunnerState:
                 log_event("error", {"task_id": task_id, "error": f"SQL file not found: {sql_file}"})
                 return _persist(state, "apply_sql_if_needed")
 
-        # Check for human approval.
+        # Check for human approval (or auto-approve additive SQL).
         if not inbox_approved.exists():
-            state.sql_approval_status = "pending"
-            # Task-scoped by construction: the SQL simply isn't applied. The
-            # loop is never halted here, and the SQL guard remains the authority
-            # on whether a statement is destructive (M4c.0).
-            log_event("sql_approval_waiting", authority_payload(
-                "sql_approval",
-                task_id=task_id,
-                message=f"Waiting for approval file: {inbox_approved}",
-            ), task_id=task_id)
-            return _persist(state, "apply_sql_if_needed")
+            if cfg.auto_approve_enabled:
+                try:
+                    sql_text = Path(sql_file).read_text()
+                except OSError:
+                    sql_text = ""
+                if should_auto_approve_sql(sql_text):
+                    inbox_approved.write_text("auto-approved by runner (additive SQL)")
+                    log_event("sql_auto_approved", {
+                        "task_id": task_id,
+                        "sql_file": sql_file,
+                        "message": "SQL auto-approved (no destructive statements detected).",
+                    }, task_id=task_id)
+                    state.sql_approval_status = "approved"
+                    # Fall through to apply the SQL below.
+                else:
+                    state.sql_approval_status = "pending"
+                    log_event("sql_approval_waiting", authority_payload(
+                        "sql_approval",
+                        task_id=task_id,
+                        message=(
+                            f"Waiting for approval file: {inbox_approved} "
+                            "(auto-approve blocked: destructive SQL detected)"
+                        ),
+                    ), task_id=task_id)
+                    return _persist(state, "apply_sql_if_needed")
+            else:
+                state.sql_approval_status = "pending"
+                # Task-scoped by construction: the SQL simply isn't applied. The
+                # loop is never halted here, and the SQL guard remains the authority
+                # on whether a statement is destructive (M4c.0).
+                log_event("sql_approval_waiting", authority_payload(
+                    "sql_approval",
+                    task_id=task_id,
+                    message=f"Waiting for approval file: {inbox_approved}",
+                ), task_id=task_id)
+                return _persist(state, "apply_sql_if_needed")
 
         approval_text = inbox_approved.read_text().strip().lower()
         if approval_text in ("rejected", "reject", "no"):
@@ -2853,6 +2984,34 @@ def deploy_if_needed(state: RunnerState) -> RunnerState:
         }, task_id=task_id)
 
     return _persist(state, "deploy_if_needed")
+
+
+def check_sentry_post_deploy_if_needed(state: RunnerState) -> RunnerState:
+    """M4c: check Sentry for new errors after each successful deploy.
+
+    Runs immediately after ``deploy_if_needed`` when:
+    - A deploy completed (state.deploy_result is set and deploy_ready is True)
+    - SENTRY_POST_DEPLOY_CHECK=true (default)
+
+    FAIL-OPEN: Sentry unavailable, unconfigured, or erroring is logged as
+    ``sentry_post_deploy_degraded`` and the loop continues. This node never
+    sets stop_reason.
+
+    Uses ``state.task_started_at`` as the ``since_iso`` so only errors that
+    first appeared during or after this task's run are surfaced.
+    """
+    if not cfg.sentry_post_deploy_enabled:
+        return state
+
+    # Only run when a deploy actually completed (ready or failed — both are
+    # interesting from an error-regression perspective).
+    if not state.deploy_result:
+        return state
+
+    since_iso = state.task_started_at
+    result = check_sentry_after_deploy(since_iso=since_iso)
+    state.sentry_post_deploy_result = result
+    return _persist(state, "check_sentry_post_deploy_if_needed")
 
 
 def run_e2e_if_needed(state: RunnerState) -> RunnerState:
@@ -3762,19 +3921,32 @@ def run_strategic_gate(state: RunnerState) -> RunnerState:
             ))
 
         if not approved_path.exists():
-            state.strategic_gate_status = "pending"
-            state.strategic_gate_at_loop = gate_loop
-            state.stop_reason = STRATEGIC_GATE_STOP
-            log_event("strategic_gate_triggered", {
-                "loop_count": gate_loop,
-                "tasks_since_gate": cfg.strategic_pause_interval,
-                "review_path": str(review_path),
-                "approve_by": str(approved_path),
-                "message": (
-                    f"Strategic review required after {cfg.strategic_pause_interval} tasks. "
-                    f"See {review_path.name}; create {approved_path.name} to resume."
-                ),
-            })
+            if cfg.auto_approve_enabled and should_auto_approve_strategic():
+                # Write the fulfillment file so the gate resolves immediately.
+                # The outbox review file is still written above for observability.
+                approved_path.write_text("auto-approved by runner")
+                state.strategic_tasks_since_gate = 0
+                log_event("strategic_gate_auto_approved", {
+                    "gate_loop": gate_loop,
+                    "message": (
+                        f"Strategic review auto-approved after {cfg.strategic_pause_interval} "
+                        "tasks; resuming autonomous run."
+                    ),
+                })
+            else:
+                state.strategic_gate_status = "pending"
+                state.strategic_gate_at_loop = gate_loop
+                state.stop_reason = STRATEGIC_GATE_STOP
+                log_event("strategic_gate_triggered", {
+                    "loop_count": gate_loop,
+                    "tasks_since_gate": cfg.strategic_pause_interval,
+                    "review_path": str(review_path),
+                    "approve_by": str(approved_path),
+                    "message": (
+                        f"Strategic review required after {cfg.strategic_pause_interval} tasks. "
+                        f"See {review_path.name}; create {approved_path.name} to resume."
+                    ),
+                })
         else:
             # Pre-approved (edge case: operator already created the file).
             log_event("strategic_gate_auto_approved", {"gate_loop": gate_loop})
@@ -4128,6 +4300,7 @@ def build_graph():
     builder.add_node("deterministic_repair_if_needed", deterministic_repair_if_needed)
     builder.add_node("apply_sql_if_needed", apply_sql_if_needed)
     builder.add_node("deploy_if_needed", deploy_if_needed)
+    builder.add_node("check_sentry_post_deploy_if_needed", check_sentry_post_deploy_if_needed)
     builder.add_node("run_e2e_if_needed", run_e2e_if_needed)
     builder.add_node("run_ui_flow_validation_if_needed", run_ui_flow_validation_if_needed)
     builder.add_node("run_product_eval_if_needed", run_product_eval_if_needed)
@@ -4229,7 +4402,8 @@ def build_graph():
     builder.add_edge("commit_push_merge_if_needed", "deterministic_repair_if_needed")
     builder.add_edge("deterministic_repair_if_needed", "apply_sql_if_needed")
     builder.add_edge("apply_sql_if_needed", "deploy_if_needed")
-    builder.add_edge("deploy_if_needed", "run_e2e_if_needed")
+    builder.add_edge("deploy_if_needed", "check_sentry_post_deploy_if_needed")
+    builder.add_edge("check_sentry_post_deploy_if_needed", "run_e2e_if_needed")
     builder.add_edge("run_e2e_if_needed", "run_ui_flow_validation_if_needed")
     builder.add_edge("run_ui_flow_validation_if_needed", "run_product_eval_if_needed")
     builder.add_edge("run_product_eval_if_needed", "update_github_if_needed")

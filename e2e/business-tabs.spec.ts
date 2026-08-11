@@ -47,9 +47,11 @@ test.describe("business detail tabs", () => {
 
     await login(page);
 
-    const demoCardHeading = page.getByRole("heading", {
-      name: DEMO_BUSINESS.idea_name,
-    });
+    // The dashboard renders the business name in more than one place, so an
+    // unscoped getByText trips Playwright's strict mode. first() is enough.
+    const demoCardHeading = page
+      .getByText(DEMO_BUSINESS.idea_name, { exact: true })
+      .first();
     await expect(demoCardHeading).toBeVisible();
     await demoCardHeading.click();
     await expect(page).toHaveURL(/\/dashboard\/businesses\/.+$/);

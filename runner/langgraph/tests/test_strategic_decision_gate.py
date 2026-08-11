@@ -169,6 +169,7 @@ def test_node_triggers_at_interval_and_blocks():
     def body(outbox, inbox):
         graph.cfg.strategic_gate_enabled = True
         graph.cfg.strategic_pause_interval = 5
+        graph.cfg.auto_approve_enabled = False  # test blocking, not auto-approve
         out = graph.run_strategic_gate(_state(loop_count=7, tasks_since_gate=4))
         assert out.stop_reason == STRATEGIC_GATE_STOP, out.stop_reason
         assert out.strategic_gate_status == "pending", out.strategic_gate_status
@@ -183,6 +184,10 @@ def test_node_pending_blocks_without_approval():
     def body(outbox, inbox):
         graph.cfg.strategic_gate_enabled = True
         graph.cfg.strategic_pause_interval = 5
+        # A gate that was already pending (from a prior run) re-checks the inbox.
+        # Auto-approve is irrelevant here — this path checks the inbox file,
+        # not the fresh-trigger path; keep auto_approve_enabled in its default
+        # state to confirm the pending-recheck path is independent.
         out = graph.run_strategic_gate(_state(gate_status="pending", gate_at_loop=3))
         assert out.stop_reason == STRATEGIC_GATE_STOP, out.stop_reason
         assert out.strategic_gate_status == "pending", out.strategic_gate_status
