@@ -819,6 +819,14 @@ class RunnerConfig:
     max_session_minutes_without_merge: int = field(
         default_factory=lambda: int(os.getenv("MAX_SESSION_MINUTES_WITHOUT_MERGE", "0"))
     )
+    # M4c.0: before dispatching a worker, cheaply test whether the task's named
+    # deliverables (file paths in the description) already exist in the working
+    # tree.  When all exist, the task is marked complete without dispatching.
+    # Conservative by design: requires ALL named paths to exist, and always
+    # dispatches when the description names no concrete file paths.
+    task_already_satisfied_precheck_enabled: bool = field(
+        default_factory=lambda: os.getenv("TASK_ALREADY_SATISFIED_PRECHECK", "true").lower() == "true"
+    )
 
     @property
     def has_ntfy(self) -> bool:
@@ -1053,6 +1061,7 @@ class RunnerConfig:
             "supervisory_early_stop_enabled": self.supervisory_early_stop_enabled,
             "max_session_tokens_without_merge": self.max_session_tokens_without_merge,
             "max_session_minutes_without_merge": self.max_session_minutes_without_merge,
+            "task_already_satisfied_precheck_enabled": self.task_already_satisfied_precheck_enabled,
         }
 
     def threshold_violations(self) -> list:

@@ -175,6 +175,12 @@ from tools.state_self_healing import (
     run_startup_heal,
 )
 from tools.dispatch_preflight import verify_origin_remote
+from tools.mission_briefing import (
+    build_mission_briefing,
+    extract_file_paths,
+    check_artifacts_present,
+    should_precheck_task,
+)
 from tools.environment_ownership import (
     check_sentry_after_deploy,
     trigger_deploy_for_sha_mismatch,
@@ -694,6 +700,8 @@ _TASK_SCOPED_STATE_DEFAULTS = {
     # M4c environment-ownership fields — scoped per task
     "task_started_at": None,
     "sentry_post_deploy_result": None,
+    # M4c.0: set to True when the precheck found all named artifacts present
+    "task_already_satisfied": None,
 }
 
 
@@ -1568,6 +1576,23 @@ def generate_worker_prompt(state: RunnerState) -> RunnerState:
             description_section=description_section,
         )
 
+    # M4c.0: mission briefing — inject completed/upcoming task context so the
+    # worker knows what has already been built (and must not be rebuilt) and
+    # what comes next (and is not its job). Injected just before "Complete this
+    # task fully." so it is read as part of the task setup, not as a trailer.
+    # No-op (returns "") for tasks with no mission; those prompts are unchanged.
+    _COMPLETE_MARKER = "Complete this task fully."
+    briefing = build_mission_briefing(task, load_tasks())
+    if briefing:
+        if _COMPLETE_MARKER in prompt:
+            prompt = prompt.replace(_COMPLETE_MARKER, briefing + _COMPLETE_MARKER, 1)
+        else:
+            prompt = prompt + "\n" + briefing
+        log_event("prompt_briefing_added", {
+            "task_id": state.current_task_id,
+            "briefing_chars": len(briefing),
+        }, task_id=state.current_task_id)
+
     # M4c.4: a WIP checkpoint on this task's branch means a previous attempt was
     # interrupted with unfinished work. Say so at the very top of the prompt —
     # a worker that does not know it exists re-implements it, and the
@@ -1592,6 +1617,82 @@ def generate_worker_prompt(state: RunnerState) -> RunnerState:
     state.messages = state.messages + [{"role": "user", "content": prompt}]
     log_event("prompt_generated", {"task_id": state.current_task_id, "prompt_len": len(prompt)})
     return _persist(state, "generate_worker_prompt")
+
+
+def check_task_already_satisfied(state: RunnerState) -> RunnerState:
+    """M4c.0 pre-dispatch precheck: skip worker when all named deliverables exist.
+
+    Parses concrete file paths from the task description and checks whether
+    every one already exists in the working tree.  When all do, the task is
+    marked complete without dispatching a worker.
+
+    Conservative by design:
+    - Requires ALL named paths to exist (not just any).
+    - Always dispatches when the description names no concrete file paths.
+    - Skipped when TASK_ALREADY_SATISFIED_PRECHECK=false or task.force_dispatch.
+    - Fail-open: any extraction or filesystem error is swallowed and the worker
+      is dispatched normally — a false-negative is always safer than a skip.
+    """
+    if not cfg.task_already_satisfied_precheck_enabled:
+        return _persist(state, "check_task_already_satisfied")
+
+    task = state.current_task or {}
+    task_id = state.current_task_id or "unknown"
+
+    if not should_precheck_task(task):
+        log_event("task_precheck_skipped", {
+            "task_id": task_id,
+            "reason": "force_dispatch override",
+        }, task_id=task_id)
+        return _persist(state, "check_task_already_satisfied")
+
+    try:
+        description = (task.get("description") or "").strip()
+        file_paths = extract_file_paths(description)
+
+        if not file_paths:
+            return _persist(state, "check_task_already_satisfied")
+
+        repo_path = _effective_repo_path(state)
+        result = check_artifacts_present(
+            file_paths,
+            repo_path,
+            extra_search_dirs=[str(_RUNNER_DIR)],
+        )
+
+        if not result["all_present"]:
+            return _persist(state, "check_task_already_satisfied")
+
+        # Every named artifact exists — the work is already in the tree.
+        log_event("task_already_satisfied", {
+            "task_id": task_id,
+            "title": task.get("title", ""),
+            "file_paths_checked": file_paths,
+            "present": result["present"],
+            "message": (
+                "All named artifacts exist in the working tree; "
+                "marking task complete without dispatching a worker."
+            ),
+        }, task_id=task_id)
+
+        summary_str = (
+            f"task_already_satisfied: all named artifacts were already present "
+            f"({', '.join(file_paths[:5])})"
+        )
+        mark_task_complete(task_id, summary_str)
+        state.task_already_satisfied = True
+        state.loop_count += 1
+        state.last_task_completed_at = datetime.utcnow().isoformat()
+        state.consecutive_failures = 0
+
+    except Exception as exc:
+        log_event("task_precheck_error", {
+            "task_id": task_id,
+            "error": str(exc),
+            "message": "precheck raised; dispatching worker normally",
+        }, task_id=task_id)
+
+    return _persist(state, "check_task_already_satisfied")
 
 
 _DRY_RUN_WORKER_OUTPUT = """\
@@ -4322,6 +4423,18 @@ def decide_continue_or_stop(state: RunnerState) -> RunnerState:
 
 # ── Routing ───────────────────────────────────────────────────────────────────
 
+def _route_after_precheck(state: RunnerState) -> str:
+    """Route after check_task_already_satisfied (M4c.0).
+
+    When the precheck found all named artifacts present, the task is already
+    complete — skip dispatch and continue to the next task.  Otherwise proceed
+    normally to dispatch_worker.
+    """
+    if state.task_already_satisfied:
+        return "decide_continue_or_stop"
+    return "dispatch_worker"
+
+
 def _route_after_load(state: RunnerState) -> str:
     if state.stop_reason:
         return "compile_mission_if_needed"
@@ -4441,6 +4554,7 @@ def build_graph():
     builder.add_node("check_acceptance_criteria", check_acceptance_criteria)
     builder.add_node("resolve_model", resolve_model_node)
     builder.add_node("generate_worker_prompt", generate_worker_prompt)
+    builder.add_node("check_task_already_satisfied", check_task_already_satisfied)
     builder.add_node("dispatch_worker", dispatch_worker)
     builder.add_node("capture_worker_result", capture_worker_result)
     builder.add_node("escalate_to_claude_if_needed", escalate_to_claude_if_needed)
@@ -4528,7 +4642,15 @@ def build_graph():
         "decide_continue_or_stop": "decide_continue_or_stop",
     })
     builder.add_edge("resolve_model", "generate_worker_prompt")
-    builder.add_edge("generate_worker_prompt", "dispatch_worker")
+    builder.add_edge("generate_worker_prompt", "check_task_already_satisfied")
+    builder.add_conditional_edges(
+        "check_task_already_satisfied",
+        _route_after_precheck,
+        {
+            "dispatch_worker": "dispatch_worker",
+            "decide_continue_or_stop": "decide_continue_or_stop",
+        },
+    )
     builder.add_edge("dispatch_worker", "capture_worker_result")
     builder.add_edge("capture_worker_result", "escalate_to_claude_if_needed")
     builder.add_edge("escalate_to_claude_if_needed", "parse_worker_summary")

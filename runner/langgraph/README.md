@@ -475,6 +475,7 @@ Copy `.env.example` to `.env` and fill in:
 | `SUPERVISORY_EARLY_STOP_ENABLED` | Enable the M4c supervisory early-stop rules that judge the RUN rather than just individual tasks: environmental CI classification, auth-failure halt, check-count stability gate, PR gate reconciliation at startup, and spend-without-progress ceiling. When false, all five rules are no-ops (default: true) |
 | `MAX_SESSION_TOKENS_WITHOUT_MERGE` | Cumulative Claude CLI tokens consumed without a single successful merge before the spend-without-progress ceiling fires; 0 disables the token ceiling (default: 0). Counted across all worker runs this session; a merge resets the risk — any merge keeps the loop running regardless of spend |
 | `MAX_SESSION_MINUTES_WITHOUT_MERGE` | Elapsed session minutes without a successful merge before the spend-without-progress ceiling fires; 0 disables the time ceiling (default: 0). Mirrors `MAX_SESSION_TOKENS_WITHOUT_MERGE` but watches the clock instead of the token counter; both can be active simultaneously |
+| `TASK_ALREADY_SATISFIED_PRECHECK` | Before dispatching a worker, parse concrete file paths from the task description and check whether every one already exists in the working tree. When all exist, mark the task complete without dispatching. Conservative: requires ALL named paths to exist; always dispatches when the description names no concrete paths. Override per-task with `force_dispatch: true` (default: true) |
 
 #### Threshold ordering invariants
 
