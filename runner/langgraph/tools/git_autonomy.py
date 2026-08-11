@@ -582,10 +582,25 @@ def worktree_files(repo_path: str, *, git_run: Optional[GitRun] = None) -> list[
         return []
     paths = []
     for line in (r.output or "").splitlines():
-        if len(line) > 3:
+        # Porcelain v1 format: XY SP path (path starts at index 3).
+        # run_command's output.strip() can eat the leading space of the FIRST
+        # line when X=" " (e.g. " M runner/foo.py" → "M runner/foo.py"),
+        # shifting the separator space from index 2 to index 1 and causing
+        # line[3:] to drop the leading character of the path.  Detect which
+        # case we are in by checking where the separator space sits: if index 2
+        # is a space the line is intact (use line[3:]); if index 1 is a space
+        # but index 2 is not, the leading char was stripped (use line[2:]).
+        if len(line) < 3:
+            continue
+        if line[2] == " ":
             entry = line[3:].strip()
-            # Renames are reported as "old -> new"; the new path is what exists.
-            paths.append(entry.split(" -> ")[-1].strip().strip('"'))
+        elif line[1] == " ":
+            # Leading X=" " was eaten by output.strip(); separator is now at 1.
+            entry = line[2:].strip()
+        else:
+            continue
+        # Renames are reported as "old -> new"; the new path is what exists.
+        paths.append(entry.split(" -> ")[-1].strip().strip('"'))
     return [p for p in paths if p]
 
 
