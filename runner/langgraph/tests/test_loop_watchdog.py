@@ -16,6 +16,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from tools.loop_watchdog import (
     evaluate_restart_decision,
     HARD_GATE_REASONS,
+    NETWORK_RETRY_DELAY_S,
 )
 
 _BASE_UTC = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
@@ -279,6 +280,133 @@ def test_reason_string_nonempty():
 
 
 # ---------------------------------------------------------------------------
+# network_unavailable — M4c.4
+# ---------------------------------------------------------------------------
+
+def test_network_unavailable_restarts():
+    r = evaluate_restart_decision("network_unavailable")
+    assert r["should_restart"] is True
+
+
+def test_network_unavailable_not_a_hard_gate():
+    assert "network_unavailable" not in HARD_GATE_REASONS
+
+
+def test_network_unavailable_uses_network_retry_delay():
+    r = evaluate_restart_decision("network_unavailable")
+    assert r["wait_seconds"] == NETWORK_RETRY_DELAY_S
+
+
+def test_network_unavailable_does_not_use_default_delay():
+    r = evaluate_restart_decision("network_unavailable", default_delay_s=30)
+    assert r["wait_seconds"] == NETWORK_RETRY_DELAY_S
+    assert r["wait_seconds"] != 30
+
+
+def test_network_unavailable_custom_delay():
+    r = evaluate_restart_decision("network_unavailable", network_retry_delay_s=120)
+    assert r["wait_seconds"] == 120
+
+
+def test_network_unavailable_no_started_at_in_state():
+    r = evaluate_restart_decision("network_unavailable", {})
+    assert r["should_restart"] is True
+    assert r["wait_seconds"] == NETWORK_RETRY_DELAY_S
+
+
+def test_network_unavailable_no_state():
+    r = evaluate_restart_decision("network_unavailable", None)
+    assert r["should_restart"] is True
+
+
+def test_network_unavailable_within_patience():
+    # 30 minutes offline — within the 90-minute ceiling
+    started = _BASE_UTC - timedelta(minutes=30)
+    state = {"network_unavailable_started_at": started.isoformat()}
+    r = evaluate_restart_decision(
+        "network_unavailable",
+        state,
+        _now=_BASE_UTC,
+    )
+    assert r["should_restart"] is True
+    assert r["wait_seconds"] == NETWORK_RETRY_DELAY_S
+
+
+def test_network_unavailable_at_ceiling_stops():
+    # Exactly at the 90-minute patience ceiling
+    started = _BASE_UTC - timedelta(minutes=90)
+    state = {"network_unavailable_started_at": started.isoformat()}
+    r = evaluate_restart_decision(
+        "network_unavailable",
+        state,
+        network_max_patience_s=90 * 60,
+        _now=_BASE_UTC,
+    )
+    assert r["should_restart"] is False
+    assert "patience ceiling" in r["reason"]
+    assert "90" in r["reason"]
+
+
+def test_network_unavailable_past_ceiling_stops():
+    # 120 minutes offline — past the 90-minute ceiling
+    started = _BASE_UTC - timedelta(minutes=120)
+    state = {"network_unavailable_started_at": started.isoformat()}
+    r = evaluate_restart_decision(
+        "network_unavailable",
+        state,
+        network_max_patience_s=90 * 60,
+        _now=_BASE_UTC,
+    )
+    assert r["should_restart"] is False
+
+
+def test_network_unavailable_custom_patience():
+    # Custom patience of 10 minutes; 11 minutes offline → stop
+    started = _BASE_UTC - timedelta(minutes=11)
+    state = {"network_unavailable_started_at": started.isoformat()}
+    r = evaluate_restart_decision(
+        "network_unavailable",
+        state,
+        network_max_patience_s=10 * 60,
+        _now=_BASE_UTC,
+    )
+    assert r["should_restart"] is False
+    assert "patience ceiling" in r["reason"]
+
+
+def test_network_unavailable_custom_patience_within():
+    # Custom patience of 10 minutes; 5 minutes offline → still retrying
+    started = _BASE_UTC - timedelta(minutes=5)
+    state = {"network_unavailable_started_at": started.isoformat()}
+    r = evaluate_restart_decision(
+        "network_unavailable",
+        state,
+        network_max_patience_s=10 * 60,
+        _now=_BASE_UTC,
+    )
+    assert r["should_restart"] is True
+
+
+def test_network_unavailable_malformed_started_at():
+    state = {"network_unavailable_started_at": "not-a-datetime"}
+    r = evaluate_restart_decision("network_unavailable", state)
+    assert r["should_restart"] is True
+    assert r["wait_seconds"] == NETWORK_RETRY_DELAY_S
+
+
+def test_network_unavailable_report_has_minute_count():
+    started = _BASE_UTC - timedelta(minutes=120)
+    state = {"network_unavailable_started_at": started.isoformat()}
+    r = evaluate_restart_decision(
+        "network_unavailable",
+        state,
+        network_max_patience_s=90 * 60,
+        _now=_BASE_UTC,
+    )
+    assert "120" in r["reason"]
+
+
+# ---------------------------------------------------------------------------
 # Wiring (standalone runner)
 # ---------------------------------------------------------------------------
 
@@ -322,6 +450,21 @@ if __name__ == "__main__":
         test_result_always_has_all_keys,
         test_no_restart_wait_seconds_is_zero,
         test_reason_string_nonempty,
+        # M4c.4: network_unavailable
+        test_network_unavailable_restarts,
+        test_network_unavailable_not_a_hard_gate,
+        test_network_unavailable_uses_network_retry_delay,
+        test_network_unavailable_does_not_use_default_delay,
+        test_network_unavailable_custom_delay,
+        test_network_unavailable_no_started_at_in_state,
+        test_network_unavailable_no_state,
+        test_network_unavailable_within_patience,
+        test_network_unavailable_at_ceiling_stops,
+        test_network_unavailable_past_ceiling_stops,
+        test_network_unavailable_custom_patience,
+        test_network_unavailable_custom_patience_within,
+        test_network_unavailable_malformed_started_at,
+        test_network_unavailable_report_has_minute_count,
     ]
     passed = failed = 0
     for t in tests:

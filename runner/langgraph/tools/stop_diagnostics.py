@@ -846,6 +846,31 @@ STOP_HANDLERS: dict[str, StopHandler] = dict([
         ),
         evidence_events=("launch_readiness_failed",),
     )),
+    _h(StopHandler(
+        reason="network_unavailable",
+        headline="Network connectivity lost — watchdog pausing until restored",
+        cause=(
+            "A connectivity probe (DNS resolution + HEAD request) failed before a task "
+            "was claimed or after a network-shaped mid-call error was confirmed. Every "
+            "worker call needs the network (Anthropic, GitHub, Supabase, Vercel, Slack), "
+            "so the loop paused rather than recording fake task failures that pollute "
+            "retry counters and threshold telemetry."
+        ),
+        action=(
+            "No action required — the watchdog will retry every "
+            "NETWORK_RETRY_DELAY_S seconds (default 5 min). When connectivity returns "
+            "the loop resumes automatically and logs `network_restored` with the total "
+            "outage duration. If offline for more than NETWORK_MAX_PATIENCE_MINUTES "
+            "(default 90 min) the watchdog stops and this message is your signal."
+        ),
+        config_keys=(
+            "network_pause_enabled",
+            "network_probe_timeout_s",
+            "network_retry_delay_s",
+            "network_max_patience_minutes",
+        ),
+        evidence_events=("network_unavailable_detected", "network_restored"),
+    )),
 
     # ── Business (foreign repo) missions ────────────────────────────────────
     _h(StopHandler(
